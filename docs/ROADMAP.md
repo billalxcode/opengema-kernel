@@ -3,8 +3,9 @@
 Dokumen ini jadi acuan tunggal untuk urutan kerja, batas modul, dan aturan
 anti redundansi. Setiap task punya ID supaya bisa dirujuk di commit.
 
-Status sekarang: boot UEFI + UART PL011 + stub MMU. Semua kode masih di
-`kernel/` datar. Fase 0 merapikan itu sebelum fitur baru ditambah.
+Status sekarang: Fase 0 selesai. Kode sudah dipisah per modul, loader
+menangkap memory map, keluar dari boot services, lalu masuk `kmain`
+lewat `BootInfo`.
 
 ---
 
@@ -140,37 +141,43 @@ Aturan penegakan:
 
 ### Fase 0 - Fondasi dan pemisahan modul
 
-- [ ] F-01 Buat struktur direktori target, pindahkan file lama tanpa ubah isi.
-- [ ] F-02 Pecah CMake jadi target per modul: `og_arch`, `og_io`, `og_core`,
-      `og_mem`, `og_events`, `og_time`, `og_dma`, `og_drivers`, `og_fs`,
-      `og_sched`, `og_sync`, `og_syscall`, `og_platform`, `og_boot`.
-- [ ] F-03 Tegakkan aturan include lewat `target_include_directories` PUBLIC
-      dan PRIVATE, bukan lewat konvensi.
-- [ ] F-04 `og/status.h`: status code, `Result<T>`, helper `IsOk`, `IsErr`.
-      Hapus pemakaian status liar di modul lain.
-- [ ] F-05 `libs/core/memory.h`: pindahkan `memcpy`, `memset`, `memmove`,
-      `memcmp` dari `kernel/kernel/stubs.cpp`. Tambah `strlen`, `strcmp`,
-      `memzero`.
-- [ ] F-06 `libs/core/bit.h`: `Bit`, `Mask`, `Extract`, `Insert`, `AlignUp`,
+- [x] F-01 Struktur direktori per modul, file lama dipindah ke lokasi baru.
+- [x] F-02 CMake dipecah jadi target per modul: `og_lib_core`, `og_arch`,
+      `og_io`, `og_core`, `og_drivers`, `og_kernel`, `og_boot`. Modul lain
+      menyusul saat fasenya dikerjakan.
+- [x] F-03 Dependensi modul lewat `target_link_libraries`, include lewat
+      `INTERFACE`. Lapisan header dijaga `scripts/check-arch.sh` karena
+      header publik masih satu direktori.
+- [x] F-04 `og/status.h`: status code, `Result<T>`, `IsOk`, `IsErr`.
+- [x] F-05 `libs/core/memory.h` dan `memory.cpp`: pemilik tunggal
+      `memcpy`, `memmove`, `memset`, `memcmp`, `strlen`, `strcmp`, `strncmp`.
+- [x] F-06 `libs/core/bit.h`: `Mask`, `Extract`, `Insert`, `Bit`, `AlignUp`,
       `AlignDown`, `IsAligned`.
-- [ ] F-07 `core/log.h`: level, sink, `Log(level, ...)`, sink UART untuk early
-      boot, sink null untuk host test.
-- [ ] F-08 `core/panic.h`: `Panic(reason)`, dump `ESR_EL1`, `FAR_EL1`,
-      `ELR_EL1`, `SPSR_EL1`, `VBAR_EL1`.
-- [ ] F-09 `core/assert.h`: `OG_ASSERT`, `OG_ASSERT_MSG`, `OG_UNREACHABLE`.
-- [ ] F-10 `boot/uefi/efi_memmap.cpp`: ambil memory map sebelum exit, simpan
-      ke `BootInfo` yang netral dari tipe UEFI.
-- [ ] F-11 `boot/uefi/efi_exit.cpp`: `ExitBootServices` dengan retry map key.
-- [ ] F-12 `og/bootinfo.h`: struct boot info versi 1, magic, ukuran, deskriptor
-      memori, framebuffer opsional, rsdp opsional.
-- [ ] F-13 Urutan init kernel: `core/init.cpp` memanggil modul berurutan dan
-      berhenti di error pertama. Tidak ada init tersebar di konstruktor global.
-- [ ] F-14 Hapus `kernel/kernel/stubs.cpp` setelah isinya pindah ke F-05.
-- [ ] F-15 Script `scripts/check-arch.sh`: gagal kalau ada include melanggar
-      lapisan, atau `volatile` di luar `io/`.
+- [x] F-07 `og/log.h` dan `kernel/core/log.cpp`: level, sink, `Log`,
+      `LogDec`, `LogHex`. Sink UART didaftarkan oleh driver.
+- [x] F-08 `og/panic.h` dan `kernel/core/panic.cpp`: dump `ESR_EL1`,
+      `FAR_EL1`, `ELR_EL1`, `SPSR_EL1`, `VBAR_EL1` lalu halt.
+- [x] F-09 `og/assert.h`: `OG_ASSERT`, `OG_ASSERT_MSG`, `OG_UNREACHABLE`.
+- [x] F-10 `boot/uefi/efi_memmap.cpp`: ambil memory map, normalisasi ke
+      `BootInfo` yang netral dari tipe UEFI.
+- [x] F-11 `boot/uefi/efi_exit.cpp`: `ExitBootServices` dengan retry map key.
+- [x] F-12 `og/bootinfo.h`: magic, versi, ukuran, uart base, 64 rentang memori.
+- [x] F-13 `kernel/core/init.cpp`: satu urutan init, berhenti di error pertama.
+- [x] F-14 `kernel/kernel/stubs.cpp` dihapus, isinya pindah ke `libs/core`.
+- [x] F-15 `scripts/check-arch.sh`, dijalankan otomatis oleh target
+      `og_arch_check` di setiap build.
 
 **Selesai bila:** build tetap jalan, boot tetap sampai `kmain`, dan tidak ada
 duplikasi fungsi memory atau status.
+
+Catatan hasil Fase 0:
+
+1. `kernel/include/og/arch/registers.h` jadi lokasi header arch, bukan
+   `kernel/arch/aarch64/registers.h`, supaya masuk aturan header publik.
+2. `EFI_BOOT_SERVICES` diawali `EFI_TABLE_HEADER` 24 byte. Offset service
+   dikunci `static_assert` di `libs/efi/efi.h`.
+3. EDK2 melaporkan `descriptor_size` 48 byte, bukan 40. Iterasi memory map
+   wajib memakai stride dari firmware, bukan `sizeof`.
 
 ### Fase 1 - IO dan console
 

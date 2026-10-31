@@ -25,13 +25,17 @@ Mau lihat jendela QEMU:
 
 ## Status
 
-Sudah boot sampai kernel:
+Sudah boot sampai kernel dan keluar dari boot services UEFI:
 
 ```
-opengema-kernel: EFI boot
-hello UART PL011
-opengema-kernel: kmain boot
-uart: PL011 0x09000000 ok
+opengema-kernel: uefi entry
+uefi: boot services exited
+kernel: kmain entered
+memory ranges: 29
+uart base: 0x0000000009000000
+kernel: halt
 ```
 
-Berikutnya: MMU, ExitBootServices, dan exception handler.
+Berikutnya: MMU, interrupt, dan driver.
+
+Roadmap lengkap ada di `docs/ROADMAP.md`.
