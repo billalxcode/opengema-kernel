@@ -1,0 +1,9 @@
+build/
+esp/EFI/BOOT/BOOTAA64.EFI
+esp.img
+firmware/*.fd
+*.o *.obj
+compile_commands.json
+qemu.log
+/tmp/qemu-*.log
+.firecrawl/
