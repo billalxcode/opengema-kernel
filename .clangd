@@ -1,0 +1,21 @@
+CompileFlags:
+  Compiler: clang++
+  Add:
+    - --target=aarch64-unknown-windows
+    - -ffreestanding
+    - -nostdinc
+    - -fshort-wchar
+    - -mno-red-zone
+    - -fno-exceptions
+    - -fno-rtti
+    - -std=c++20
+    - -Ilibs/cxx
+    - -Ilibs/efi
+    - -Ikernel/include
+  Remove:
+    - -march=*
+    - -mcpu=*
+
+Diagnostics:
+  Suppress:
+    - unknown-argument

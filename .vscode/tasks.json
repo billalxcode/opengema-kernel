@@ -1,0 +1,34 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build (podman)",
+      "type": "shell",
+      "command": "./scripts/build.sh",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "make esp image",
+      "type": "shell",
+      "command": "./scripts/make-esp.sh",
+      "problemMatcher": []
+    },
+    {
+      "label": "run qemu",
+      "type": "shell",
+      "command": "./scripts/run-qemu.sh",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "format changed files",
+      "type": "shell",
+      "command": "git diff --name-only -- '*.cpp' '*.h' | xargs -r clang-format -i",
+      "problemMatcher": []
+    }
+  ]
+}
