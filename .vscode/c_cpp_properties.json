@@ -15,6 +15,7 @@
       ],
       "includePath": [
         "${workspaceFolder}/libs/cxx",
+        "${workspaceFolder}/libs/core",
         "${workspaceFolder}/libs/efi",
         "${workspaceFolder}/kernel/include"
       ],

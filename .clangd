@@ -10,6 +10,7 @@ CompileFlags:
     - -fno-rtti
     - -std=c++20
     - -Ilibs/cxx
+    - -Ilibs/core
     - -Ilibs/efi
     - -Ikernel/include
   Remove:
