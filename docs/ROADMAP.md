@@ -1,0 +1,419 @@
+# Roadmap opengema-kernel
+
+Dokumen ini jadi acuan tunggal untuk urutan kerja, batas modul, dan aturan
+anti redundansi. Setiap task punya ID supaya bisa dirujuk di commit.
+
+Status sekarang: boot UEFI + UART PL011 + stub MMU. Semua kode masih di
+`kernel/` datar. Fase 0 merapikan itu sebelum fitur baru ditambah.
+
+---
+
+## 1. Prinsip
+
+1. Satu kemampuan, satu pemilik. Tidak ada implementasi kedua dari fungsi
+   yang sudah ada.
+2. Arah dependensi hanya ke bawah. Modul bawah tidak boleh tahu modul atas.
+3. Guard clause di semua fungsi yang bisa gagal: cek gagal dulu, return awal.
+4. Interface kecil dan stabil. Implementasi boleh berubah tanpa ubah pemanggil.
+5. Setiap modul punya satu header publik. Sisanya detail internal.
+6. Kode harus bisa dibaca tanpa perlu tahu isi modul lain.
+7. Tidak ada state global mutable kecuali singleton yang memang didesain
+   (contoh: satu instance console untuk early boot).
+
+---
+
+## 2. Lapisan arsitektur
+
+Urutan dari bawah ke atas. Modul hanya boleh include modul di bawahnya.
+
+```
+L0  libs/           freestanding cxx, efi header, memory, bit, math
+L1  arch/aarch64/   barrier, cache, registers, mmu primitives, context switch
+L2  io/             mmio, console, print, register field
+L3  core/           status, error, log, panic, assert, version, init
+L4  mem/            pmm, vmm, heap, address space
+L5  events/         vector, trap, irq, deferred work, wait queue
+L6  time/           clocksource, timer, delay
+L7  dma/            coherent, streaming, cache maintenance
+L8  drivers/        uart, gic, timer, rtc, pci, virtio
+L9  fs/             vfs, devfs, ramfs, fat32
+L10 sched/          thread, scheduler, context
+L11 sync/           spinlock, mutex, semaphore, refcount
+L12 syscall/        el0, svc, copy_from_user
+L13 platform/       qemu virt, device discovery
+L14 boot/           uefi entry, bootinfo, exit boot services
+```
+
+Catatan: `core/` berisi status dan log yang dipakai hampir semua modul,
+jadi diperlakukan seperti L3 yang boleh dipakai L1 ke atas. Pengecualian
+ini didokumentasikan, bukan diulang di kode.
+
+Grafik dependensi utama:
+
+```
+boot -> platform -> arch -> io -> core -> mem -> events -> time
+                                                     |
+                                                     v
+                                        dma -> drivers -> fs
+                                                     |
+                                                     v
+                                              sched -> sync -> syscall
+```
+
+---
+
+## 3. Struktur direktori target
+
+```
+libs/
+  cxx/            cstddef, cstdint, type_traits, concepts, span
+  efi/            efi.h
+  core/           memory.h, string.h, bit.h, math.h, result.h
+kernel/
+  include/og/     header publik, satu per modul
+  arch/aarch64/   barriers.cpp, cache.S, context.S, vectors.S, mmu_primitives.cpp
+  io/             mmio.cpp, console.cpp, print.cpp
+  core/           log.cpp, panic.cpp, assert.cpp, init.cpp, version.cpp
+  mem/            pmm.cpp, vmm.cpp, heap.cpp, address_space.cpp
+  events/         vector.cpp, trap.cpp, irq.cpp, workqueue.cpp, waitqueue.cpp
+  time/           clocksource.cpp, timer.cpp, delay.cpp
+  dma/            dma.cpp, cache.cpp, pool.cpp
+  drivers/
+    uart/         pl011.cpp
+    irq/          gicv3.cpp
+    timer/        arm_generic.cpp
+    rtc/          pl031.cpp
+    pci/          ecam.cpp
+    virtio/       virtio_common.cpp, virtio_blk.cpp, virtio_gpu.cpp
+  fs/             vfs.cpp, devfs.cpp, ramfs.cpp, fat32.cpp
+  sched/          thread.cpp, scheduler.cpp, context.S
+  sync/           spinlock.cpp, mutex.cpp, semaphore.cpp
+  syscall/        syscall.cpp, usercopy.cpp
+  platform/       qemu_virt.cpp, platform.h
+  boot/uefi/      efi_main.cpp, efi_console.cpp, efi_memmap.cpp, efi_exit.cpp
+tests/
+  host/           unit test modul murni
+  qemu/           smoke test script
+docs/
+  ROADMAP.md
+```
+
+---
+
+## 4. Aturan anti redundansi
+
+Tabel pemilik tunggal. Kalau butuh kemampuan ini, pakai header pemiliknya.
+
+| Kemampuan | Pemilik | Dilarang ada di |
+|---|---|---|
+| barrier CPU | `arch/aarch64/barriers.h` | driver, fs, mem |
+| cache maintenance | `arch/aarch64/cache.h` | driver |
+| baca tulis MMIO | `io/mmio.h` | semua modul lain |
+| console dan print | `io/console.h`, `io/print.h` | driver, boot |
+| status dan error | `og/status.h` | modul lain |
+| log | `core/log.h` | semua modul lain |
+| panic dan assert | `core/panic.h`, `core/assert.h` | semua modul lain |
+| memcpy, memset, strlen | `libs/core/memory.h` | semua modul lain |
+| bit ops | `libs/core/bit.h` | semua modul lain |
+| alokasi page fisik | `mem/pmm.h` | driver, fs |
+| map dan unmap virtual | `mem/vmm.h` | driver, fs |
+| alokasi heap | `mem/heap.h` | driver, fs |
+| registrasi IRQ | `events/irq.h` | driver |
+| timer dan timeout | `time/timer.h` | driver |
+| alokasi DMA | `dma/dma.h` | driver |
+| registry device | `drivers/device.h` | driver individu |
+| file dan direktori | `fs/vfs.h` | driver |
+| lock | `sync/*.h` | semua modul lain |
+
+Aturan penegakan:
+
+1. Setiap modul jadi target CMake sendiri dengan include PUBLIK hanya untuk
+   lapisan di bawahnya. Salah include = build gagal.
+2. `volatile` hanya boleh muncul di `io/mmio.cpp` dan deklarasi register.
+3. Fungsi yang sudah pindah ke pemiliknya dihapus dari tempat lama, tidak
+   disalin. Refactor yang sama tidak boleh muncul dua kali.
+4. Kalau dua modul butuh logika sama, logika naik ke `libs/core/`.
+
+---
+
+## 5. Fase dan todolist
+
+### Fase 0 - Fondasi dan pemisahan modul
+
+- [ ] F-01 Buat struktur direktori target, pindahkan file lama tanpa ubah isi.
+- [ ] F-02 Pecah CMake jadi target per modul: `og_arch`, `og_io`, `og_core`,
+      `og_mem`, `og_events`, `og_time`, `og_dma`, `og_drivers`, `og_fs`,
+      `og_sched`, `og_sync`, `og_syscall`, `og_platform`, `og_boot`.
+- [ ] F-03 Tegakkan aturan include lewat `target_include_directories` PUBLIC
+      dan PRIVATE, bukan lewat konvensi.
+- [ ] F-04 `og/status.h`: status code, `Result<T>`, helper `IsOk`, `IsErr`.
+      Hapus pemakaian status liar di modul lain.
+- [ ] F-05 `libs/core/memory.h`: pindahkan `memcpy`, `memset`, `memmove`,
+      `memcmp` dari `kernel/kernel/stubs.cpp`. Tambah `strlen`, `strcmp`,
+      `memzero`.
+- [ ] F-06 `libs/core/bit.h`: `Bit`, `Mask`, `Extract`, `Insert`, `AlignUp`,
+      `AlignDown`, `IsAligned`.
+- [ ] F-07 `core/log.h`: level, sink, `Log(level, ...)`, sink UART untuk early
+      boot, sink null untuk host test.
+- [ ] F-08 `core/panic.h`: `Panic(reason)`, dump `ESR_EL1`, `FAR_EL1`,
+      `ELR_EL1`, `SPSR_EL1`, `VBAR_EL1`.
+- [ ] F-09 `core/assert.h`: `OG_ASSERT`, `OG_ASSERT_MSG`, `OG_UNREACHABLE`.
+- [ ] F-10 `boot/uefi/efi_memmap.cpp`: ambil memory map sebelum exit, simpan
+      ke `BootInfo` yang netral dari tipe UEFI.
+- [ ] F-11 `boot/uefi/efi_exit.cpp`: `ExitBootServices` dengan retry map key.
+- [ ] F-12 `og/bootinfo.h`: struct boot info versi 1, magic, ukuran, deskriptor
+      memori, framebuffer opsional, rsdp opsional.
+- [ ] F-13 Urutan init kernel: `core/init.cpp` memanggil modul berurutan dan
+      berhenti di error pertama. Tidak ada init tersebar di konstruktor global.
+- [ ] F-14 Hapus `kernel/kernel/stubs.cpp` setelah isinya pindah ke F-05.
+- [ ] F-15 Script `scripts/check-arch.sh`: gagal kalau ada include melanggar
+      lapisan, atau `volatile` di luar `io/`.
+
+**Selesai bila:** build tetap jalan, boot tetap sampai `kmain`, dan tidak ada
+duplikasi fungsi memory atau status.
+
+### Fase 1 - IO dan console
+
+- [ ] IO-01 `io/mmio.h`: `MmioRegion` dengan base, size, dan bounds check.
+      Akses `Read32`, `Write32`, `Read64`, `Write64`, versi 8 dan 16 bit.
+- [ ] IO-02 `arch/aarch64/barriers.h`: `Dmb`, `Dsb`, `Isb` dengan opsi
+      `sy`, `ish`, `ishst`, `nsh`.
+- [ ] IO-03 `io/register.h`: `Field<kPos, kWidth>` dengan `Encode`, `Decode`,
+      dan `static_assert` batas.
+- [ ] IO-04 `io/console.h`: interface `Console` dengan `Write(span)`,
+      implementasi `ConsoleUart` dan `ConsoleEfi`.
+- [ ] IO-05 `io/print.h`: `Print`, `PrintHex`, `PrintDec`, `PrintLn` tanpa
+      alokasi dan tanpa variadic berat.
+- [ ] IO-06 Ganti semua `uart.puts` langsung di boot dan driver dengan
+      `Log` atau `Print` dari IO-05.
+- [ ] IO-07 Uji: `og/print` dipakai dari `kmain`, output identik.
+
+**Selesai bila:** tidak ada akses MMIO di luar `io/`, dan console bisa
+diganti tanpa ubah pemanggil.
+
+### Fase 2 - Arch dasar
+
+- [ ] ARCH-01 `arch/aarch64/registers.h`: baca tulis `SCTLR_EL1`, `TCR_EL1`,
+      `TTBR0_EL1`, `MAIR_EL1`, `VBAR_EL1`, `ESR_EL1`, `FAR_EL1`, `ELR_EL1`,
+      `SPSR_EL1`, `DAIF`.
+- [ ] ARCH-02 `arch/aarch64/cache.h`: `CleanInvalidateRange`, `InvalidateIcache`,
+      `DcCivac`, `DcIvacin`.
+- [ ] ARCH-03 `arch/aarch64/mmu_primitives.cpp`: bangun tabel L0 sampai L3,
+      atribut normal dan device, set `MAIR`, `TCR`, `TTBR0`, aktifkan `SCTLR.M`.
+- [ ] ARCH-04 `arch/aarch64/tlb.h`: `TlbiVae1`, `TlbiVaal1`, `Dsb`, `Isb`.
+- [ ] ARCH-05 `arch/aarch64/vectors.S`: 16 vector, `alignas(2048)`, stub
+      simpan register ke `TrapFrame`, panggil handler C++.
+- [ ] ARCH-06 `arch/aarch64/context.S`: `SwitchContext`, simpan dan pulihkan
+      callee-saved register.
+- [ ] ARCH-07 `arch/aarch64/cpu.h`: `CpuId`, `CurrentEl`, `CoreIndex` nanti.
+
+**Selesai bila:** MMU aktif dengan tabel sendiri, dan exception sengaja
+memicu panic yang benar, bukan hang.
+
+### Fase 3 - Memori
+
+- [ ] MEM-01 `mem/pmm.h`: bitmap allocator atas `BootInfo` memory map,
+      `AllocPage`, `AllocPages(n)`, `FreePage`, `FreePages`.
+- [ ] MEM-02 `mem/pmm.cpp`: tandai region reserved: kernel image, boot info,
+      MMIO, ACPI, framebuffer.
+- [ ] MEM-03 `mem/vmm.h`: `Map(va, pa, size, Attr)`, `Unmap`, `MapDevice`,
+      `Protect`, `Translate`.
+- [ ] MEM-04 `mem/vmm.cpp`: walk tabel 4 level, alokasi tabel dari pmm,
+      dukung 4K, 2M, 1G.
+- [ ] MEM-05 `mem/heap.h`: `kmalloc`, `kzalloc`, `kfree`, `krealloc` minimal,
+      alignment, dan `HeapStats`.
+- [ ] MEM-06 `mem/heap.cpp`: TLSF atau slab sederhana di atas `AllocPages`.
+- [ ] MEM-07 `mem/address_space.h`: objek address space, siap untuk user mode.
+- [ ] MEM-08 Guard page di bawah stack kernel dan deteksi overflow.
+- [ ] MEM-09 Uji QEMU: alokasi dan free 10 ribu page, cek tidak bocor.
+
+**Selesai bila:** `mmu.init_identity` diganti `vmm` sungguhan, dan heap
+dipakai minimal satu modul.
+
+### Fase 4 - Events dan interrupt
+
+- [ ] EV-01 `events/vector.cpp`: pasang `VBAR_EL1`, `alignas(2048)`.
+- [ ] EV-02 `events/trap.cpp`: decode `ESR_EL1` dengan struct bitfield,
+      klasifikasi data abort, instruction abort, SVC, SError.
+- [ ] EV-03 `events/trap.cpp`: handler default memanggil `Panic` dengan dump.
+- [ ] EV-04 `events/irq.h`: `RegisterIrq(n, handler, cookie)`, `UnregisterIrq`,
+      `EnableIrq`, `DisableIrq`, `AckIrq`, `EndIrq`.
+- [ ] EV-05 `events/workqueue.h`: antrian kerja tertunda, dijalankan setelah IRQ.
+- [ ] EV-06 `events/waitqueue.h`: `Wait(predicate)`, `WakeOne`, `WakeAll`,
+      tanpa busy loop.
+- [ ] EV-07 Cegah rekursi IRQ: simpan state `DAIF` di `SpinlockIrqSave`.
+
+**Selesai bila:** timer tick masuk ke handler terdaftar dan bisa dihitung.
+
+### Fase 5 - Time
+
+- [ ] TIME-01 `time/clocksource.h`: counter frekuensi tetap, `Now`, `ToNs`.
+- [ ] TIME-02 `drivers/timer/arm_generic.cpp`: `CNTPCT`, `CNTFRQ`, compare.
+- [ ] TIME-03 `time/timer.h`: `ScheduleAfter`, `Cancel`, `Tick`, antrian
+      timeout berbasis delta.
+- [ ] TIME-04 `time/delay.h`: `DelayUs`, `DelayMs` pakai clocksource, bukan
+      loop kosong.
+- [ ] TIME-05 Uji: 1000 tick per detik stabil plus minus 1 persen di QEMU.
+
+**Selesai bila:** sleep dan timeout jalan tanpa busy loop.
+
+### Fase 6 - Sync
+
+- [ ] SYN-01 `sync/spinlock.h`: `Spinlock` dan `SpinlockIrqSave`, dengan
+      `DAIF` simpan pulih.
+- [ ] SYN-02 `sync/mutex.h`: mutex dengan wait queue, hanya untuk konteks
+      yang boleh tidur.
+- [ ] SYN-03 `sync/semaphore.h`: hitung, `Wait`, `Signal`.
+- [ ] SYN-04 `sync/refcount.h`: `Ref`, `Unref`, `Release`.
+- [ ] SYN-05 `sync/once.h`: `CallOnce`.
+- [ ] SYN-06 Semua lock punya nama untuk debug deadlock.
+
+**Selesai bila:** tidak ada lagi disable interrupt manual tersebar.
+
+### Fase 7 - DMA
+
+- [ ] DMA-01 `dma/dma.h`: `DmaAddr`, translasi CPU ke device. Identitas
+      sekarang, siap untuk IOMMU.
+- [ ] DMA-02 `AllocCoherent(size, align)`: page contiguous plus map device.
+- [ ] DMA-03 `MapStreaming(span, dir)`, `UnmapStreaming` dengan cache
+      maintenance dari `arch/cache.h`.
+- [ ] DMA-04 `dma/pool.cpp`: pool per device supaya tidak fragmentasi.
+- [ ] DMA-05 Uji dengan virtio-blk setelah Fase 8.
+
+**Selesai bila:** driver virtio memakai DMA API, bukan alamat fisik mentah.
+
+### Fase 8 - Driver
+
+- [ ] DRV-01 `drivers/device.h`: registry device, `RegisterDevice`,
+      `FindDevice(name)`, status probe, tanpa global mutable tersebar.
+- [ ] DRV-02 `drivers/uart/pl011.cpp`: init lengkap, baud, FIFO, IRQ RX,
+      ring buffer TX dan RX.
+- [ ] DRV-03 `drivers/irq/gicv3.cpp`: distributor, redistributor, CPU
+      interface, enable, disable, prioritas, ack, eoi.
+- [ ] DRV-04 `drivers/rtc/pl031.cpp`: baca waktu, siap dipakai log timestamp.
+- [ ] DRV-05 `drivers/pci/ecam.cpp`: scan bus, device, function, baca BAR,
+      assign BAR, simpan ke registry.
+- [ ] DRV-06 `drivers/virtio/virtio_common.cpp`: feature negotiation, queue
+      setup, descriptor, available, used, notify.
+- [ ] DRV-07 `drivers/virtio/virtio_blk.cpp`: baca blok, tulis blok, IRQ.
+- [ ] DRV-08 `drivers/virtio/virtio_gpu.cpp`: framebuffer, mode set, flush.
+- [ ] DRV-09 `drivers/watchdog` opsional.
+
+**Selesai bila:** UART RX pakai IRQ, GIC hidup, dan satu device virtio
+berfungsi.
+
+### Fase 9 - Filesystem
+
+- [ ] FS-01 `fs/vfs.h`: `Inode`, `FileOps`, `SuperblockOps`, `Mount`, `Path`.
+- [ ] FS-02 `fs/vfs.cpp`: resolusi path, mount table, lookup, traversal,
+      tanpa rekursi tak terbatas.
+- [ ] FS-03 `fs/devfs.cpp`: `/dev/console`, `/dev/uart0`, `/dev/null`,
+      `/dev/zero`.
+- [ ] FS-04 `fs/ramfs.cpp`: file dan direktori di memori untuk initramfs.
+- [ ] FS-05 `fs/fat32.cpp`: baca saja, BPB, FAT, cluster chain, LFN.
+- [ ] FS-06 `fs/file.cpp`: tabel descriptor, `open`, `read`, `write`, `seek`,
+      `close`, `stat`.
+- [ ] FS-07 Pasang ESP sebagai root read-only saat boot.
+- [ ] FS-08 `fs/procfs` opsional untuk info kernel.
+
+**Selesai bila:** bisa `open("/dev/console")` dan `read("/init")` dari FAT.
+
+### Fase 10 - Scheduler
+
+- [ ] SCH-01 `sched/thread.h`: `Thread`, state, kernel stack dari vmm plus
+      guard page.
+- [ ] SCH-02 `sched/scheduler.cpp`: ready queue round robin, idle thread.
+- [ ] SCH-03 Preemption dari tick timer.
+- [ ] SCH-04 `Sleep`, `Wakeup`, integrasi `waitqueue`.
+- [ ] SCH-05 Load balancing sederhana untuk SMP nanti.
+- [ ] SCH-06 Uji: dua thread bergantian print tanpa saling mengunci.
+
+**Selesai bila:** `kmain` menjadi thread init dan idle berjalan saat kosong.
+
+### Fase 11 - Syscall dan user mode
+
+- [ ] SYS-01 Transisi EL1 ke EL0: `SPSR`, `ELR`, stack user.
+- [ ] SYS-02 ABI `svc #0`, nomor di `x8`, argumen `x0..x5`, hasil `x0`.
+- [ ] SYS-03 Syscall awal: `write`, `read`, `exit`, `yield`.
+- [ ] SYS-04 `syscall/usercopy.cpp`: `CopyFromUser`, `CopyToUser` dengan
+      validasi range terhadap address space.
+- [ ] SYS-05 Loader program user dari ramfs.
+- [ ] SYS-06 `mmap` dan `munmap` untuk user.
+
+**Selesai bila:** satu program EL0 bisa print lalu exit bersih.
+
+### Fase 12 - Platform dan SMP
+
+- [ ] PLT-01 `platform/platform.h`: deskripsi board, base device, IRQ map.
+- [ ] PLT-02 `platform/qemu_virt.cpp`: konfigurasi QEMU virt, termasuk DTB
+      opsional.
+- [ ] PLT-03 Parser DTB minimal untuk base address dan memory.
+- [ ] SMP-01 PSCI `CPU_ON` dan boot sekunder.
+- [ ] SMP-02 Per-CPU data, `Tpidr_el1`.
+- [ ] SMP-03 SGI untuk reschedule dan TLB shootdown.
+
+**Selesai bila:** dua core hidup dan print bergantian.
+
+### Fase 13 - Testing dan tooling
+
+- [ ] TST-01 Host test runner tanpa framework berat untuk `libs/core`,
+      `fs/fat32` parser, `mem` algoritma murni.
+- [ ] TST-02 `scripts/test-qemu.sh`: jalankan QEMU, grep output yang
+      diharapkan, exit nonzero kalau gagal.
+- [ ] TST-03 `scripts/check-arch.sh` masuk CI lokal.
+- [ ] TST-04 Target `make test` di CMake.
+- [ ] TST-05 Dokumentasi cara debug di `docs/DEBUG.md`, ringkas.
+
+**Selesai bila:** satu perintah menjalankan build, unit test, dan smoke test.
+
+### Fase 14 - Hardening
+
+- [ ] HARD-01 W^X: code read execute, data no execute, stack no execute.
+- [ ] HARD-02 Stack canary untuk fungsi kernel.
+- [ ] HARD-03 Validasi semua input dari device dan user.
+- [ ] HARD-04 Batas iterasi di semua loop yang menunggu hardware.
+- [ ] HARD-05 Panic dump lengkap dan konsisten.
+
+---
+
+## 6. Definition of done per modul
+
+Sebuah modul dianggap selesai bila semua ini benar:
+
+1. Punya satu header publik di `kernel/include/og/`.
+2. Semua fungsi fallible memakai `Result` atau `Status` dan `[[nodiscard]]`.
+3. Guard clause di awal, tanpa nesting lebih dari satu level.
+4. Tidak ada `volatile` di luar `io/`.
+5. Tidak ada duplikasi fungsi yang sudah ada di tabel pemilik.
+6. Ada minimal satu pemakaian nyata di kernel, bukan kode mati.
+7. Ada test host untuk logika murni, atau uji QEMU untuk jalur hardware.
+8. Dokumentasi singkat di header: kontrak, konteks pemanggilan, boleh tidur
+   atau tidak.
+
+---
+
+## 7. Urutan pengerjaan yang disarankan
+
+1. Fase 0 sampai 3: fondasi, IO, arch, memori. Ini yang membuka sisanya.
+2. Fase 4 sampai 6: events, time, sync. Timer butuh IRQ, sync butuh events.
+3. Fase 7 dan 8: DMA dan driver. DMA sebelum virtio.
+4. Fase 9: filesystem. Bisa paralel dengan driver setelah vfs ada.
+5. Fase 10 dan 11: scheduler lalu syscall.
+6. Fase 12 sampai 14: platform, SMP, testing, hardening.
+
+Paralel yang aman: FS-01 dan FS-04 bisa jalan bareng TST-01 karena hanya
+butuh `libs/core`, tidak butuh hardware.
+
+---
+
+## 8. Larangan
+
+1. Dilarang menambah driver baru sebelum `drivers/device.h` ada.
+2. Dilarang memakai alamat fisik mentah di driver, wajib lewat dma atau mmio.
+3. Dilarang menulis ulang `memcpy`, `memset`, `strlen` di modul baru.
+4. Dilarang membuat lock sendiri di dalam driver, pakai `sync/`.
+5. Dilarang menaruh logika filesystem di driver virtio.
+6. Dilarang menaruh logika alokasi di driver apa pun.
+7. Dilarang import header modul atas dari modul bawah.
+8. Dilarang menyalin fungsi yang sudah ada hanya karena beda tipe parameter.
+   Pakai template atau overload di pemiliknya.
