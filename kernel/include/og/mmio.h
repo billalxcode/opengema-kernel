@@ -1,30 +1,19 @@
 #pragma once
 
-#include <concepts>
+// Canonical owner of memory mapped IO access.
+// No other module may touch volatile pointers or emit barriers around MMIO.
+
 #include <cstdint>
 
-namespace og {
+namespace og::io {
 
-template <typename T>
-concept MmioWord = std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>;
+[[nodiscard]] uint32_t MmioRead32(uint64_t address) noexcept;
+void MmioWrite32(uint64_t address, uint32_t value) noexcept;
 
-inline void MmioWrite32(uint64_t addr, uint32_t value) noexcept {
-  auto* p = reinterpret_cast<volatile uint32_t*>(addr);
-  if (p == nullptr) {
-    return;
-  }
-  *p = value;
-  __asm__ volatile("dsb sy" ::: "memory");
-}
+[[nodiscard]] uint64_t MmioRead64(uint64_t address) noexcept;
+void MmioWrite64(uint64_t address, uint64_t value) noexcept;
 
-inline uint32_t MmioRead32(uint64_t addr) noexcept {
-  auto* p = reinterpret_cast<volatile const uint32_t*>(addr);
-  if (p == nullptr) {
-    return 0;
-  }
-  uint32_t v = *p;
-  __asm__ volatile("dsb sy" ::: "memory");
-  return v;
-}
+[[nodiscard]] uint8_t MmioRead8(uint64_t address) noexcept;
+void MmioWrite8(uint64_t address, uint8_t value) noexcept;
 
-}  // namespace og
+}  // namespace og::io
