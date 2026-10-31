@@ -1,0 +1,12 @@
+#pragma once
+
+#include <type_traits>
+
+// Minimal freestanding concepts for opengema-kernel.
+
+namespace std {
+
+template <typename A, typename B>
+concept same_as = is_same_v<A, B> && is_same_v<B, A>;
+
+}  // namespace std

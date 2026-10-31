@@ -1,0 +1,52 @@
+#pragma once
+
+// Minimal freestanding type_traits for opengema-kernel.
+// Only what the kernel uses today. Extend on demand.
+
+namespace std {
+
+template <typename T, T kValue>
+struct integral_constant {
+  static constexpr T value = kValue;
+  using value_type = T;
+  using type = integral_constant;
+  constexpr operator value_type() const noexcept { return value; }
+};
+
+using true_type = integral_constant<bool, true>;
+using false_type = integral_constant<bool, false>;
+
+template <typename A, typename B>
+struct is_same : false_type {};
+
+template <typename A>
+struct is_same<A, A> : true_type {};
+
+template <typename A, typename B>
+inline constexpr bool is_same_v = is_same<A, B>::value;
+
+template <typename T>
+struct remove_const {
+  using type = T;
+};
+
+template <typename T>
+struct remove_const<const T> {
+  using type = T;
+};
+
+template <typename T>
+using remove_const_t = typename remove_const<T>::type;
+
+template <bool kCond, typename T = void>
+struct enable_if {};
+
+template <typename T>
+struct enable_if<true, T> {
+  using type = T;
+};
+
+template <bool kCond, typename T = void>
+using enable_if_t = typename enable_if<kCond, T>::type;
+
+}  // namespace std

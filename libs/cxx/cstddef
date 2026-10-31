@@ -1,0 +1,19 @@
+#pragma once
+
+// Minimal freestanding cstddef for opengema-kernel.
+
+namespace std {
+
+using size_t = __SIZE_TYPE__;
+using ptrdiff_t = __PTRDIFF_TYPE__;
+using nullptr_t = decltype(nullptr);
+
+}  // namespace std
+
+using std::nullptr_t;
+using std::ptrdiff_t;
+using std::size_t;
+
+#define offsetof(T, M) __builtin_offsetof(T, M)
+
+static_assert(sizeof(size_t) == 8);
