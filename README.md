@@ -14,7 +14,13 @@ Build di dalam podman, jalankan QEMU di host:
 ./scripts/get-firmware.sh   # siapkan firmware UEFI
 ./scripts/build.sh          # build kernel
 ./scripts/make-esp.sh       # siapkan disk boot
-./scripts/run-qemu.sh       # jalankan
+./scripts/run-qemu.sh       # jalankan, default tanpa GUI
+```
+
+Mau lihat jendela QEMU:
+
+```sh
+./scripts/run-qemu.sh --gui=on
 ```
 
 ## Status
