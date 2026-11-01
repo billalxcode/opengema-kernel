@@ -234,6 +234,39 @@ int main() {
     return 1;
   }
 
+  std::vector<uint8_t> unsupported = image;
+  PutLe16(unsupported.data() + 11U, 256U);
+  Disk unsupported_disk{&unsupported};
+  const og::fs::BlockDevice unsupported_device{
+    &ReadDisk, &unsupported_disk, kSectorCount, 0};
+  if (og::fs::fat32::Mount(unsupported_device, &root) !=
+      og::Status::kUnsupported) {
+    std::printf("fat32 probe: bad sector size was accepted\n");
+    return 1;
+  }
+
+  std::vector<uint8_t> bad_cluster = image;
+  bad_cluster[13U] = 3U;
+  Disk bad_cluster_disk{&bad_cluster};
+  const og::fs::BlockDevice bad_cluster_device{&ReadDisk, &bad_cluster_disk,
+                                               kSectorCount, 0};
+  if (og::fs::fat32::Mount(bad_cluster_device, &root) !=
+      og::Status::kInvalidArg) {
+    std::printf("fat32 probe: bad cluster size was accepted\n");
+    return 1;
+  }
+
+  std::vector<uint8_t> bad_layout = image;
+  PutLe16(bad_layout.data() + 14U, 64U);
+  Disk bad_layout_disk{&bad_layout};
+  const og::fs::BlockDevice bad_layout_device{&ReadDisk, &bad_layout_disk,
+                                              kSectorCount, 0};
+  if (og::fs::fat32::Mount(bad_layout_device, &root) !=
+      og::Status::kInvalidArg) {
+    std::printf("fat32 probe: bad data start was accepted\n");
+    return 1;
+  }
+
   std::printf("fat32 probe: OK\n");
   return 0;
 }
