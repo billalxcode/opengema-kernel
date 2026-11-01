@@ -496,8 +496,10 @@ Catatan hasil Fase 11:
 - [x] PLT-01 `og/platform.h`: deskripsi board dengan rentang UART, GIC,
       PCIe, RAM, jumlah CPU, dan konduit PSCI.
 - [x] PLT-02 `kernel/platform/qemu_virt.cpp`: konfigurasi QEMU virt.
-- [ ] PLT-03 Parser DTB: ditunda. Konduit PSCI dideteksi dengan mencoba
-      `PSCI_VERSION` lewat HVC lalu SMC, jadi tidak perlu DTB untuk boot.
+- [x] PLT-03 `og/fdt.h` dan `kernel/platform/fdt.cpp`: header FDT, cari
+      node lewat path, baca properti, dan hitung anak. Dipakai untuk konduit
+      PSCI dan jumlah CPU. Diuji dengan `acpi=off` karena firmware default
+      memberi ACPI, bukan DTB.
 - [x] SMP-01 PSCI `CPU_ON` dengan entry point dan stack fisik, lalu
       secondary menyalakan MMU dan vektor sendiri.
 - [x] SMP-02 Per-CPU data lewat `TPIDR_EL1`.
@@ -644,8 +646,6 @@ yang belum selesai, supaya tidak ada yang hilang di antara fase.
 
 ### 9.3 Ditunda karena belum ada pemakai nyata
 
-- [ ] PLT-03 parser DTB: konduit PSCI dan alamat device masih memakai
-      deskripsi platform. Parser dibutuhkan saat menambah board lain.
 - [ ] SMP penjadwalan lintas core (SCH-05): butuh per-CPU scheduler.
 - [ ] DRV-08 virtio-gpu: menunggu kebutuhan framebuffer.
 
@@ -658,7 +658,7 @@ yang belum selesai, supaya tidak ada yang hilang di antara fase.
 - [x] Fase 9 selesai.
 - [ ] Fase 10 sisa: SCH-05 load balancing SMP (lihat 9.1).
 - [x] Fase 11 selesai.
-- [ ] Fase 12 sisa: PLT-03 parser DTB dan SMP scheduling (lihat 9.3).
+- [ ] Fase 12 sisa: SMP scheduling (lihat 9.3).
 - [x] Fase 13 selesai.
 - [x] Fase 14 selesai.
 

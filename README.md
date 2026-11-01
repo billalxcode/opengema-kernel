@@ -52,6 +52,9 @@ scheduler, dan user mode:
 opengema-kernel: uefi entry
 uefi: boot services exited
 kernel: kmain entered
+platform: dtb parsed
+platform: cpus: 2
+platform: psci conduit: 0
 pmm: total frames: 131072
 pmm: free frames: 122090
 vmm: identity map active

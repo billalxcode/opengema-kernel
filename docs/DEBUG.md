@@ -21,7 +21,7 @@ Berhenti di kegagalan pertama:
 VARS_TMP="$(mktemp /tmp/AAVMF_VARS.XXXXXX.fd)"
 cp firmware/AAVMF_VARS.fd "$VARS_TMP"
 qemu-system-aarch64 \
-  -M virt,gic-version=3 -cpu cortex-a72 -smp 2 -m 512M -nic none \
+  -M virt,gic-version=3,acpi=off -cpu cortex-a72 -smp 2 -m 512M -nic none \
   -drive if=pflash,format=raw,file=firmware/AAVMF_CODE.fd,readonly=on \
   -drive if=pflash,format=raw,file="$VARS_TMP" \
   -drive file=esp.img,format=raw,if=virtio \
