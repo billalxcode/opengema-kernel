@@ -24,9 +24,11 @@
 #include "og/pmm.h"
 #include "og/print.h"
 #include "og/psci.h"
+#include "og/rtc.h"
 #include "og/sched.h"
 #include "og/smp.h"
 #include "og/status.h"
+#include "og/sync.h"
 #include "og/syscall.h"
 #include "og/timer.h"
 #include "og/trap.h"
@@ -45,7 +47,7 @@ namespace og {
 
 namespace {
 
-constexpr uint32_t kTickHz = 100;
+constexpr uint32_t kTickHz = 1000;
 // The host can starve the vCPU, so prove interrupts arrive without
 // asserting a wall clock rate. Only zero ticks is treated as a failure.
 constexpr uint64_t kTargetTicks = 10;
@@ -57,7 +59,63 @@ constexpr uint64_t kUserStackSize = 16384;
 uint64_t g_work_runs = 0;
 uint64_t g_workers_done = 0;
 uint64_t g_ipi_count = 0;
+uint64_t g_mutex_counter = 0;
+uint64_t g_mutex_done = 0;
+uint64_t g_semaphore_seen = 0;
+uint64_t g_once_runs = 0;
+uint64_t g_timeout_fired = 0;
+sync::Mutex g_test_mutex;
+sync::Semaphore g_test_semaphore;
 drivers::virtio::Blk g_block_device;
+drivers::rtc::Pl031 g_rtc;
+
+void InitRtc() noexcept {
+  const platform::Platform& board = platform::Current();
+  const Status status = g_rtc.init(board.rtc.base, board.rtc.size);
+  if (IsErr(status)) {
+    Log(LogLevel::kWarn, "rtc: init failed\n");
+    return;
+  }
+  const Result<uint64_t> seconds = g_rtc.read_unix_seconds();
+  if (seconds.is_err()) {
+    Log(LogLevel::kWarn, "rtc: read failed\n");
+    return;
+  }
+  LogDec(LogLevel::kInfo, "rtc: unix seconds", seconds.value());
+
+  drivers::Device device{};
+  device.name = "pl031";
+  device.device_class = drivers::DeviceClass::kUnknown;
+  device.capacity = seconds.value();
+  device.driver_data = &g_rtc;
+  (void)drivers::RegisterDevice(device);
+}
+
+void MutexWorker(void* /*argument*/) noexcept {
+  for (uint32_t index = 0; index < 50U; ++index) {
+    if (IsErr(g_test_mutex.lock())) {
+      break;
+    }
+    const uint64_t value = g_mutex_counter;
+    g_mutex_counter = value + 1U;
+    g_test_mutex.unlock();
+    (void)sched::ThreadSleep(1);
+  }
+  (void)__atomic_add_fetch(&g_mutex_done, 1U, __ATOMIC_RELAXED);
+}
+
+void SemaphoreWorker(void* /*argument*/) noexcept {
+  (void)g_test_semaphore.wait();
+  (void)__atomic_add_fetch(&g_semaphore_seen, 1U, __ATOMIC_RELAXED);
+}
+
+void OnceHandler(void* /*argument*/) noexcept {
+  (void)__atomic_add_fetch(&g_once_runs, 1U, __ATOMIC_RELAXED);
+}
+
+void TimeoutHandler(void* /*argument*/) noexcept {
+  (void)__atomic_add_fetch(&g_timeout_fired, 1U, __ATOMIC_RELAXED);
+}
 
 Status IpiHandler(void* /*context*/, uint32_t /*irq*/) noexcept {
   __atomic_add_fetch(&g_ipi_count, 1U, __ATOMIC_RELAXED);
@@ -348,6 +406,7 @@ void kmain(BootInfo* info) noexcept {
   }
 
   InitBlockDevice();
+  InitRtc();
   InitFilesystem();
 
   status = events::WorkQueueInit();
@@ -474,6 +533,64 @@ void kmain(BootInfo* info) noexcept {
   }
   Log(LogLevel::kInfo, "sched: round robin ok\n");
 
+  g_test_mutex.set_name("self-test");
+  g_test_semaphore.init(0);
+  if (sched::ThreadCreate("mutex-a", &MutexWorker, nullptr).is_err() ||
+      sched::ThreadCreate("mutex-b", &MutexWorker, nullptr).is_err() ||
+      sched::ThreadCreate("semaphore", &SemaphoreWorker, nullptr).is_err()) {
+    Panic("sync: thread create failed");
+  }
+  g_test_semaphore.signal();
+
+  uint32_t sync_waits = 0;
+  while ((__atomic_load_n(&g_mutex_done, __ATOMIC_ACQUIRE) < 2U ||
+          __atomic_load_n(&g_semaphore_seen, __ATOMIC_ACQUIRE) < 1U) &&
+         sync_waits < 5000U) {
+    (void)sched::ThreadSleep(1);
+    ++sync_waits;
+  }
+  if (g_mutex_counter != 100U) {
+    Panic("sync: mutex lost updates");
+  }
+  if (g_semaphore_seen != 1U) {
+    Panic("sync: semaphore failed");
+  }
+
+  sync::RefCount refs;
+  refs.reset(1);
+  if (refs.add(2) != 3U) {
+    Panic("sync: refcount add failed");
+  }
+  if (refs.release() || refs.release()) {
+    Panic("sync: refcount released early");
+  }
+  if (!refs.release()) {
+    Panic("sync: refcount did not reach zero");
+  }
+
+  sync::OnceFlag once{};
+  sync::CallOnce(once, &OnceHandler, nullptr);
+  sync::CallOnce(once, &OnceHandler, nullptr);
+  if (g_once_runs != 1U) {
+    Panic("sync: once ran twice");
+  }
+  Log(LogLevel::kInfo, "sync: mutex, semaphore, refcount, once ok\n");
+
+  const Result<time::Timeout*> scheduled_timeout =
+    time::ScheduleAfter(5, &TimeoutHandler, nullptr);
+  if (scheduled_timeout.is_err()) {
+    Panic("time: schedule failed");
+  }
+  uint32_t timeout_waits = 0;
+  while (__atomic_load_n(&g_timeout_fired, __ATOMIC_ACQUIRE) == 0U && timeout_waits < 500U) {
+    (void)sched::ThreadSleep(1);
+    ++timeout_waits;
+  }
+  if (g_timeout_fired != 1U) {
+    Panic("time: timeout did not fire");
+  }
+  Log(LogLevel::kInfo, "time: timeout ok\n");
+
   status = LoadUserProgram();
   if (IsErr(status)) {
     Panic("user: load failed");
@@ -490,6 +607,11 @@ void kmain(BootInfo* info) noexcept {
   sched::SchedulerStart();
   arch::aarch64::EnableIrq();
 
+  uint32_t user_waits = 0;
+  while (!syscall::UserExited() && user_waits < 5000U) {
+    (void)sched::ThreadSleep(1);
+    ++user_waits;
+  }
   if (!syscall::UserExited()) {
     Panic("user: exit not reached");
   }

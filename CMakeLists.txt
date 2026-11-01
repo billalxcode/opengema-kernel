@@ -122,6 +122,7 @@ og_add_module(og_drivers
     kernel/drivers/device.cpp
     kernel/drivers/uart/pl011.cpp
     kernel/drivers/irq/gicv3.cpp
+    kernel/drivers/rtc/pl031.cpp
     kernel/drivers/pci/ecam.cpp
     kernel/drivers/virtio/virtio_common.cpp
     kernel/drivers/virtio/virtio_blk.cpp
@@ -143,6 +144,10 @@ og_add_module(og_syscall
   SOURCES kernel/syscall/syscall.cpp
   DEPS og_sched og_events og_mem og_core og_inc_kernel)
 
+og_add_module(og_sync
+  SOURCES kernel/sync/sync.cpp
+  DEPS og_sched og_arch og_core og_inc_kernel)
+
 og_add_module(og_platform
   SOURCES
     kernel/platform/qemu_virt.cpp
@@ -153,7 +158,7 @@ og_add_module(og_platform
 
 og_add_module(og_kernel
   SOURCES kernel/core/init.cpp
-  DEPS og_platform og_syscall og_sched og_fs og_mem og_events og_time og_dma og_drivers og_inc_kernel)
+  DEPS og_sync og_platform og_syscall og_sched og_fs og_mem og_events og_time og_dma og_drivers og_inc_kernel)
 
 og_add_module(og_boot
   SOURCES
@@ -174,6 +179,7 @@ set(OG_IMAGE_OBJECTS
   $<TARGET_OBJECTS:og_drivers>
   $<TARGET_OBJECTS:og_fs>
   $<TARGET_OBJECTS:og_sched>
+  $<TARGET_OBJECTS:og_sync>
   $<TARGET_OBJECTS:og_syscall>
   $<TARGET_OBJECTS:og_platform>
   $<TARGET_OBJECTS:og_time>
@@ -196,7 +202,7 @@ add_custom_command(
     /out:${CMAKE_BINARY_DIR}/BOOTAA64.EFI
     ${OG_IMAGE_OBJECTS}
   COMMAND_EXPAND_LISTS
-  DEPENDS og_boot og_kernel og_drivers og_fs og_sched og_syscall og_platform og_time og_dma og_events og_mem og_core og_io og_arch og_lib_core
+  DEPENDS og_boot og_kernel og_drivers og_fs og_sched og_sync og_syscall og_platform og_time og_dma og_events og_mem og_core og_io og_arch og_lib_core
   COMMENT "lld-link BOOTAA64.EFI"
 )
 
