@@ -40,6 +40,10 @@ mem test: vmm 2m ok
 mem test: heap ok
 dma test: coherent ok
 dma test: streaming ok
+pci: virtio device id: 4097
+virtio-blk: queue size: 256
+virtio-blk: capacity sectors: 131072
+virtio-blk: gpt header ok
 event test: irq and workqueue ok
 gic: ready
 timer: frequency: 62500000
@@ -48,6 +52,6 @@ timer: periodic tick ok
 kernel: halt
 ```
 
-Berikutnya: PCIe dan virtio, lalu filesystem.
+Berikutnya: filesystem di atas virtio-blk.
 
 Roadmap lengkap ada di `docs/ROADMAP.md`.

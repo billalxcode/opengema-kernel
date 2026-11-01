@@ -365,23 +365,36 @@ alamat CPU, pola data bertahan, dan jumlah frame bebas kembali setelah
 
 ### Fase 8 - Driver
 
-- [ ] DRV-01 `drivers/device.h`: registry device, `RegisterDevice`,
-      `FindDevice(name)`, status probe, tanpa global mutable tersebar.
-- [ ] DRV-02 `drivers/uart/pl011.cpp`: init lengkap, baud, FIFO, IRQ RX,
-      ring buffer TX dan RX.
-- [ ] DRV-03 `drivers/irq/gicv3.cpp`: distributor, redistributor, CPU
-      interface, enable, disable, prioritas, ack, eoi.
-- [ ] DRV-04 `drivers/rtc/pl031.cpp`: baca waktu, siap dipakai log timestamp.
-- [ ] DRV-05 `drivers/pci/ecam.cpp`: scan bus, device, function, baca BAR,
-      assign BAR, simpan ke registry.
-- [ ] DRV-06 `drivers/virtio/virtio_common.cpp`: feature negotiation, queue
-      setup, descriptor, available, used, notify.
-- [ ] DRV-07 `drivers/virtio/virtio_blk.cpp`: baca blok, tulis blok, IRQ.
-- [ ] DRV-08 `drivers/virtio/virtio_gpu.cpp`: framebuffer, mode set, flush.
-- [ ] DRV-09 `drivers/watchdog` opsional.
+- [x] DRV-01 `og/device.h`: registry dengan nama, kelas, kapasitas, dan
+      `driver_data`. Dipakai virtio-blk saat mendaftar.
+- [~] DRV-02 PL011: TX polling selesai. RX lewat IRQ, pengaturan baud, dan
+      ring buffer belum.
+- [x] DRV-03 GICv3: distributor, redistributor, CPU interface, enable,
+      disable, acknowledge, end. Single core.
+- [ ] DRV-04 RTC PL031: belum, menunggu pemakai untuk timestamp.
+- [x] DRV-05 PCIe ECAM: scan bus, device, function, baca BAR, dan
+      `EnableDevice` untuk menyalakan memory decoding.
+- [x] DRV-06 virtio PCI transport: capability modern, feature negotiation,
+      queue setup, notify.
+- [x] DRV-07 virtio-blk: baca blok, polled completion, tanpa IRQ.
+- [ ] DRV-08 virtio-gpu: belum, ditunda sampai ada kebutuhan framebuffer.
+- [ ] DRV-09 watchdog: tidak dipakai di QEMU.
 
 **Selesai bila:** UART RX pakai IRQ, GIC hidup, dan satu device virtio
 berfungsi.
+
+Catatan hasil Fase 8:
+
+1. ECAM pada QEMU 11 `virt` ada di `0x4010000000`, bukan `0x3F000000`.
+   Angka ini diambil dari DTB hasil `dumpdtb`, bukan tebakan.
+2. Firmware mematikan memory decoding pada device sebelum kita mengambil
+   alih. Tanpa menyalakan bit memori di command register, semua register
+   virtio terbaca `0xFFFF`.
+3. Verifikasi nyata: kernel membaca sektor 1 dari ESP dan mencocokkan
+   tanda tangan GPT `EFI PART`. Capacity terbaca 131072 sektor, sesuai
+   ukuran image 64 MiB.
+4. Virtio masih polled. MSI-X dan jalur IRQ menyusul bersama driver yang
+   butuh throughput.
 
 ### Fase 9 - Filesystem
 
