@@ -1,6 +1,7 @@
 #include "og/mem/pmm.h"
 
 #include "memory.h"
+#include "og/arch/spinlock.h"
 
 namespace og::mem {
 
@@ -14,6 +15,7 @@ uint64_t g_frame_count = 0;
 uint64_t g_free_count = 0;
 uint64_t g_hint = 0;
 bool g_ready = false;
+arch::aarch64::IrqSpinlock g_lock;
 
 [[nodiscard]] uint64_t BitMask(uint64_t index) noexcept {
   return 1ULL << (index & 63U);
@@ -129,7 +131,7 @@ Status PmmInit(const BootInfo& info) noexcept {
   return Status::kOk;
 }
 
-Result<uint64_t> PmmAllocPages(uint64_t count) noexcept {
+Result<uint64_t> AllocPagesLocked(uint64_t count) noexcept {
   if (!g_ready) {
     return Result<uint64_t>::Err(Status::kNotInit);
   }
@@ -164,11 +166,18 @@ Result<uint64_t> PmmAllocPages(uint64_t count) noexcept {
   return Result<uint64_t>::Ok(g_ram_base + (start * kPageSize));
 }
 
+Result<uint64_t> PmmAllocPages(uint64_t count) noexcept {
+  g_lock.lock();
+  const Result<uint64_t> address = AllocPagesLocked(count);
+  g_lock.unlock();
+  return address;
+}
+
 Result<uint64_t> PmmAllocPage() noexcept {
   return PmmAllocPages(1);
 }
 
-Status PmmFreePages(uint64_t address, uint64_t count) noexcept {
+Status FreePagesLocked(uint64_t address, uint64_t count) noexcept {
   if (!g_ready) {
     return Status::kNotInit;
   }
@@ -206,12 +215,22 @@ Status PmmFreePages(uint64_t address, uint64_t count) noexcept {
   return Status::kOk;
 }
 
+Status PmmFreePages(uint64_t address, uint64_t count) noexcept {
+  g_lock.lock();
+  const Status status = FreePagesLocked(address, count);
+  g_lock.unlock();
+  return status;
+}
+
 Status PmmFreePage(uint64_t address) noexcept {
   return PmmFreePages(address, 1);
 }
 
 uint64_t PmmFreeFrames() noexcept {
-  return g_free_count;
+  g_lock.lock();
+  const uint64_t count = g_free_count;
+  g_lock.unlock();
+  return count;
 }
 
 uint64_t PmmTotalFrames() noexcept {
@@ -219,7 +238,10 @@ uint64_t PmmTotalFrames() noexcept {
 }
 
 bool PmmReady() noexcept {
-  return g_ready;
+  g_lock.lock();
+  const bool ready = g_ready;
+  g_lock.unlock();
+  return ready;
 }
 
 }  // namespace og::mem
