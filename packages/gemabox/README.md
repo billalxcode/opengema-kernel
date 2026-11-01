@@ -1,10 +1,13 @@
 # gemabox
 
 Program user mode dasar untuk opengema-kernel. Ditulis dengan C++20 di atas
-API publik `libgemapi`, dikompilasi menjadi `build/gemabox.elf`, disalin ke
-ESP sebagai `GEMABOX.ELF`, lalu dibaca kernel ke ramfs sebagai
-`/ram/gemabox` sebelum dijalankan di EL0. Kernel memvalidasi header ELF64,
-memetakan setiap segmen `PT_LOAD`, dan memakai alamat entry dari file.
+API publik `libgemapi`. Binary yang dipasang adalah ELF64 dynamic:
+`PT_INTERP` menunjuk `/ram/ld-gem` dan `DT_NEEDED` menunjuk
+`libgemapi.so.1`. Kernel memvalidasi ELF, memetakan segmen `PT_LOAD`, lalu
+`ld-gem` memuat dependency dari filesystem sebelum masuk ke `main`.
+
+Saat bring-up, binary disalin ke ESP sebagai `GEMABOX.ELF`, lalu kernel
+memindahkannya ke ramfs sebagai `/ram/gemabox`.
 
 Aplikasi ini tidak menyertakan header `kgema/` dan tidak menautkan
 `libkgema`. Lapisan ABI itu dipakai `libgemapi` secara privat.

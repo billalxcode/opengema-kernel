@@ -18,7 +18,6 @@ namespace og::process {
 
 constexpr uint32_t kMaxProcesses = 16;
 constexpr uint32_t kKernelPid = 0;
-constexpr uint64_t kUserCodeVa = mem::kUserSpaceBase;
 constexpr uint64_t kUserStackVa = mem::kUserSpaceBase + 0x100000ULL;
 constexpr uint64_t kUserStackSize = 16384;
 constexpr uint64_t kMaxProgramSize = 65536;

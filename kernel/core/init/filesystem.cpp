@@ -31,6 +31,47 @@ Status BlockReadAdapter(void* context, uint64_t sector,
   return static_cast<drivers::virtio::Blk*>(context)->read(sector, buffer);
 }
 
+Status CopyBootFile(const char* boot_path, const char* name, uint64_t max_size,
+                    const char* bytes_label, const char* missing_label) noexcept {
+  const Result<fs::Stat> stat = fs::FsStat(boot_path);
+  if (stat.is_err()) {
+    Log(LogLevel::kWarn, missing_label);
+    return stat.status();
+  }
+  const uint64_t size = stat.value().size;
+  if (size == 0U || size > max_size) {
+    return Status::kInvalidArg;
+  }
+
+  const Result<void*> buffer = mem::HeapAlloc(size);
+  if (buffer.is_err()) {
+    return buffer.status();
+  }
+  const Result<uint32_t> file = fs::FsOpen(g_boot_files, boot_path);
+  if (file.is_err()) {
+    (void)mem::HeapFree(buffer.value());
+    return file.status();
+  }
+  uint64_t read = 0;
+  const Status status = fs::FsRead(
+    g_boot_files, file.value(),
+    std::span<uint8_t>(static_cast<uint8_t*>(buffer.value()), size), read);
+  (void)fs::FsClose(g_boot_files, file.value());
+  if (IsErr(status) || read != size) {
+    (void)mem::HeapFree(buffer.value());
+    return Status::kIoError;
+  }
+
+  const Result<fs::Node*> node =
+    fs::ramfs::CreateFile(g_ram_root, name, buffer.value(), size);
+  (void)mem::HeapFree(buffer.value());
+  if (node.is_err()) {
+    return node.status();
+  }
+  LogDec(LogLevel::kInfo, bytes_label, size);
+  return Status::kOk;
+}
+
 Status PopulateRamfs() noexcept {
   Result<fs::Node*> ram = fs::ramfs::Create();
   if (ram.is_err()) {
@@ -42,42 +83,30 @@ Status PopulateRamfs() noexcept {
     return status;
   }
 
-  const Result<fs::Stat> stat = fs::FsStat("/GEMABOX.ELF");
-  if (stat.is_err()) {
-    Log(LogLevel::kWarn, "fs: GEMABOX.ELF missing\n");
-    return stat.status();
+  status = CopyBootFile("/GEMABOX.ELF", "gemabox", 65536U,
+                        "fs: ramfs gemabox bytes",
+                        "fs: GEMABOX.ELF missing\n");
+  if (IsErr(status)) {
+    return status;
   }
-  const uint64_t size = stat.value().size;
-  if (size == 0 || size > 65536U) {
-    return Status::kInvalidArg;
+  status = CopyBootFile("/LDGEM.ELF", "ld-gem", 65536U,
+                        "fs: ramfs ld-gem bytes",
+                        "fs: LDGEM.ELF missing\n");
+  if (IsErr(status)) {
+    return status;
   }
-
-  const Result<void*> buffer = mem::HeapAlloc(size);
-  if (buffer.is_err()) {
-    return buffer.status();
+  status = CopyBootFile("/GEMAPI.SO", "libgemapi.so.1", 131072U,
+                        "fs: ramfs libgemapi bytes",
+                        "fs: GEMAPI.SO missing\n");
+  if (IsErr(status)) {
+    return status;
   }
-  const Result<uint32_t> file = fs::FsOpen(g_boot_files, "/GEMABOX.ELF");
-  if (file.is_err()) {
-    (void)mem::HeapFree(buffer.value());
-    return file.status();
+  status = CopyBootFile("/KGEMA.SO", "libkgema.so.1", 131072U,
+                        "fs: ramfs libkgema bytes",
+                        "fs: KGEMA.SO missing\n");
+  if (IsErr(status)) {
+    return status;
   }
-  uint64_t read = 0;
-  status = fs::FsRead(
-    g_boot_files, file.value(),
-    std::span<uint8_t>(static_cast<uint8_t*>(buffer.value()), size), read);
-  (void)fs::FsClose(g_boot_files, file.value());
-  if (IsErr(status) || read != size) {
-    (void)mem::HeapFree(buffer.value());
-    return Status::kIoError;
-  }
-
-  const Result<fs::Node*> init =
-    fs::ramfs::CreateFile(g_ram_root, "gemabox", buffer.value(), size);
-  (void)mem::HeapFree(buffer.value());
-  if (init.is_err()) {
-    return init.status();
-  }
-  LogDec(LogLevel::kInfo, "fs: ramfs gemabox bytes", size);
 
   const Result<fs::Node*> hello = fs::ramfs::CreateFile(g_ram_root, "hello", nullptr, 0);
   if (hello.is_err()) {

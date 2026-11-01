@@ -35,7 +35,6 @@ target_link_libraries(og_inc_efi INTERFACE og_inc_cxx)
 # the kgema objects in its static archive and depends on libkgema.so in its
 # shared form.
 find_program(OG_GEMABOX_LD NAMES aarch64-linux-gnu-ld REQUIRED)
-find_program(OG_GEMABOX_OBJCOPY NAMES aarch64-linux-gnu-objcopy REQUIRED)
 find_program(OG_KGEMA_AR NAMES aarch64-linux-gnu-ar REQUIRED)
 
 set(OG_USER_CXX_FLAGS
@@ -68,7 +67,8 @@ set(OG_KGEMA_SOURCES
   packages/libkgema/src/io.cpp
   packages/libkgema/src/file.cpp
   packages/libkgema/src/memory.cpp
-  packages/libkgema/src/process.cpp)
+  packages/libkgema/src/process.cpp
+  packages/libkgema/src/runtime.cpp)
 
 set(OG_GEMAPI_SOURCES
   packages/libgemapi/src/error.cpp
@@ -137,6 +137,7 @@ set(OG_GEMAPI_SO ${CMAKE_BINARY_DIR}/libgemapi.so.1)
 add_custom_command(
   OUTPUT ${OG_KGEMA_SO}
   COMMAND ${OG_GEMABOX_LD} -shared -soname libkgema.so.1
+          -z max-page-size=4096 -s
           -o ${OG_KGEMA_SO} $<TARGET_OBJECTS:og_kgema_pic>
   COMMAND ${CMAKE_COMMAND} -E create_symlink libkgema.so.1
           ${CMAKE_BINARY_DIR}/libkgema.so
@@ -147,6 +148,7 @@ add_custom_command(
 add_custom_command(
   OUTPUT ${OG_GEMAPI_SO}
   COMMAND ${OG_GEMABOX_LD} -shared -soname libgemapi.so.1
+          -z max-page-size=4096 -s
           -o ${OG_GEMAPI_SO} $<TARGET_OBJECTS:og_gemapi_pic>
           -L${CMAKE_BINARY_DIR} -lkgema
   COMMAND ${CMAKE_COMMAND} -E create_symlink libgemapi.so.1
@@ -163,22 +165,77 @@ target_include_directories(og_gemabox_user PRIVATE ${OG_GEMAPI_INCLUDE})
 target_compile_options(og_gemabox_user PRIVATE ${OG_USER_CXX_FLAGS})
 
 set(OG_GEMABOX_ELF ${CMAKE_BINARY_DIR}/gemabox.elf)
+set(OG_GEMABOX_STATIC ${CMAKE_BINARY_DIR}/gemabox-static.elf)
 
+# The dynamic executable links libgemapi.so and carries the interpreter path.
+# Its own image provides _start from the API runtime object.
 add_custom_command(
   OUTPUT ${OG_GEMABOX_ELF}
   COMMAND ${OG_GEMABOX_LD} -T ${CMAKE_SOURCE_DIR}/packages/libgemapi/link.ld
           -z max-page-size=4096 -s
-          -u _start $<TARGET_OBJECTS:og_gemabox_user> ${OG_GEMAPI_ARCHIVE}
+          --dynamic-linker=/ram/ld-gem
+          -u _start
+          $<TARGET_OBJECTS:og_gemabox_user>
+          $<TARGET_OBJECTS:og_gemapi_start>
+          -L${CMAKE_BINARY_DIR} -rpath-link=${CMAKE_BINARY_DIR} -lgemapi
           -o ${OG_GEMABOX_ELF}
+  DEPENDS
+    og_gemabox_user
+    og_gemapi_start
+    ${OG_GEMAPI_SO}
+    ${CMAKE_SOURCE_DIR}/packages/libgemapi/link.ld
+  COMMAND_EXPAND_LISTS
+  COMMENT "link gemabox dynamic")
+
+# Bootstrap fallback and recovery image. Not copied to the ESP by default.
+add_custom_command(
+  OUTPUT ${OG_GEMABOX_STATIC}
+  COMMAND ${OG_GEMABOX_LD} -T ${CMAKE_SOURCE_DIR}/packages/libgemapi/link.ld
+          -z max-page-size=4096 -s
+          -u _start $<TARGET_OBJECTS:og_gemabox_user> ${OG_GEMAPI_ARCHIVE}
+          -o ${OG_GEMABOX_STATIC}
   DEPENDS
     og_gemabox_user
     og_libgemapi
     ${CMAKE_SOURCE_DIR}/packages/libgemapi/link.ld
   COMMAND_EXPAND_LISTS
-  COMMENT "link gemabox")
+  COMMENT "link gemabox static")
+
+add_custom_target(og_gemabox_static DEPENDS ${OG_GEMABOX_STATIC})
 
 add_custom_target(og_gemabox DEPENDS ${OG_GEMABOX_ELF})
-add_dependencies(og_gemabox og_libgemapi)
+add_dependencies(og_gemabox og_libgemapi og_gemabox_static)
+
+# ld-gem is the only long lived static program: it must run before any shared
+# object is available. It links the private ABI only.
+set(OG_LDGEM_INCLUDE ${CMAKE_SOURCE_DIR}/packages/ld-gem/include)
+add_library(og_ldgem_user OBJECT
+  packages/ld-gem/src/elf.cpp
+  packages/ld-gem/src/image.cpp
+  packages/ld-gem/src/linker.cpp
+  packages/ld-gem/src/main.cpp
+  packages/ld-gem/src/start.cpp)
+target_include_directories(og_ldgem_user PRIVATE
+  ${OG_LDGEM_INCLUDE}
+  ${OG_KGEMA_INCLUDE})
+target_compile_options(og_ldgem_user PRIVATE ${OG_USER_CXX_FLAGS})
+
+set(OG_LDGEM_ELF ${CMAKE_BINARY_DIR}/ld-gem.elf)
+add_custom_command(
+  OUTPUT ${OG_LDGEM_ELF}
+  COMMAND ${OG_GEMABOX_LD} -T ${CMAKE_SOURCE_DIR}/packages/ld-gem/link.ld
+          -z max-page-size=4096 -s
+          -u _start $<TARGET_OBJECTS:og_ldgem_user> ${OG_KGEMA_ARCHIVE}
+          -o ${OG_LDGEM_ELF}
+  DEPENDS
+    og_ldgem_user
+    og_libkgema
+    ${CMAKE_SOURCE_DIR}/packages/ld-gem/link.ld
+  COMMAND_EXPAND_LISTS
+  COMMENT "link ld-gem")
+
+add_custom_target(og_ld_gem DEPENDS ${OG_LDGEM_ELF})
+add_dependencies(og_ld_gem og_libkgema)
 
 # One OBJECT library per module. DEPS lists lower layers only, so the
 # link graph mirrors the architecture in docs/ROADMAP.md.
@@ -318,7 +375,7 @@ og_add_module(og_boot
     kernel/boot/uefi/efi_exit.cpp
   DEPS og_kernel og_inc_efi og_inc_kernel)
 
-add_dependencies(og_kernel og_gemabox)
+add_dependencies(og_kernel og_gemabox og_ld_gem)
 
 # Direct PE/COFF link. lld-link emits proper headers and .reloc.
 set(OG_IMAGE_OBJECTS

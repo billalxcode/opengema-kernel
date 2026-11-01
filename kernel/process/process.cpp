@@ -26,10 +26,136 @@ struct UserStack {
   uint32_t argc;
 };
 
+constexpr uint32_t kMaxEnv = 4;
+constexpr uint64_t kMaxEnvLength = 96;
+constexpr uint64_t kMaxInterpreterPath = 128;
+
+[[nodiscard]] uint32_t FormatHex(char* out, uint64_t value) noexcept {
+  constexpr char kDigits[] = "0123456789abcdef";
+  char reversed[16]{};
+  uint32_t count = 0;
+  do {
+    reversed[count] = kDigits[value & 0xFULL];
+    ++count;
+    value >>= 4U;
+  } while (value != 0U);
+  for (uint32_t index = 0; index < count; ++index) {
+    out[index] = reversed[count - 1U - index];
+  }
+  return count;
+}
+
+void FormatEnv(char* out, const char* key, uint64_t value) noexcept {
+  uint32_t cursor = 0;
+  while (key[cursor] != '\0') {
+    out[cursor] = key[cursor];
+    ++cursor;
+  }
+  out[cursor] = '=';
+  ++cursor;
+  out[cursor] = '0';
+  ++cursor;
+  out[cursor] = 'x';
+  ++cursor;
+  cursor += FormatHex(out + cursor, value);
+  out[cursor] = '\0';
+}
+
+[[nodiscard]] Status ReadImage(fs::FileTable& files, uint32_t file,
+                               uint64_t file_size, elf::Image& image) noexcept {
+  uint8_t header[elf::kHeaderBufferSize]{};
+  const uint64_t size =
+    file_size < sizeof(header) ? file_size : static_cast<uint64_t>(sizeof(header));
+  Status status = fs::FsSeek(files, file, 0);
+  if (IsErr(status)) {
+    return status;
+  }
+  uint64_t read = 0;
+  status = fs::FsRead(files, file, std::span<uint8_t>(header, size), read);
+  if (IsErr(status) || read != size) {
+    return Status::kIoError;
+  }
+  const Result<elf::Image> parsed =
+    elf::Parse(std::span<const uint8_t>(header, read), file_size);
+  if (parsed.is_err()) {
+    return parsed.status();
+  }
+  image = parsed.value();
+  return Status::kOk;
+}
+
+[[nodiscard]] Status MapImage(fs::FileTable& files, uint32_t file,
+                              const elf::Image& image,
+                              mem::AddressSpace& space) noexcept {
+  Status status = Status::kOk;
+  for (uint32_t index = 0;
+       index < image.segment_count && IsOk(status); ++index) {
+    const elf::Segment& segment = image.segments[index];
+    const uint64_t page_offset = segment.virtual_address & (elf::kPageSize - 1U);
+    const uint64_t map_base = segment.virtual_address - page_offset;
+    const uint64_t map_size =
+      bits::AlignUp(page_offset + segment.memory_size, elf::kPageSize);
+    status = mem::VmmMapUser(space, map_base, map_size, segment.executable);
+    if (IsErr(status) || segment.file_size == 0U) {
+      continue;
+    }
+
+    const Result<void*> buffer = mem::HeapAlloc(segment.file_size);
+    if (buffer.is_err()) {
+      status = buffer.status();
+      break;
+    }
+    status = fs::FsSeek(files, file, segment.file_offset);
+    uint64_t read = 0;
+    if (IsOk(status)) {
+      status = fs::FsRead(
+        files, file,
+        std::span<uint8_t>(static_cast<uint8_t*>(buffer.value()),
+                           segment.file_size),
+        read);
+    }
+    if (IsOk(status) && read != segment.file_size) {
+      status = Status::kIoError;
+    }
+    if (IsOk(status)) {
+      status = mem::VmmCopyOut(space, segment.virtual_address, buffer.value(),
+                               segment.file_size);
+    }
+    (void)mem::HeapFree(buffer.value());
+  }
+  return status;
+}
+
+[[nodiscard]] Status ReadInterpreterPath(fs::FileTable& files, uint32_t file,
+                                         const elf::Image& image, char* path,
+                                         uint64_t capacity) noexcept {
+  if (image.interpreter_size < 2U || image.interpreter_size > capacity) {
+    return Status::kInvalidArg;
+  }
+  Status status = fs::FsSeek(files, file, image.interpreter_offset);
+  if (IsErr(status)) {
+    return status;
+  }
+  uint64_t read = 0;
+  status = fs::FsRead(
+    files, file,
+    std::span<uint8_t>(reinterpret_cast<uint8_t*>(path),
+                       image.interpreter_size),
+    read);
+  if (IsErr(status) || read != image.interpreter_size) {
+    return Status::kIoError;
+  }
+  if (path[image.interpreter_size - 1U] != '\0' || path[0] != '/') {
+    return Status::kInvalidArg;
+  }
+  return Status::kOk;
+}
+
 [[nodiscard]] Status BuildUserStack(const mem::AddressSpace& space, const char* path,
                                     const char* const* argv, uint32_t argc,
+                                    const char* const* env, uint32_t env_count,
                                     UserStack& out) noexcept {
-  if (argc > kMaxArgs) {
+  if (argc > kMaxArgs || env_count > kMaxEnv) {
     return Status::kInvalidArg;
   }
 
@@ -51,7 +177,26 @@ struct UserStack {
   }
 
   uint64_t cursor = kUserStackVa + kUserStackSize;
-  uint64_t pointers[kMaxArgs + 1U]{};
+  uint64_t pointers[kMaxArgs]{};
+  uint64_t environment[kMaxEnv]{};
+
+  for (uint32_t index = 0; index < env_count; ++index) {
+    if (env == nullptr || env[index] == nullptr) {
+      return Status::kInvalidArg;
+    }
+    const uint64_t length = mem::Length(env[index]);
+    if (length > kMaxEnvLength || (length + 1U) >= (cursor - kUserStackVa)) {
+      return Status::kInvalidArg;
+    }
+    cursor -= (length + 1U);
+    const Status copied =
+      mem::VmmCopyOut(space, cursor, env[index], length + 1U);
+    if (IsErr(copied)) {
+      return copied;
+    }
+    environment[index] = cursor;
+  }
+
   for (uint32_t index = 0; index < count; ++index) {
     const uint64_t length = mem::Length(values[index]);
     if (length > kMaxArgLength || (length + 1U) >= (cursor - kUserStackVa)) {
@@ -66,17 +211,27 @@ struct UserStack {
   }
 
   cursor &= ~7ULL;
-  const uint64_t zero = 0;
-  cursor -= sizeof(zero);
-  Status status = mem::VmmCopyOut(space, cursor, &zero, sizeof(zero));
+  const uint64_t env_bytes =
+    (static_cast<uint64_t>(env_count) + 1U) * sizeof(uint64_t);
+  cursor -= env_bytes;
+  uint64_t env_array[kMaxEnv + 1U]{};
+  for (uint32_t index = 0; index < env_count; ++index) {
+    env_array[index] = environment[index];
+  }
+  Status status = mem::VmmCopyOut(space, cursor, env_array, env_bytes);
   if (IsErr(status)) {
     return status;
   }
   out.envp = cursor;
 
-  cursor -= (static_cast<uint64_t>(count) + 1U) * sizeof(uint64_t);
-  status = mem::VmmCopyOut(space, cursor, pointers,
-                           (static_cast<uint64_t>(count) + 1U) * sizeof(uint64_t));
+  const uint64_t argv_bytes =
+    (static_cast<uint64_t>(count) + 1U) * sizeof(uint64_t);
+  cursor -= argv_bytes;
+  uint64_t arg_array[kMaxArgs + 1U]{};
+  for (uint32_t index = 0; index < count; ++index) {
+    arg_array[index] = pointers[index];
+  }
+  status = mem::VmmCopyOut(space, cursor, arg_array, argv_bytes);
   if (IsErr(status)) {
     return status;
   }
@@ -224,70 +379,79 @@ Result<uint32_t> SpawnWithArgs(const char* path, uint32_t parent_pid,
     return Result<uint32_t>::Err(file.status());
   }
 
-  uint8_t header[elf::kHeaderBufferSize]{};
-  const uint64_t header_size =
-    size < sizeof(header) ? size : static_cast<uint64_t>(sizeof(header));
-  uint64_t header_read = 0;
-  Status status = fs::FsRead(
-    loader_files, file.value(),
-    std::span<uint8_t>(header, header_size), header_read);
-  if (IsErr(status) || header_read != header_size) {
-    (void)fs::FsClose(loader_files, file.value());
-    return Result<uint32_t>::Err(Status::kIoError);
-  }
-
-  const Result<elf::Image> image = elf::Parse(
-    std::span<const uint8_t>(header, header_read), size);
-  if (image.is_err()) {
-    (void)fs::FsClose(loader_files, file.value());
-    return Result<uint32_t>::Err(image.status());
-  }
-  if (image.value().interpreter_size != 0U) {
-    (void)fs::FsClose(loader_files, file.value());
-    return Result<uint32_t>::Err(Status::kUnsupported);
-  }
-
-  mem::AddressSpace space{};
-  status = mem::AddressSpaceInit(space);
+  elf::Image image{};
+  Status status = ReadImage(loader_files, file.value(), size, image);
   if (IsErr(status)) {
     (void)fs::FsClose(loader_files, file.value());
     return Result<uint32_t>::Err(status);
   }
 
-  for (uint32_t index = 0;
-       index < image.value().segment_count && IsOk(status); ++index) {
-    const elf::Segment& segment = image.value().segments[index];
-    const uint64_t page_offset = segment.virtual_address & (elf::kPageSize - 1U);
-    const uint64_t map_base = segment.virtual_address - page_offset;
-    const uint64_t map_size =
-      bits::AlignUp(page_offset + segment.memory_size, elf::kPageSize);
-    status = mem::VmmMapUser(space, map_base, map_size, segment.executable);
-    if (IsErr(status) || segment.file_size == 0U) {
-      continue;
+  const bool dynamic = image.interpreter_size != 0U;
+  char interpreter_path[kMaxInterpreterPath]{};
+  elf::Image interpreter_image{};
+  uint32_t interpreter_descriptor = 0;
+  bool interpreter_open = false;
+
+  if (dynamic) {
+    if (image.dynamic_address == 0U) {
+      (void)fs::FsClose(loader_files, file.value());
+      return Result<uint32_t>::Err(Status::kInvalidArg);
+    }
+    status = ReadInterpreterPath(loader_files, file.value(), image,
+                                 interpreter_path, sizeof(interpreter_path));
+    if (IsErr(status)) {
+      (void)fs::FsClose(loader_files, file.value());
+      return Result<uint32_t>::Err(status);
     }
 
-    const Result<void*> buffer = mem::HeapAlloc(segment.file_size);
-    if (buffer.is_err()) {
-      status = buffer.status();
-      break;
+    const Result<fs::Stat> interpreter_stat = fs::FsStat(interpreter_path);
+    if (interpreter_stat.is_err() || interpreter_stat.value().size == 0U ||
+        interpreter_stat.value().size > kMaxProgramSize) {
+      (void)fs::FsClose(loader_files, file.value());
+      return Result<uint32_t>::Err(interpreter_stat.is_err()
+                                     ? interpreter_stat.status()
+                                     : Status::kInvalidArg);
     }
-    status = fs::FsSeek(loader_files, file.value(), segment.file_offset);
-    uint64_t read = 0;
-    if (IsOk(status)) {
-      status = fs::FsRead(
-        loader_files, file.value(),
-        std::span<uint8_t>(static_cast<uint8_t*>(buffer.value()),
-                           segment.file_size),
-        read);
+    const Result<uint32_t> interpreter =
+      fs::FsOpen(loader_files, interpreter_path);
+    if (interpreter.is_err()) {
+      (void)fs::FsClose(loader_files, file.value());
+      return Result<uint32_t>::Err(interpreter.status());
     }
-    if (IsOk(status) && read != segment.file_size) {
-      status = Status::kIoError;
+    interpreter_descriptor = interpreter.value();
+    interpreter_open = true;
+    status = ReadImage(loader_files, interpreter_descriptor,
+                       interpreter_stat.value().size, interpreter_image);
+    if (IsErr(status)) {
+      (void)fs::FsClose(loader_files, interpreter_descriptor);
+      (void)fs::FsClose(loader_files, file.value());
+      return Result<uint32_t>::Err(status);
     }
-    if (IsOk(status)) {
-      status = mem::VmmCopyOut(space, segment.virtual_address, buffer.value(),
-                               segment.file_size);
+    if (interpreter_image.interpreter_size != 0U ||
+        interpreter_image.dynamic_address != 0U) {
+      (void)fs::FsClose(loader_files, interpreter_descriptor);
+      (void)fs::FsClose(loader_files, file.value());
+      return Result<uint32_t>::Err(Status::kUnsupported);
     }
-    (void)mem::HeapFree(buffer.value());
+  }
+
+  mem::AddressSpace space{};
+  status = mem::AddressSpaceInit(space);
+  if (IsErr(status)) {
+    if (interpreter_open) {
+      (void)fs::FsClose(loader_files, interpreter_descriptor);
+    }
+    (void)fs::FsClose(loader_files, file.value());
+    return Result<uint32_t>::Err(status);
+  }
+
+  status = MapImage(loader_files, file.value(), image, space);
+  if (IsOk(status) && dynamic) {
+    status = MapImage(loader_files, interpreter_descriptor, interpreter_image,
+                      space);
+  }
+  if (interpreter_open) {
+    (void)fs::FsClose(loader_files, interpreter_descriptor);
   }
   (void)fs::FsClose(loader_files, file.value());
   if (IsErr(status)) {
@@ -296,14 +460,29 @@ Result<uint32_t> SpawnWithArgs(const char* path, uint32_t parent_pid,
   }
 
   status = mem::VmmMapUser(space, kUserStackVa, kUserStackSize, false);
+  const char* environment[kMaxEnv]{};
+  uint32_t environment_count = 0;
+  char entry_env[kMaxEnvLength]{};
+  char dynamic_env[kMaxEnvLength]{};
+  if (dynamic) {
+    FormatEnv(entry_env, "GEM_ENTRY", image.entry);
+    FormatEnv(dynamic_env, "GEM_DYNAMIC", image.dynamic_address);
+    environment[environment_count] = entry_env;
+    ++environment_count;
+    environment[environment_count] = dynamic_env;
+    ++environment_count;
+  }
   UserStack user_stack{};
   if (IsOk(status)) {
-    status = BuildUserStack(space, path, argv, argc, user_stack);
+    status = BuildUserStack(space, path, argv, argc, environment,
+                            environment_count, user_stack);
   }
   if (IsErr(status)) {
     (void)mem::AddressSpaceDestroy(space);
     return Result<uint32_t>::Err(status);
   }
+
+  const uint64_t entry = dynamic ? interpreter_image.entry : image.entry;
 
   g_lock.lock();
   Process* slot = nullptr;
@@ -326,7 +505,7 @@ Result<uint32_t> SpawnWithArgs(const char* path, uint32_t parent_pid,
   slot->exit_code = 0;
   slot->used = 1;
   slot->space = space;
-  slot->entry = image.value().entry;
+  slot->entry = entry;
   slot->stack_top = user_stack.stack_pointer;
   slot->argv = user_stack.argv;
   slot->envp = user_stack.envp;

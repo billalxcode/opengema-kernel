@@ -89,6 +89,26 @@ Keputusan brainstorming: aplikasi memakai dynamic library langsung.
 Kernel tidak perlu memahami simbol library. Kernel memvalidasi ELF,
 memetakan file, dan menyediakan syscall yang dibutuhkan `ld-gem`.
 
+### Antarmuka kernel ke ld-gem
+
+Kernel belum memakai auxiliary vector penuh. Setelah memetakan executable
+utama dan interpreter, kernel menambahkan dua environment ke stack user:
+
+```
+GEM_DYNAMIC=0x<alamat dynamic section>
+GEM_ENTRY=0x<entry point executable>
+```
+
+`ld-gem` membaca kedua nilai itu, memuat `DT_NEEDED`, menerapkan relokasi,
+lalu melompat ke `GEM_ENTRY` dengan argc, argv, dan envp yang sama.
+
+Untuk memetakan shared object, `ld-gem` memakai `mmap` dengan flag
+executable. Aplikasi biasa tidak memakai flag itu; `gemapi::memory::map`
+tetap non-executable.
+
+Selama bootstrap, `ld-gem` mencari library di `/ram`. Setelah GSLFS dan
+init user ada, search path menjadi `/System/Libraries`.
+
 Pengecualian bootstrap:
 
 - `ld-gem` statis karena harus berjalan sebelum library dinamis tersedia.

@@ -26,6 +26,10 @@ Aturan:
 `libgemapi` memakai `libkgema` secara privat. Aplikasi tidak boleh
 menautkan `libkgema` langsung.
 
+Pengecualian: `ld-gem` adalah bagian layer libraries, bukan aplikasi. Ia
+memakai `libkgema` langsung karena harus berjalan sebelum `libgemapi`
+tersedia.
+
 ## 1.1 Struktur paket
 
 ```

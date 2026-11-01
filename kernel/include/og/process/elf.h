@@ -28,6 +28,7 @@ struct Segment {
 
 struct Image {
   uint64_t entry;
+  uint64_t dynamic_address;
   uint32_t segment_count;
   Segment segments[kMaxSegments];
   uint64_t interpreter_offset;

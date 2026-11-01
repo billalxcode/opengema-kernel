@@ -1,6 +1,7 @@
 # GEMA System Layer (GSL)
 
-Status: draft untuk brainstorming. Belum ada keputusan final.
+Status: keputusan inti sudah dibuat. GSL-1 selesai dan GSL-2 berjalan
+untuk binary dynamic serta `ld-gem`. GSLFS dan init user belum ada.
 
 GSL adalah arsitektur userland dan packaging untuk opengema-kernel. Tujuannya
 memisahkan akses hardware dari aplikasi, membuat dependency eksplisit, dan
@@ -50,12 +51,13 @@ Kode sekarang berada di awal GSL:
 - `packages/libkgema` adalah ABI privat di bawah `libgemapi`; hanya
   `libkgema` yang berisi instruksi `svc`.
 - `gemabox` hanya memakai header `gemapi/` dan menautkan `libgemapi.a`.
-- `libkgema.so.1` dan `libgemapi.so.1` sudah dibangun, tetapi belum dimuat
-  karena `ld-gem` dan ELF loader dynamic belum ada.
-- Kernel sudah memuat `/ram/gemabox` sebagai ELF64 statis, memetakan
-  `PT_LOAD`, dan memakai entry point dari file.
+- `libkgema.so.1` dan `libgemapi.so.1` dimuat oleh `ld-gem` dari `/ram`
+  sebagai bootstrap menuju `/System/Libraries`.
+- Kernel memuat `/ram/gemabox` sebagai ELF64 dynamic, membaca `PT_INTERP`,
+  dan memetakan `/ram/ld-gem`.
 - `scripts/check-gsl.sh` menolak aplikasi yang menyentuh lapisan bawah.
-- Binary gemabox masih dimasukkan kernel ke ramfs, bukan dari GSLFS.
+- Binary, `ld-gem`, dan library masih dimasukkan kernel ke ramfs, bukan
+  dari GSLFS.
 - Belum ada init user atau system volume.
 
 Dokumen GSL ini adalah target arsitektur, bukan deskripsi kode yang sudah

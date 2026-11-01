@@ -3,6 +3,11 @@ CompileFlags:
   Remove:
     - -march=*
     - -mcpu=*
+  Add:
+    # GSL include roots. compile_commands.json normally provides these; the
+    # relative fallbacks assume the standard build/ directory.
+    - -I../packages/libgemapi/include
+    - -I../packages/ld-gem/include
 
 Diagnostics:
   Suppress:

@@ -21,6 +21,15 @@ if [ -n \"\$LOOP\" ]; then
   if [ -f build/gemabox.elf ]; then
     cp build/gemabox.elf /mnt/esp/GEMABOX.ELF
   fi
+  if [ -f build/ld-gem.elf ]; then
+    cp build/ld-gem.elf /mnt/esp/LDGEM.ELF
+  fi
+  if [ -f build/libgemapi.so.1 ]; then
+    cp build/libgemapi.so.1 /mnt/esp/GEMAPI.SO
+  fi
+  if [ -f build/libkgema.so.1 ]; then
+    cp build/libkgema.so.1 /mnt/esp/KGEMA.SO
+  fi
   printf '%s\r\n' 'FS0:\EFI\BOOT\BOOTAA64.EFI' > /mnt/esp/startup.nsh
   umount /mnt/esp
   losetup -d \"\$LOOP\" || true
@@ -35,6 +44,15 @@ else
   mcopy -i esp.img@@\$((\$START_SECTOR * 512)) esp/EFI/BOOT/BOOTAA64.EFI ::/EFI/BOOT/BOOTAA64.EFI
   if [ -f build/gemabox.elf ]; then
     mcopy -i esp.img@@\$((\$START_SECTOR * 512)) build/gemabox.elf ::/GEMABOX.ELF
+  fi
+  if [ -f build/ld-gem.elf ]; then
+    mcopy -i esp.img@@\$((\$START_SECTOR * 512)) build/ld-gem.elf ::/LDGEM.ELF
+  fi
+  if [ -f build/libgemapi.so.1 ]; then
+    mcopy -i esp.img@@\$((\$START_SECTOR * 512)) build/libgemapi.so.1 ::/GEMAPI.SO
+  fi
+  if [ -f build/libkgema.so.1 ]; then
+    mcopy -i esp.img@@\$((\$START_SECTOR * 512)) build/libkgema.so.1 ::/KGEMA.SO
   fi
   printf '%s\r\n' 'FS0:\EFI\BOOT\BOOTAA64.EFI' > /tmp/startup.nsh
   mcopy -i esp.img@@\$((\$START_SECTOR * 512)) /tmp/startup.nsh ::/startup.nsh

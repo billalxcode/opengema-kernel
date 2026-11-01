@@ -27,6 +27,7 @@ constexpr uint64_t kTtyLine = 128;
 constexpr uint64_t kStdout = 1;
 constexpr uint64_t kResultError = static_cast<uint64_t>(-1);
 constexpr uint64_t kPageSize = 4096;
+constexpr uint64_t kMmapFlagExecutable = 1;
 constexpr uint64_t kUserMmapLimit = mem::kUserSpaceBase + mem::kUserSpaceSize;
 
 struct UserStat {
@@ -93,8 +94,9 @@ struct UserStat {
   return Status::kOk;
 }
 
-[[nodiscard]] Status DoMmap(uint64_t size, uint64_t& result) noexcept {
-  if (size == 0U) {
+[[nodiscard]] Status DoMmap(uint64_t size, uint64_t flags,
+                            uint64_t& result) noexcept {
+  if (size == 0U || flags > kMmapFlagExecutable) {
     return Status::kInvalidArg;
   }
   process::Process* process = CurrentProcess();
@@ -110,7 +112,9 @@ struct UserStat {
     return Status::kNoMem;
   }
   const uint64_t address = process->space.mmap_next;
-  const Status status = mem::VmmMapUser(process->space, address, aligned, false);
+  const bool executable = (flags & kMmapFlagExecutable) != 0U;
+  const Status status =
+    mem::VmmMapUser(process->space, address, aligned, executable);
   if (IsErr(status)) {
     return status;
   }
@@ -492,7 +496,7 @@ struct UserStat {
       result = 0;
       break;
     case kSysMmap:
-      status = DoMmap(frame->x[0], result);
+      status = DoMmap(frame->x[0], frame->x[1], result);
       break;
     case kSysMunmap:
       status = DoMunmap(frame->x[0], frame->x[1], result);

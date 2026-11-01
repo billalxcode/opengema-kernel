@@ -76,7 +76,10 @@ virtio-gpu: display height: 800
 virtio-gpu: scanouts: 1
 virtio-gpu: scanout ok
 fs: mounted devfs and fat32
-fs: ramfs gemabox bytes: 7992
+fs: ramfs gemabox bytes: 9048
+fs: ramfs ld-gem bytes: 10792
+fs: ramfs libgemapi bytes: 9352
+fs: ramfs libkgema bytes: 5064
 fs: ramfs write ok
 fs: devfs console ok
 fs: fat32 file read ok
@@ -128,8 +131,11 @@ Framebuffer console memakai virtio-gpu 1280x800 dan diuji otomatis dengan
 `screendump` dari monitor QEMU. Program user ditulis dengan C++20 di atas
 API publik `packages/libgemapi`, yang memakai lapisan ABI
 `packages/libkgema` secara privat. Aplikasi tidak menyentuh `svc` atau
-header kernel. Program berjalan di address space sendiri pada 1 TiB,
-dengan ASID yang dipasang saat context switch. Dua proses gemabox berjalan
+header kernel. Binary gemabox adalah ELF64 dynamic: kernel memetakan
+executable dan `/ram/ld-gem`, lalu `ld-gem` memuat `libgemapi.so.1` dan
+`libkgema.so.1` dari filesystem sebelum menjalankan `main`. Program berjalan
+di address space sendiri pada 1 TiB, dengan ASID yang dipasang saat context
+switch. Dua proses gemabox berjalan
 bersamaan, masing masing punya tabel file sendiri, lalu setiap proses
 menjalankan child dengan argv dan menunggu. Proses writer menguji `chdir`,
 write ke FD, seek, dan read. Proses shell menerima input UART, menjalankan

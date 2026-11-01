@@ -15,6 +15,7 @@ constexpr uint32_t kElfVersionCurrent = 1;
 constexpr uint16_t kTypeExecutable = 2;
 constexpr uint16_t kMachineAarch64 = 183;
 constexpr uint32_t kProgramTypeLoad = 1;
+constexpr uint32_t kProgramTypeDynamic = 2;
 constexpr uint32_t kProgramTypeInterp = 3;
 constexpr uint32_t kProgramFlagExecute = 1;
 constexpr uint64_t kPageMask = kPageSize - 1U;
@@ -109,11 +110,25 @@ Result<Image> Parse(std::span<const uint8_t> header, uint64_t file_size) noexcep
     const uint64_t memory_bytes = Read64(header, base + 40U);
 
     if (type == kProgramTypeInterp) {
-      if (file_bytes == 0U || !RangeInside(offset, file_bytes, file_size)) {
+      if (file_bytes == 0U) {
+        continue;
+      }
+      if (!RangeInside(offset, file_bytes, file_size)) {
         return Result<Image>::Err(Status::kInvalidArg);
       }
       image.interpreter_offset = offset;
       image.interpreter_size = file_bytes;
+      continue;
+    }
+    if (type == kProgramTypeDynamic) {
+      if (file_bytes == 0U) {
+        continue;
+      }
+      if (virtual_address < mem::kUserSpaceBase ||
+          virtual_address >= (mem::kUserSpaceBase + mem::kUserSpaceSize)) {
+        return Result<Image>::Err(Status::kInvalidArg);
+      }
+      image.dynamic_address = virtual_address;
       continue;
     }
     if (type != kProgramTypeLoad) {
@@ -149,6 +164,9 @@ Result<Image> Parse(std::span<const uint8_t> header, uint64_t file_size) noexcep
 
   if (image.segment_count == 0U) {
     return Result<Image>::Err(Status::kInvalidArg);
+  }
+  if (image.dynamic_address != 0U && image.interpreter_size == 0U) {
+    return Result<Image>::Err(Status::kUnsupported);
   }
   return Result<Image>::Ok(image);
 }

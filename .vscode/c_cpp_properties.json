@@ -18,7 +18,9 @@
         "${workspaceFolder}/libs/core",
         "${workspaceFolder}/libs/efi",
         "${workspaceFolder}/kernel/include",
-        "${workspaceFolder}/packages/libkgema/include"
+        "${workspaceFolder}/packages/libkgema/include",
+        "${workspaceFolder}/packages/libgemapi/include",
+        "${workspaceFolder}/packages/ld-gem/include"
       ],
       "defines": [],
       "cStandard": "c17",
@@ -29,7 +31,9 @@
           "${workspaceFolder}/libs/cxx",
           "${workspaceFolder}/libs/efi",
           "${workspaceFolder}/kernel",
-          "${workspaceFolder}/packages/libkgema"
+          "${workspaceFolder}/packages/libkgema",
+          "${workspaceFolder}/packages/libgemapi",
+          "${workspaceFolder}/packages/ld-gem"
         ],
         "limitSymbolsToIncludedHeaders": true
       }

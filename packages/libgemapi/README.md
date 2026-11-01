@@ -78,9 +78,9 @@ build/libgemapi.so -> libgemapi.so.1
 `libgemapi.a` adalah satu kesatuan link: berisi objek API, `_start`, dan
 objek `libkgema` privat. Baris link aplikasi hanya menyebut `libgemapi.a`.
 
-`libgemapi.so.1` memiliki `DT_NEEDED` ke `libkgema.so.1`. Shared object ini
-belum dimuat saat boot karena `ld-gem` baru dikerjakan setelah ELF loader
-statis selesai.
+`libgemapi.so.1` memiliki `DT_NEEDED` ke `libkgema.so.1` dan dimuat oleh
+`ld-gem`. Executable dynamic menautkan `_start` dari objek runtime terpisah
+dan `libgemapi.so`; executable statis memakai arsip `libgemapi.a`.
 
 ## Aturan
 

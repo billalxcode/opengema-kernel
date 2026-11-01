@@ -43,16 +43,15 @@ object.
 - [x] `gemabox` hanya memakai header `gemapi/`.
 - [x] Tambah `scripts/check-gsl.sh`.
 - [ ] Symbol versioning dan aturan kompatibilitas ABI.
-- [ ] Siapkan `ld-gem` statis sebagai bootstrap.
+- [x] Siapkan `ld-gem` statis sebagai bootstrap.
 
 Selesai bila: `libgemapi.so` dan `libkgema.so` bisa dibangun, dan aplikasi
 tidak memiliki simbol atau include `kgema`.
 
 Status: boundary API dan shared object sudah ada. `libgemapi.a` adalah satu
 kesatuan link berisi objek API, `_start`, dan objek `libkgema` privat.
-`libgemapi.so.1` sudah memiliki `DT_NEEDED` ke `libkgema.so.1`, tetapi
-belum dimuat karena `ld-gem` baru dikerjakan pada GSL-2. Symbol versioning
-menyusul bersama loader.
+`libgemapi.so.1` sudah memiliki `DT_NEEDED` ke `libkgema.so.1` dan dimuat
+oleh `ld-gem`. Symbol versioning menyusul.
 
 ## GSL-2 - ELF loader dan dynamic linker
 
@@ -60,23 +59,26 @@ Tujuan: binary dan dependency benar-benar dimuat dari filesystem.
 
 - [x] ELF64 loader di kernel untuk ET_EXEC statis.
 - [x] Dukungan `PT_LOAD`.
+- [x] Dukungan `PT_INTERP` dan pemetaan interpreter.
 - [x] Validasi header, mesin, entry, segmen, alignment, dan batas file.
 - [x] Kernel memakai entry point dari ELF, bukan alamat tetap.
 - [x] Binary uji tidak lagi berupa flat binary.
 - [x] Test menolak file yang bukan ELF.
-- [~] `PT_INTERP` terdeteksi dan ditolak sampai `ld-gem` tersedia.
-- [ ] `ld-gem` memproses `DT_NEEDED`.
-- [ ] Relokasi dan symbol binding.
-- [ ] Search path hanya `/System/Libraries`.
+- [x] `ld-gem` memproses `DT_NEEDED` secara rekursif.
+- [x] Relokasi `RELATIVE`, `GLOB_DAT`, `JUMP_SLOT`, dan `ABS64`.
+- [x] Symbol binding dengan hash SYSV.
+- [~] Search path `/ram` untuk bootstrap, target `/System/Libraries`.
 - [ ] Read-only code mapping dan W^X user.
 - [ ] Test library hilang, versi salah, dan ELF rusak lanjutan.
 
 Selesai bila: aplikasi dynamic berjalan dengan `libgemapi.so` dan
 `libkgema.so` dari filesystem.
 
-Status: kernel sudah memuat `/ram/gemabox` sebagai ELF64, memetakan segmen
-`PT_LOAD`, dan memakai alamat entry dari file. `PT_INTERP` belum dijalankan
-karena `ld-gem` belum ada. Binary masih berasal dari ramfs, bukan GSLFS.
+Status: kernel memuat `/ram/gemabox` sebagai ELF64, membaca `PT_INTERP`,
+memetakan executable dan `/ram/ld-gem` dalam satu address space, lalu
+menyerahkan `GEM_DYNAMIC` dan `GEM_ENTRY` lewat environment. `ld-gem`
+memuat dependency dari ramfs, menerapkan relokasi, dan melompat ke entry
+utama. Binary masih berasal dari ramfs, bukan GSLFS.
 
 ## GSL-3 - GSLFS dan system volume
 
