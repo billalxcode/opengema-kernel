@@ -180,6 +180,34 @@ void Gicv3::end(uint32_t intid) noexcept {
   arch::aarch64::WriteIccEoir1El1(static_cast<uint64_t>(intid));
 }
 
+Status Gicv3::EnablePpiAt(uint64_t redistributor_base, uint32_t intid) noexcept {
+  if (redistributor_base == 0) {
+    return Status::kInvalidArg;
+  }
+  if (intid >= 32U) {
+    return Status::kInvalidArg;
+  }
+  io::MmioRegion frame(redistributor_base, kRedistributorSize);
+  const uint32_t bit = 1U << intid;
+  Status status = frame.Write32(kRedistributorGroup0, bit);
+  if (IsErr(status)) {
+    return status;
+  }
+  status = frame.Write8(kRedistributorPrioritySgi + intid, kDefaultPriority);
+  if (IsErr(status)) {
+    return status;
+  }
+  return frame.Write32(kRedistributorEnable0, bit);
+}
+
+void Gicv3::SendSgi(uint32_t intid, uint64_t target_aff0) noexcept {
+  if (intid > 15U) {
+    return;
+  }
+  const uint64_t value = (static_cast<uint64_t>(intid) << 24U) | (1ULL << target_aff0);
+  arch::aarch64::WriteIccSgi1rEl1(value);
+}
+
 events::InterruptController MakeController(Gicv3& gic) noexcept {
   if (!gic.is_ready()) {
     return events::InterruptController{};

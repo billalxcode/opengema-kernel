@@ -194,4 +194,19 @@ inline void WriteIccEoir1El1(uint64_t value) noexcept {
   __asm__ volatile("msr s3_0_c12_c12_1, %0" ::"r"(value) : "memory");
 }
 
+inline void WriteIccSgi1rEl1(uint64_t value) noexcept {
+  __asm__ volatile("msr s3_0_c12_c11_5, %0" ::"r"(value) : "memory");
+  __asm__ volatile("isb" ::: "memory");
+}
+
+[[nodiscard]] inline uint64_t ReadTpidrEl1() noexcept {
+  uint64_t value = 0;
+  __asm__ volatile("mrs %0, tpidr_el1" : "=r"(value));
+  return value;
+}
+
+inline void WriteTpidrEl1(uint64_t value) noexcept {
+  __asm__ volatile("msr tpidr_el1, %0" ::"r"(value) : "memory");
+}
+
 }  // namespace og::arch::aarch64

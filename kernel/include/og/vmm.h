@@ -36,6 +36,9 @@ namespace og::mem {
 [[nodiscard]] Status VmmCopyOut(uint64_t user_address, const void* source, uint64_t size) noexcept;
 [[nodiscard]] bool VmmUserContains(uint64_t user_address, uint64_t size) noexcept;
 
+// Address of the level 0 table, used when bringing up secondary cores.
+[[nodiscard]] uint64_t VmmRootAddress() noexcept;
+
 [[nodiscard]] Result<uint64_t> VmmTranslate(uint64_t virtual_address) noexcept;
 
 [[nodiscard]] bool VmmReady() noexcept;

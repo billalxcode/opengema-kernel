@@ -11,6 +11,8 @@
 
 namespace og::drivers::irq {
 
+constexpr uint64_t kRedistributorStride = 0x20000;
+
 class Gicv3 {
  public:
   Gicv3() noexcept = default;
@@ -25,6 +27,14 @@ class Gicv3 {
 
   [[nodiscard]] uint32_t acknowledge() noexcept;
   void end(uint32_t intid) noexcept;
+
+  // Enables an SGI or PPI on a specific redistributor, used to arm IPIs on
+  // secondary cores before they are started.
+  [[nodiscard]] static Status EnablePpiAt(uint64_t redistributor_base,
+                                          uint32_t intid) noexcept;
+
+  // Sends SGI intid to the core whose Aff0 equals target_aff0.
+  static void SendSgi(uint32_t intid, uint64_t target_aff0) noexcept;
 
   [[nodiscard]] bool is_ready() const noexcept { return ready_; }
 

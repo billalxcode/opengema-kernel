@@ -424,4 +424,8 @@ bool VmmReady() noexcept {
   return g_root != nullptr;
 }
 
+uint64_t VmmRootAddress() noexcept {
+  return reinterpret_cast<uint64_t>(g_root);
+}
+
 }  // namespace og::mem
