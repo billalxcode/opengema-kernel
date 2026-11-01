@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Serial test client for QEMU.
 
-Connects to the QEMU unix serial socket, mirrors output to a log, injects
-four bytes once the kernel reports UART readiness, and stops at halt.
+Connects to the QEMU unix serial socket, mirrors output to a log, drives the
+gemabox shell with help and exit, and stops at halt.
 
 Usage: uart_test_client.py <socket> <log> [timeout_seconds]
 Exit nonzero on connect timeout or missing halt marker.
@@ -37,7 +37,8 @@ def main(argv):
 
     client.settimeout(0.5)
     buffer = bytearray()
-    injected = False
+    help_sent = False
+    exit_sent = False
     halted = False
 
     with open(log_path, "wb") as log:
@@ -52,9 +53,13 @@ def main(argv):
             log.flush()
             buffer.extend(chunk)
 
-            if not injected and b"uart: ready" in buffer:
-                client.sendall(b"ping")
-                injected = True
+            if not help_sent and b"gemabox> " in buffer:
+                client.sendall(b"help\n")
+                help_sent = True
+
+            if help_sent and not exit_sent and b"commands: help, echo, cat, exit" in buffer:
+                client.sendall(b"exit\n")
+                exit_sent = True
 
             if b"kernel: halt" in buffer:
                 halted = True

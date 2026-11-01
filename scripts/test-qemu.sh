@@ -83,8 +83,9 @@ check "smp: ipi count: 1"
 check "smp: worker cpus: 3"
 check "mem: address space switch ok"
 check "sched: round robin ok"
-check "uart: rx ok"
 check "user: spawn pid"
+check "gemabox> "
+check "commands: help, echo, cat, exit"
 check "process: remaining: 0"
 check "kernel: halt"
 
@@ -103,7 +104,7 @@ count_check "mmap ok" 2
 count_check "child ok" 2
 count_check "spawn ok" 2
 count_check "write ok" 1
-count_check "user: exit status: 0" 3
+count_check "user: exit status: 0" 4
 
 if [ "$SCREEN_STATUS" -ne 0 ]; then
   echo "qemu test: FAIL framebuffer screen"

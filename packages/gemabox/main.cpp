@@ -17,6 +17,88 @@ constexpr char kMmapFailed[] = "mmap failed\n";
 constexpr char kChildOk[] = "child ok\n";
 constexpr char kSpawnOk[] = "spawn ok\n";
 constexpr char kWriteMessage[] = "write ok\n";
+constexpr char kPrompt[] = "gemabox> ";
+constexpr char kHelp[] = "commands: help, echo, cat, exit\n";
+
+bool same(const char* lhs, const char* rhs) {
+  if (lhs == nullptr || rhs == nullptr) {
+    return false;
+  }
+  while (*lhs != '\0' && *lhs == *rhs) {
+    ++lhs;
+    ++rhs;
+  }
+  return *lhs == *rhs;
+}
+
+bool starts_with(const char* text, const char* prefix) {
+  if (text == nullptr || prefix == nullptr) {
+    return false;
+  }
+  while (*prefix != '\0') {
+    if (*text != *prefix) {
+      return false;
+    }
+    ++text;
+    ++prefix;
+  }
+  return true;
+}
+
+void cat_file(const char* path) {
+  const kgema::i64 descriptor = kgema::open(path);
+  if (descriptor < 0) {
+    kgema::write("cat: open failed\n");
+    return;
+  }
+  char buffer[64];
+  for (;;) {
+    const kgema::i64 count = kgema::read(descriptor, buffer, sizeof(buffer));
+    if (count < 0) {
+      kgema::write("cat: read failed\n");
+      break;
+    }
+    if (count == 0) {
+      break;
+    }
+    kgema::write(buffer, static_cast<kgema::usize>(count));
+  }
+  (void)kgema::close(descriptor);
+}
+
+int run_shell() {
+  char line[128];
+  for (;;) {
+    kgema::write(kPrompt);
+    const kgema::i64 length = kgema::read(0, line, sizeof(line) - 1U);
+    if (length < 0) {
+      return 1;
+    }
+    line[length] = '\0';
+    if (length == 0) {
+      continue;
+    }
+    if (same(line, "exit")) {
+      return 0;
+    }
+    if (same(line, "help")) {
+      kgema::write(kHelp);
+      continue;
+    }
+    if (starts_with(line, "echo ") && length > 5) {
+      kgema::write(line + 5, static_cast<kgema::usize>(length - 5));
+      kgema::write("\n");
+      continue;
+    }
+    if (starts_with(line, "cat ") && length > 4) {
+      cat_file(line + 4);
+      continue;
+    }
+    kgema::write("unknown: ");
+    kgema::write(line, static_cast<kgema::usize>(length));
+    kgema::write("\n");
+  }
+}
 
 int run_writer() {
   if (!kgema::chdir("/ram")) {
@@ -47,17 +129,6 @@ int run_writer() {
   return 0;
 }
 
-bool same(const char* lhs, const char* rhs) {
-  if (lhs == nullptr || rhs == nullptr) {
-    return false;
-  }
-  while (*lhs != '\0' && *lhs == *rhs) {
-    ++lhs;
-    ++rhs;
-  }
-  return *lhs == *rhs;
-}
-
 }  // namespace
 
 int main(int argc, char** argv, char** /*envp*/) {
@@ -67,6 +138,9 @@ int main(int argc, char** argv, char** /*envp*/) {
   }
   if (argc > 1 && same(argv[1], "writer")) {
     return run_writer();
+  }
+  if (argc > 1 && same(argv[1], "shell")) {
+    return run_shell();
   }
   if (kgema::getpid() == 0U) {
     return 1;

@@ -5,7 +5,6 @@
 #include "og/core/log.h"
 #include "og/core/panic.h"
 #include "og/core/status.h"
-#include "og/drivers/uart.h"
 #include "og/events/workqueue.h"
 #include "og/io/print.h"
 #include "og/mem/vmm.h"
@@ -30,7 +29,6 @@ uint64_t g_mutex_done = 0;
 uint64_t g_semaphore_seen = 0;
 uint64_t g_once_runs = 0;
 uint64_t g_timeout_fired = 0;
-uint64_t g_uart_rx_bytes = 0;
 sync::Mutex g_test_mutex;
 sync::Semaphore g_test_semaphore;
 
@@ -73,21 +71,6 @@ void OnceHandler(void* /*argument*/) noexcept {
 
 void TimeoutHandler(void* /*argument*/) noexcept {
   (void)__atomic_add_fetch(&g_timeout_fired, 1U, __ATOMIC_RELAXED);
-}
-
-void UartRxWorker(void* /*argument*/) noexcept {
-  char buffer[4];
-  for (uint32_t waits = 0; waits < 5000U; ++waits) {
-    drivers::uart::Pl011* uart = drivers::uart::Active();
-    if (uart != nullptr) {
-      const uint32_t received = uart->read(std::span<char>(buffer, sizeof(buffer)));
-      if (received == sizeof(buffer)) {
-        __atomic_store_n(&g_uart_rx_bytes, 4U, __ATOMIC_RELEASE);
-        return;
-      }
-    }
-    (void)sched::ThreadSleep(1);
-  }
 }
 
 void WorkerA(void* /*argument*/) noexcept {
@@ -204,9 +187,13 @@ void RunSchedulerSelfTest() noexcept {
 
   g_test_mutex.set_name("self-test");
   g_test_semaphore.init(0);
-  if (sched::ThreadCreate("mutex-a", &MutexWorker, nullptr).is_err() ||
-      sched::ThreadCreate("mutex-b", &MutexWorker, nullptr).is_err() ||
-      sched::ThreadCreate("semaphore", &SemaphoreWorker, nullptr).is_err()) {
+  const Result<sched::Thread*> mutex_a =
+    sched::ThreadCreate("mutex-a", &MutexWorker, nullptr);
+  const Result<sched::Thread*> mutex_b =
+    sched::ThreadCreate("mutex-b", &MutexWorker, nullptr);
+  const Result<sched::Thread*> semaphore =
+    sched::ThreadCreate("semaphore", &SemaphoreWorker, nullptr);
+  if (mutex_a.is_err() || mutex_b.is_err() || semaphore.is_err()) {
     Panic("sync: thread create failed");
   }
   g_test_semaphore.signal();
@@ -245,6 +232,11 @@ void RunSchedulerSelfTest() noexcept {
   }
   Log(LogLevel::kInfo, "sync: mutex, semaphore, refcount, once ok\n");
 
+  if (!ReclaimThread(mutex_a.value()) || !ReclaimThread(mutex_b.value()) ||
+      !ReclaimThread(semaphore.value())) {
+    Panic("sync: thread reclaim failed");
+  }
+
   const Result<time::Timeout*> scheduled_timeout =
     time::ScheduleAfter(5, &TimeoutHandler, nullptr);
   if (scheduled_timeout.is_err()) {
@@ -260,22 +252,6 @@ void RunSchedulerSelfTest() noexcept {
     Panic("time: timeout did not fire");
   }
   Log(LogLevel::kInfo, "time: timeout ok\n");
-
-  (void)PrintLn("uart: ready");
-  if (sched::ThreadCreate("uart-rx", &UartRxWorker, nullptr).is_err()) {
-    Panic("uart: rx thread create failed");
-  }
-  uint32_t uart_waits = 0;
-  while (__atomic_load_n(&g_uart_rx_bytes, __ATOMIC_ACQUIRE) < 4U &&
-         uart_waits < 5000U) {
-    (void)sched::ThreadSleep(1);
-    ++uart_waits;
-  }
-  if (__atomic_load_n(&g_uart_rx_bytes, __ATOMIC_ACQUIRE) == 4U) {
-    Log(LogLevel::kInfo, "uart: rx ok\n");
-  } else {
-    Log(LogLevel::kWarn, "uart: rx timeout\n");
-  }
 
   if (!ReclaimThread(worker_a.value()) || !ReclaimThread(worker_b.value())) {
     Panic("sched: worker reclaim failed");
