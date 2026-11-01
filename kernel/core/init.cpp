@@ -34,6 +34,7 @@
 #include "og/syscall.h"
 #include "og/timer.h"
 #include "og/trap.h"
+#include "og/uart.h"
 #include "og/vfs.h"
 #include "og/virtio_blk.h"
 #include "og/vmm.h"
@@ -65,6 +66,7 @@ uint64_t g_mutex_done = 0;
 uint64_t g_semaphore_seen = 0;
 uint64_t g_once_runs = 0;
 uint64_t g_timeout_fired = 0;
+uint64_t g_uart_rx_bytes = 0;
 sync::Mutex g_test_mutex;
 sync::Semaphore g_test_semaphore;
 drivers::virtio::Blk g_block_device;
@@ -116,6 +118,21 @@ void OnceHandler(void* /*argument*/) noexcept {
 
 void TimeoutHandler(void* /*argument*/) noexcept {
   (void)__atomic_add_fetch(&g_timeout_fired, 1U, __ATOMIC_RELAXED);
+}
+
+void UartRxWorker(void* /*argument*/) noexcept {
+  char buffer[4];
+  for (uint32_t waits = 0; waits < 5000U; ++waits) {
+    drivers::uart::Pl011* uart = drivers::uart::Active();
+    if (uart != nullptr) {
+      const uint32_t received = uart->read(std::span<char>(buffer, sizeof(buffer)));
+      if (received == sizeof(buffer)) {
+        __atomic_store_n(&g_uart_rx_bytes, 4U, __ATOMIC_RELEASE);
+        return;
+      }
+    }
+    (void)sched::ThreadSleep(1);
+  }
 }
 
 Status IpiHandler(void* /*context*/, uint32_t /*irq*/) noexcept {
@@ -583,6 +600,20 @@ void kmain(BootInfo* info) noexcept {
   events::SetInterruptController(drivers::irq::MakeController(gic));
   Log(LogLevel::kInfo, "gic: ready\n");
 
+  drivers::uart::Pl011* uart = drivers::uart::Active();
+  if (uart != nullptr) {
+    const Status rx_status =
+      uart->enable_receive(drivers::uart::kUartIrq, platform::Current().uart_clock, 115200);
+    if (IsErr(rx_status)) {
+      Log(LogLevel::kWarn, "uart: rx init failed\n");
+    } else {
+      const Status irq_status = gic.enable_irq(drivers::uart::kUartIrq);
+      if (IsErr(irq_status)) {
+        Log(LogLevel::kWarn, "uart: rx irq enable failed\n");
+      }
+    }
+  }
+
   status = psci::PsciInit();
   if (IsErr(status)) {
     Log(LogLevel::kWarn, "psci: not available\n");
@@ -747,6 +778,21 @@ void kmain(BootInfo* info) noexcept {
     Panic("time: timeout did not fire");
   }
   Log(LogLevel::kInfo, "time: timeout ok\n");
+
+  (void)PrintLn("uart: ready");
+  if (sched::ThreadCreate("uart-rx", &UartRxWorker, nullptr).is_err()) {
+    Panic("uart: rx thread create failed");
+  }
+  uint32_t uart_waits = 0;
+  while (__atomic_load_n(&g_uart_rx_bytes, __ATOMIC_ACQUIRE) < 4U && uart_waits < 5000U) {
+    (void)sched::ThreadSleep(1);
+    ++uart_waits;
+  }
+  if (__atomic_load_n(&g_uart_rx_bytes, __ATOMIC_ACQUIRE) == 4U) {
+    Log(LogLevel::kInfo, "uart: rx ok\n");
+  } else {
+    Log(LogLevel::kWarn, "uart: rx timeout\n");
+  }
 
   status = LoadUserProgram();
   if (IsErr(status)) {

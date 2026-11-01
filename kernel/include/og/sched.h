@@ -21,7 +21,7 @@ struct Thread;
 
 using ThreadEntry = void (*)(void* argument);
 
-constexpr uint32_t kMaxThreads = 8;
+constexpr uint32_t kMaxThreads = 16;
 constexpr uint32_t kStackPages = 4;
 constexpr uint64_t kNoWake = 0xFFFFFFFFFFFFFFFFULL;
 

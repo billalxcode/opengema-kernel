@@ -14,6 +14,7 @@ constexpr Platform kQemuVirt{
   {memmap::kRtcBase, memmap::kRtcSize},
   {memmap::kPciEcamBase, memmap::kPciEcamSize},
   memmap::kRamBase,
+  24000000,
   2,
   kPsciConduitHvc,
 };

@@ -20,6 +20,7 @@ struct Platform {
   Range rtc;
   Range pci_ecam;
   uint64_t ram_base;
+  uint64_t uart_clock;
   uint32_t cpu_count;
   uint32_t psci_conduit;  // 0 = hvc, 1 = smc
 };
