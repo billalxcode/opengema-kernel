@@ -74,17 +74,27 @@ Tahap awal cukup `spawn` dan `wait`. `exec` menyusul setelah loader stabil.
 
 ## 6. Dynamic library
 
-Jika library masih statis, langkah 10 dan 11 dilewati. Untuk dynamic:
+Keputusan brainstorming: aplikasi memakai dynamic library langsung.
 
-- Executable menyimpan daftar `DT_NEEDED`.
-- Loader mencari library di `/System/Libraries`.
-- Loader memvalidasi versi dan dependensi.
+- Kernel memuat executable ELF dan membaca `PT_INTERP`.
+- Interpreter adalah `ld-gem`, dynamic linker statis.
+- `ld-gem` membaca `DT_NEEDED` dari executable.
+- `libgemapi.so` bergantung pada `libkgema.so`.
+- `ld-gem` mencari library hanya di `/System/Libraries`.
+- Loader memvalidasi versi, soname, dan dependensi.
 - Segment code dipetakan read-only dan executable.
-- Relokasi dan symbol binding dilakukan sebelum entry.
+- Relokasi dan symbol binding diselesaikan sebelum entry.
 - Library yang hilang atau versi salah menghasilkan error exec.
 
-Kernel tidak perlu memahami simbol library. Kernel hanya memetakan file dan
-menyediakan syscall yang dibutuhkan loader.
+Kernel tidak perlu memahami simbol library. Kernel memvalidasi ELF,
+memetakan file, dan menyediakan syscall yang dibutuhkan `ld-gem`.
+
+Pengecualian bootstrap:
+
+- `ld-gem` statis karena harus berjalan sebelum library dinamis tersedia.
+- Init boleh dinamis setelah linker stabil. Init statis sementara hanya
+  boleh sebagai fallback bring-up, bukan target akhir.
+- gemabox dan aplikasi biasa wajib dynamic.
 
 ## 7. Kegagalan yang harus ditangani
 
@@ -100,8 +110,7 @@ menyediakan syscall yang dibutuhkan loader.
 
 ## 8. Yang masih dibahas
 
-- Apakah loader ELF di kernel atau service user.
-- Apakah dynamic linker di library atau proses terpisah.
-- Apakah init dijalankan dari FAT32 atau filesystem system khusus.
 - Bagaimana recovery jika init gagal.
 - Apakah kernel menyediakan `execve` langsung atau hanya `spawn`.
+- Apakah `ld-gem` juga menangani lazy binding atau semua eager.
+- Format metadata versi library.

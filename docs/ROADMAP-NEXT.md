@@ -271,7 +271,9 @@ Ringkasnya:
 
 - Aplikasi hanya boleh memakai `libgemapi`.
 - `libgemapi` memakai `libkgema` secara privat.
-- Binary dan library berasal dari filesystem.
+- Binary dan library dynamic berasal dari filesystem.
+- System volume memakai GSLFS read-only.
+- Kernel memuat executable, `ld-gem` memuat library.
 - Kernel menjalankan init, init memasang volume dan menjalankan shell.
 - Setiap layer punya validasi dan batas kegagalan.
 

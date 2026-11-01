@@ -113,43 +113,39 @@ Usulan awal:
   dijanjikan.
 - Tidak ada libc penuh.
 
-## 4. Static dan dynamic library
+## 4. Dynamic library
 
-### Tahap A: static
-
-- Aplikasi menautkan `libgemapi.a`.
-- `libgemapi.a` menautkan `libkgema.a` secara privat.
-- Binary aplikasi berisi seluruh kode API dan ABI.
-- Boundary tetap dipaksa lewat header dan aturan link.
-
-Kelebihan:
-
-- Tidak butuh dynamic linker.
-- Lebih mudah dilacak dan diuji.
-- Cocok untuk versi pertama setelah ELF loader.
-
-Kekurangan:
-
-- Ukuran binary lebih besar.
-- Update library harus membangun ulang aplikasi.
-- Belum memenuhi gambaran dependency library dari filesystem.
-
-### Tahap B: dynamic
+Keputusan brainstorming: aplikasi memakai dynamic library langsung.
 
 - Aplikasi ELF memiliki `DT_NEEDED` untuk `libgemapi.so`.
 - `libgemapi.so` memiliki dependency `libkgema.so`.
-- Dynamic linker membaca dependency dari `/System/Libraries`.
+- Kernel memuat executable dan membaca `PT_INTERP`.
+- Dynamic linker user space adalah program statis bernama `ld-gem`.
+- `ld-gem` membaca dependency dari `/System/Libraries`.
 - Simbol diselesaikan dengan versi dan urutan yang jelas.
 
 Yang dibutuhkan:
 
-- ELF loader dan `mmap` file.
+- ELF64 loader dan `mmap` file.
 - Shared object loader, relokasi, symbol table, dan `DT_NEEDED`.
-- Aturan versi library.
+- Aturan versi library dan soname.
 - Read-only mapping untuk code dan relro.
+- Search path library yang tidak bisa diubah aplikasi.
 
-Rekomendasi: mulai dari static untuk membuktikan boundary, lalu pindah ke
-dynamic setelah ELF loader dan filesystem system volume stabil.
+Pengecualian bootstrap:
+
+- `ld-gem` sendiri statis karena harus bisa berjalan sebelum ada library
+  dinamis.
+- Init boleh dinamis setelah linker stabil. Jika belum, init statis
+  sementara adalah satu satunya pengecualian aplikasi.
+- gemabox dan aplikasi biasa tetap dynamic.
+
+Konsekuensi:
+
+- Dynamic loader harus selesai sebelum aplikasi GSL bisa berjalan.
+- Build aplikasi membutuhkan `libgemapi.so`, `libkgema.so`, dan `ld-gem`.
+- ABI library harus dijaga sejak awal karena semua aplikasi memakainya.
+
 
 ## 5. Aturan link
 

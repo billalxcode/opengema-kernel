@@ -10,10 +10,10 @@ Opsi:
 - A. Static library dulu.
 - B. Langsung dynamic library.
 
-Rekomendasi: A. Static dulu untuk membuktikan boundary aplikasi dan API.
-Setelah ELF loader dan system volume stabil, pindah ke dynamic.
+Keputusan: B. Dynamic library langsung. `ld-gem` tetap statis sebagai
+bootstrap karena harus berjalan sebelum library dinamis tersedia.
 
-Status: usulan.
+Status: diputuskan.
 
 ## 2. Filesystem system volume
 
@@ -23,10 +23,10 @@ Opsi:
 - B. ext2 read-only.
 - C. Filesystem package khusus GSL.
 
-Rekomendasi: B atau C untuk system volume jangka panjang. FAT32 dipakai
-untuk data dan pertukaran file. FAT32 tidak punya permission dan symlink.
+Keputusan: C. GSLFS read-only khusus. FAT32 tetap boleh untuk volume data
+dan pertukaran file, bukan system volume.
 
-Status: terbuka.
+Status: diputuskan.
 
 ## 3. Root filesystem
 
@@ -48,9 +48,9 @@ Opsi:
 - B. Satu binary per command.
 - C. Hybrid: applet inti di gemabox, aplikasi besar terpisah.
 
-Rekomendasi: C.
+Keputusan: C. Hybrid: applet inti di gemabox, aplikasi besar terpisah.
 
-Status: usulan.
+Status: diputuskan.
 
 ## 5. Mount per library
 
@@ -60,11 +60,10 @@ Opsi:
 - B. Satu volume system berisi semua library.
 - C. Volume per package.
 
-Rekomendasi: B. Mount adalah operasi filesystem. Library di-load dari
-volume yang sudah dipasang. Ini lebih sederhana dan tidak membuat mount
-table penuh.
+Keputusan: B. Satu volume system berisi semua library. Mount adalah operasi
+filesystem; library di-load dari volume yang sudah dipasang.
 
-Status: usulan kuat.
+Status: diputuskan.
 
 ## 6. Kernel atau user loader
 
@@ -74,10 +73,10 @@ Opsi:
 - B. Kernel memuat executable, user dynamic linker memuat library.
 - C. Kernel hanya memuat flat binary, semua ELF di user.
 
-Rekomendasi: B. Kernel memvalidasi dan memetakan executable; dynamic linker
-menyelesaikan dependency dan relokasi.
+Keputusan: B. Kernel memvalidasi dan memetakan executable serta membaca
+`PT_INTERP`; `ld-gem` menyelesaikan dependency dan relokasi di user space.
 
-Status: usulan.
+Status: diputuskan.
 
 ## 7. Manifest
 
@@ -87,9 +86,9 @@ Opsi:
 - B. JSON.
 - C. Binary TLV.
 
-Rekomendasi: A untuk awal, B jika parser JSON sudah ada.
+Keputusan: A. Format `key=value` sederhana.
 
-Status: usulan.
+Status: diputuskan.
 
 ## 8. Init
 
@@ -99,9 +98,9 @@ Opsi:
 - B. Kernel menjalankan init, init menjalankan shell.
 - C. Kernel menjalankan service manager.
 
-Rekomendasi: B. Init kecil, shell dan service dikelola user space.
+Keputusan: B. Kernel menjalankan init, init menjalankan shell dan service.
 
-Status: usulan kuat.
+Status: diputuskan.
 
 ## 9. Capability
 
@@ -111,10 +110,10 @@ Opsi:
 - B. Capability handle.
 - C. Hybrid path + capability.
 
-Rekomendasi: C. Capability untuk device dan operasi sensitif, permission
-path untuk file.
+Keputusan: C. Permission path untuk filesystem, capability handle untuk
+device dan operasi sensitif.
 
-Status: terbuka.
+Status: diputuskan.
 
 ## 10. Format path
 

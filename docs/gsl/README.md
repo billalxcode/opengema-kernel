@@ -54,21 +54,24 @@ Kode sekarang masih berada pada tahap sebelum GSL:
 Dokumen GSL ini adalah target arsitektur, bukan deskripsi kode yang sudah
 selesai.
 
-## 4. Keputusan awal yang diusulkan
+## 4. Keputusan brainstorming
 
-| Topik | Usulan |
+| Topik | Keputusan |
 |---|---|
 | API aplikasi | Hanya `libgemapi` |
 | ABI kernel user | Hanya `libkgema`, disembunyikan dari aplikasi |
-| Binary | ELF64, dimuat dari filesystem |
-| Library | File di `/System/Libraries`, bukan ditanam di kernel |
-| Mount | Volume dipasang ke path, bukan satu mount per library |
+| Binary | ELF64 dynamic, dimuat dari filesystem |
+| Library | `.so` di `/System/Libraries`, bukan ditanam di kernel |
+| Mount | Satu volume system, bukan satu mount per library |
+| System volume | Filesystem GSL khusus, read-only |
 | Init | Kernel menjalankan `/System/Boot/init` sebagai proses pertama |
 | Shell | Proses user, bukan bagian kernel |
 | Isolasi | Satu proses per aplikasi, address space sendiri |
 | Kegagalan | Error dikembalikan ke pemanggil, kernel tidak ikut gagal |
-| System volume | Read-only, data user dipisah |
-| Tahap awal | Library statis dulu, dynamic loader menyusul |
+| Library strategy | Dynamic langsung, dengan bootstrap linker statis |
+| Bentuk command | Hybrid: applet inti di gemabox, aplikasi besar terpisah |
+| Manifest | `key=value` |
+| Capability | Hybrid path dan handle |
 
 ## 5. Dokumen
 
@@ -81,6 +84,7 @@ selesai.
 | `05-security-and-failure.md` | Isolasi, capability, dan recovery |
 | `06-roadmap.md` | Urutan pekerjaan GSL |
 | `07-open-questions.md` | Opsi yang masih dibahas |
+| `08-gslfs-format.md` | Format filesystem GSL read-only |
 
 ## 6. Prinsip singkat
 

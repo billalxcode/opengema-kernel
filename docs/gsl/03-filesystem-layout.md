@@ -170,15 +170,35 @@ Minimal yang dibutuhkan:
 - Pemilik dan mode nanti.
 - Mount read-only harus ditolak jika ada operasi tulis.
 
-FAT32 tidak punya permission Unix dan symlink. Untuk system volume jangka
-panjang, ext2 atau filesystem read-only khusus lebih cocok. FAT32 bisa
-dipakai untuk volume data dan pertukaran file.
+Keputusan brainstorming: system volume memakai filesystem GSL khusus yang
+read-only. Detail format ada di `08-gslfs-format.md`.
+
+- GSLFS menyimpan permission, executable flag, dependency metadata, dan
+  checksum.
+- System volume tidak bisa ditulis saat runtime.
+- Data user memakai volume terpisah. FAT32 boleh dipakai untuk data dan
+  pertukaran file, bukan untuk system volume.
+
+Image system dibuat oleh tool host `mkgslimg` dari direktori root:
+
+```
+packages/system-root/
+  System/
+  Applications/
+  Commands/
+
+build/gema-system.img
+```
+
+Kernel memasang image itu sebagai volume read-only. Build tidak lagi
+menyalin gemabox ke ESP atau ramfs.
 
 ## 8. Boot image dan ESP
 
 Usulan pemisahan:
 
 - ESP berisi hanya `EFI/BOOT/BOOTAA64.EFI`.
+- Partisi atau disk kedua berisi `gema-system.img` dengan GSLFS.
 - Volume `System` berisi init, library, service, dan aplikasi inti.
 - Volume `Data` berisi konfigurasi dan berkas user.
 - Kernel tidak menanam gemabox atau library.
@@ -187,7 +207,7 @@ Usulan pemisahan:
 
 - Nama `/Applications` versus `/Apps` atau `/Programs`.
 - Apakah `/System/Commands` diperlukan.
-- Apakah system volume memakai FAT32 dulu atau langsung ext2.
 - Apakah package manager berada di init atau service terpisah.
 - Apakah path case-sensitive seperti Linux atau case-insensitive seperti
   Windows.
+- Apakah GSLFS memakai checksum per blok atau per file.
