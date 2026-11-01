@@ -25,7 +25,7 @@ class Blk {
 
   [[nodiscard]] bool is_ready() const noexcept { return ready_; }
   [[nodiscard]] uint64_t capacity_sectors() const noexcept { return capacity_; }
-  [[nodiscard]] uint16_t queue_size() const noexcept { return queue_size_; }
+  [[nodiscard]] uint16_t queue_size() const noexcept { return queue_.size(); }
 
   // Reads whole 512 byte sectors. buffer.size() must be a multiple of 512
   // and at most 4096 bytes.
@@ -33,14 +33,8 @@ class Blk {
 
  private:
   PciTransport transport_;
-  dma::DmaBuffer queue_memory_{};
+  Queue queue_;
   dma::DmaBuffer request_memory_{};
-  uint64_t avail_offset_ = 0;
-  uint64_t used_offset_ = 0;
-  uint64_t used_bytes_ = 0;
-  uint16_t queue_size_ = 0;
-  uint16_t avail_index_ = 0;
-  uint16_t used_index_ = 0;
   uint64_t capacity_ = 0;
   bool ready_ = false;
 };
