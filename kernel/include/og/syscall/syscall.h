@@ -13,9 +13,14 @@ constexpr uint64_t kSysExit = 3;
 constexpr uint64_t kSysYield = 4;
 constexpr uint64_t kSysMmap = 5;
 constexpr uint64_t kSysMunmap = 6;
+constexpr uint64_t kSysOpen = 7;
+constexpr uint64_t kSysClose = 8;
+constexpr uint64_t kSysSeek = 9;
+constexpr uint64_t kSysStat = 10;
+constexpr uint64_t kSysGetPid = 11;
+constexpr uint64_t kSysWait = 12;
+constexpr uint64_t kSysSpawn = 13;
 
 void SyscallInit() noexcept;
-
-[[nodiscard]] bool UserExited() noexcept;
 
 }  // namespace og::syscall

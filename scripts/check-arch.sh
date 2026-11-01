@@ -23,7 +23,7 @@ rank_of_path() {
     libs/*) echo 0 ;;
     kernel/arch/*) echo 1 ;;
     kernel/io/*) echo 2 ;;
-    kernel/core/init.cpp) echo 14 ;;
+    kernel/core/init.cpp) echo 15 ;;
     kernel/core/*) echo 3 ;;
     kernel/mem/*) echo 4 ;;
     kernel/events/*) echo 5 ;;
@@ -33,9 +33,10 @@ rank_of_path() {
     kernel/fs/*) echo 9 ;;
     kernel/sched/*) echo 10 ;;
     kernel/sync/*) echo 11 ;;
-    kernel/syscall/*) echo 12 ;;
-    kernel/platform/*) echo 13 ;;
-    kernel/boot/*) echo 14 ;;
+    kernel/process/*) echo 12 ;;
+    kernel/syscall/*) echo 13 ;;
+    kernel/platform/*) echo 14 ;;
+    kernel/boot/*) echo 15 ;;
     *) echo -1 ;;
   esac
 }
@@ -55,8 +56,9 @@ rank_of_header() {
     og/fs/*) echo 9 ;;
     og/sched/*) echo 10 ;;
     og/sync/*) echo 11 ;;
-    og/syscall/*) echo 12 ;;
-    og/platform/*) echo 13 ;;
+    og/process/*) echo 12 ;;
+    og/syscall/*) echo 13 ;;
+    og/platform/*) echo 14 ;;
     *) echo -1 ;;
   esac
 }

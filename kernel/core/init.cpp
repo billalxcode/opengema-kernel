@@ -1,6 +1,5 @@
 #include "og/arch/cpu.h"
 #include "og/arch/registers.h"
-#include "og/arch/user.h"
 
 #include "memory.h"
 #include "og/core/bootinfo.h"
@@ -37,6 +36,7 @@
 #include "og/platform/platform.h"
 #include "og/platform/psci.h"
 #include "og/platform/smp.h"
+#include "og/process/process.h"
 #include "og/sched/sched.h"
 #include "og/sync/sync.h"
 #include "og/syscall/syscall.h"
@@ -56,9 +56,6 @@ namespace {
 constexpr uint64_t kTargetTicks = 10;
 constexpr uint64_t kTimeoutSeconds = 20;
 constexpr uint64_t kSectorSize = 512;
-constexpr uint64_t kUserCodeVa = mem::kUserSpaceBase;
-constexpr uint64_t kUserStackVa = mem::kUserSpaceBase + 0x100000ULL;
-constexpr uint64_t kUserStackSize = 16384;
 uint64_t g_work_runs = 0;
 uint64_t g_workers_done = 0;
 uint64_t g_worker_cpu_mask = 0;
@@ -75,7 +72,7 @@ drivers::virtio::Blk g_block_device;
 drivers::virtio::Gpu g_gpu;
 drivers::rtc::Pl031 g_rtc;
 io::Tee g_console_tee;
-mem::AddressSpace g_user_space;
+fs::FileTable g_boot_files;
 
 void InitRtc() noexcept {
   const platform::Platform& board = platform::Current();
@@ -260,65 +257,6 @@ void RunAddressSpaceTest() noexcept {
   Log(LogLevel::kInfo, "mem: address space switch ok\n");
 }
 
-void UserThreadEntry(void* /*argument*/) noexcept {
-  arch::aarch64::EnterUserMode(kUserCodeVa, kUserStackVa + kUserStackSize);
-}
-
-Status LoadUserProgram() noexcept {
-  const Result<fs::Stat> stat = fs::FsStat("/ram/gemabox");
-  if (stat.is_err()) {
-    return stat.status();
-  }
-  const uint64_t size = stat.value().size;
-  if (size == 0 || size > 65536U) {
-    return Status::kInvalidArg;
-  }
-
-  const Result<void*> buffer = mem::HeapAlloc(size);
-  if (buffer.is_err()) {
-    return buffer.status();
-  }
-  const Result<uint32_t> file = fs::FsOpen("/ram/gemabox");
-  if (file.is_err()) {
-    (void)mem::HeapFree(buffer.value());
-    return file.status();
-  }
-  uint64_t read = 0;
-  Status status = fs::FsRead(
-    file.value(),
-    std::span<uint8_t>(static_cast<uint8_t*>(buffer.value()), size), read);
-  (void)fs::FsClose(file.value());
-  if (IsErr(status) || read != size) {
-    (void)mem::HeapFree(buffer.value());
-    return Status::kIoError;
-  }
-
-  const uint64_t code_size = (size + 4095U) & ~4095U;
-  if (g_user_space.root == 0) {
-    status = mem::AddressSpaceInit(g_user_space);
-    if (IsErr(status)) {
-      (void)mem::HeapFree(buffer.value());
-      return status;
-    }
-  }
-  status = mem::VmmMapUser(g_user_space, kUserCodeVa, code_size, true);
-  if (IsErr(status)) {
-    (void)mem::HeapFree(buffer.value());
-    return status;
-  }
-  status = mem::VmmCopyOut(g_user_space, kUserCodeVa, buffer.value(), size);
-  (void)mem::HeapFree(buffer.value());
-  if (IsErr(status)) {
-    return status;
-  }
-  status = mem::VmmMapUser(g_user_space, kUserStackVa, kUserStackSize, false);
-  if (IsErr(status)) {
-    return status;
-  }
-  LogDec(LogLevel::kInfo, "user: program bytes", size);
-  return Status::kOk;
-}
-
 fs::Node* g_ram_root = nullptr;
 
 Status PopulateRamfs() noexcept {
@@ -346,16 +284,16 @@ Status PopulateRamfs() noexcept {
   if (buffer.is_err()) {
     return buffer.status();
   }
-  const Result<uint32_t> file = fs::FsOpen("/GEMABOX.BIN");
+  const Result<uint32_t> file = fs::FsOpen(g_boot_files, "/GEMABOX.BIN");
   if (file.is_err()) {
     (void)mem::HeapFree(buffer.value());
     return file.status();
   }
   uint64_t read = 0;
   status = fs::FsRead(
-    file.value(),
+    g_boot_files, file.value(),
     std::span<uint8_t>(static_cast<uint8_t*>(buffer.value()), size), read);
-  (void)fs::FsClose(file.value());
+  (void)fs::FsClose(g_boot_files, file.value());
   if (IsErr(status) || read != size) {
     (void)mem::HeapFree(buffer.value());
     return Status::kIoError;
@@ -374,32 +312,32 @@ Status PopulateRamfs() noexcept {
     return hello.status();
   }
 
-  const Result<uint32_t> hello_file = fs::FsOpen("/ram/hello");
+  const Result<uint32_t> hello_file = fs::FsOpen(g_boot_files, "/ram/hello");
   if (hello_file.is_err()) {
     return hello_file.status();
   }
   constexpr char kHello[] = "ramfs write ok\n";
   uint64_t written = 0;
   status = fs::FsWrite(
-    hello_file.value(),
+    g_boot_files, hello_file.value(),
     std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(kHello), sizeof(kHello) - 1U),
     written);
   if (IsErr(status) || written != (sizeof(kHello) - 1U)) {
-    (void)fs::FsClose(hello_file.value());
+    (void)fs::FsClose(g_boot_files, hello_file.value());
     return Status::kIoError;
   }
-  status = fs::FsSeek(hello_file.value(), 0);
+  status = fs::FsSeek(g_boot_files, hello_file.value(), 0);
   if (IsErr(status)) {
-    (void)fs::FsClose(hello_file.value());
+    (void)fs::FsClose(g_boot_files, hello_file.value());
     return status;
   }
   char readback[32];
   uint64_t readback_size = 0;
-  status = fs::FsRead(hello_file.value(),
+  status = fs::FsRead(g_boot_files, hello_file.value(),
                       std::span<uint8_t>(reinterpret_cast<uint8_t*>(readback),
                                          sizeof(kHello) - 1U),
                       readback_size);
-  (void)fs::FsClose(hello_file.value());
+  (void)fs::FsClose(g_boot_files, hello_file.value());
   if (IsErr(status) || !mem::Equal(readback, kHello, sizeof(kHello) - 1U)) {
     return Status::kIoError;
   }
@@ -417,15 +355,16 @@ Status MountProcfs() noexcept {
     return status;
   }
 
-  const Result<uint32_t> uptime = fs::FsOpen("/proc/uptime");
+  const Result<uint32_t> uptime = fs::FsOpen(g_boot_files, "/proc/uptime");
   if (uptime.is_err()) {
     return uptime.status();
   }
   char text[32];
   uint64_t read = 0;
-  const Status read_status =
-    fs::FsRead(uptime.value(), std::span<uint8_t>(reinterpret_cast<uint8_t*>(text), sizeof(text) - 1U), read);
-  (void)fs::FsClose(uptime.value());
+  const Status read_status = fs::FsRead(
+    g_boot_files, uptime.value(),
+    std::span<uint8_t>(reinterpret_cast<uint8_t*>(text), sizeof(text) - 1U), read);
+  (void)fs::FsClose(g_boot_files, uptime.value());
   if (IsErr(read_status)) {
     return read_status;
   }
@@ -558,6 +497,11 @@ void InitFilesystem() noexcept {
     Log(LogLevel::kError, "fs: init failed\n");
     return;
   }
+  status = fs::FileTableInit(g_boot_files);
+  if (IsErr(status)) {
+    Log(LogLevel::kError, "fs: boot file table failed\n");
+    return;
+  }
 
   Result<fs::Node*> dev_root = fs::devfs::Create();
   if (dev_root.is_err()) {
@@ -601,20 +545,20 @@ void InitFilesystem() noexcept {
     Log(LogLevel::kWarn, "fs: procfs setup failed\n");
   }
 
-  Result<uint32_t> console = fs::FsOpen("/dev/console");
+  Result<uint32_t> console = fs::FsOpen(g_boot_files, "/dev/console");
   if (console.is_ok()) {
     constexpr char kMessage[] = "fs: devfs console ok\n";
     uint64_t written = 0;
-    (void)fs::FsWrite(console.value(),
+    (void)fs::FsWrite(g_boot_files, console.value(),
                       std::span<const uint8_t>(
                         reinterpret_cast<const uint8_t*>(kMessage), sizeof(kMessage) - 1U),
                       written);
-    (void)fs::FsClose(console.value());
+    (void)fs::FsClose(g_boot_files, console.value());
   } else {
     Log(LogLevel::kError, "fs: open dev console failed\n");
   }
 
-  Result<uint32_t> program = fs::FsOpen("/EFI/BOOT/BOOTAA64.EFI");
+  Result<uint32_t> program = fs::FsOpen(g_boot_files, "/EFI/BOOT/BOOTAA64.EFI");
   if (program.is_err()) {
     Log(LogLevel::kError, "fs: open efi image failed\n");
     return;
@@ -622,15 +566,17 @@ void InitFilesystem() noexcept {
 
   uint8_t header[2] = {0, 0};
   uint64_t read = 0;
-  status = fs::FsRead(program.value(), std::span<uint8_t>(header, sizeof(header)), read);
+  status = fs::FsRead(
+    g_boot_files, program.value(),
+    std::span<uint8_t>(header, sizeof(header)), read);
   if (IsErr(status) || read != sizeof(header)) {
     Log(LogLevel::kError, "fs: read efi header failed\n");
-    (void)fs::FsClose(program.value());
+    (void)fs::FsClose(g_boot_files, program.value());
     return;
   }
   if (header[0] != 'M' || header[1] != 'Z') {
     Log(LogLevel::kError, "fs: efi header mismatch\n");
-    (void)fs::FsClose(program.value());
+    (void)fs::FsClose(g_boot_files, program.value());
     return;
   }
 
@@ -638,7 +584,7 @@ void InitFilesystem() noexcept {
   if (stat.is_ok()) {
     LogDec(LogLevel::kInfo, "fs: efi image bytes", stat.value().size);
   }
-  (void)fs::FsClose(program.value());
+  (void)fs::FsClose(g_boot_files, program.value());
   Log(LogLevel::kInfo, "fs: fat32 file read ok\n");
 
   for (uint32_t index = 0; index < 8U; ++index) {
@@ -824,6 +770,10 @@ void kmain(BootInfo* info) noexcept {
     LogHex(LogLevel::kError, "sched: init status", static_cast<uint64_t>(status));
     Panic("sched: init failed");
   }
+  status = process::Init();
+  if (IsErr(status)) {
+    Panic("process: init failed");
+  }
 
   status = psci::PsciInit(platform::Current().psci_conduit);
   if (IsErr(status)) {
@@ -971,36 +921,46 @@ void kmain(BootInfo* info) noexcept {
     Log(LogLevel::kWarn, "uart: rx timeout\n");
   }
 
-  status = LoadUserProgram();
-  if (IsErr(status)) {
-    Panic("user: load failed");
-  }
   syscall::SyscallInit();
-  const Result<sched::Thread*> user_thread =
-    sched::ThreadCreateIn("user", &UserThreadEntry, nullptr, &g_user_space);
-  if (user_thread.is_err()) {
-    Panic("user: thread create failed");
+
+  const uint64_t frames_before = mem::PmmFreeFrames();
+  const Result<uint32_t> first =
+    process::Spawn("/ram/gemabox", process::kKernelPid);
+  if (first.is_err()) {
+    Panic("user: first spawn failed");
+  }
+  const Result<uint32_t> second =
+    process::Spawn("/ram/gemabox", process::kKernelPid);
+  if (second.is_err()) {
+    Panic("user: second spawn failed");
   }
 
-  arch::aarch64::DisableIrq();
-  sched::SchedulerStart();
-  arch::aarch64::EnableIrq();
+  int32_t exit_code = 0;
+  Result<uint32_t> waited = process::WaitFor(first.value(), exit_code);
+  if (waited.is_err()) {
+    Panic("user: first wait failed");
+  }
+  LogDec(LogLevel::kInfo, "user: exit pid", waited.value());
+  LogDec(LogLevel::kInfo, "user: exit status", static_cast<uint64_t>(exit_code));
 
-  uint32_t user_waits = 0;
-  while (!syscall::UserExited() && user_waits < 5000U) {
-    (void)sched::ThreadSleep(1);
-    ++user_waits;
+  exit_code = 0;
+  waited = process::WaitFor(second.value(), exit_code);
+  if (waited.is_err()) {
+    Panic("user: second wait failed");
   }
-  if (!syscall::UserExited()) {
-    Panic("user: exit not reached");
+  LogDec(LogLevel::kInfo, "user: exit pid", waited.value());
+  LogDec(LogLevel::kInfo, "user: exit status", static_cast<uint64_t>(exit_code));
+
+  const uint64_t frames_after = mem::PmmFreeFrames();
+  LogDec(LogLevel::kInfo, "user: frames before", frames_before);
+  LogDec(LogLevel::kInfo, "user: frames after", frames_after);
+  LogDec(LogLevel::kInfo, "process: remaining", process::Count());
+  if (frames_after != frames_before) {
+    Panic("process: frames leaked");
   }
-  Log(LogLevel::kInfo, "user: exit ok\n");
-  uint32_t exit_waits = 0;
-  while (!sched::ThreadFinished(user_thread.value()) && exit_waits < 1000U) {
-    (void)sched::ThreadSleep(1);
-    ++exit_waits;
+  if (process::Count() != 0U) {
+    Panic("process: process leaked");
   }
-  (void)mem::AddressSpaceDestroy(g_user_space);
 
   (void)PrintLn("kernel: halt");
   arch::aarch64::HaltForever();

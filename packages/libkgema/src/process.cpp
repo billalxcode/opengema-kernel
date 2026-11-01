@@ -10,4 +10,20 @@ namespace kgema {
   }
 }
 
+u64 getpid() noexcept {
+  return static_cast<u64>(syscall::invoke3(syscall::kGetPid, 0, 0, 0));
+}
+
+i64 spawn(const char* path) noexcept {
+  if (path == nullptr) {
+    return -1;
+  }
+  return syscall::invoke3(syscall::kSpawn, reinterpret_cast<i64>(path), 0, 0);
+}
+
+i64 wait(i64 pid, int* status) noexcept {
+  return syscall::invoke3(syscall::kWait, pid,
+                          reinterpret_cast<i64>(status), 0);
+}
+
 }  // namespace kgema

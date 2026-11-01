@@ -48,22 +48,39 @@ struct Stat {
   uint64_t size;
 };
 
+struct FileEntry {
+  Node* node;
+  uint64_t offset;
+  uint32_t flags;
+  bool in_use;
+};
+
 constexpr uint32_t kMaxMounts = 8;
 constexpr uint32_t kMaxFiles = 16;
 constexpr uint32_t kMaxPath = 256;
 
+// One file table per process. The kernel keeps its own table for boot
+// probes, so no file descriptor is global any more.
+struct FileTable {
+  FileEntry entries[kMaxFiles];
+};
+
 [[nodiscard]] Status FsInit() noexcept;
+[[nodiscard]] Status FileTableInit(FileTable& table) noexcept;
 
 // Mounts root at path. Longest matching mount wins during resolution.
 [[nodiscard]] Status FsMount(const char* path, Node* root) noexcept;
 
-[[nodiscard]] Result<uint32_t> FsOpen(const char* path) noexcept;
-[[nodiscard]] Status FsRead(uint32_t descriptor, std::span<uint8_t> buffer,
-                            uint64_t& out_read) noexcept;
-[[nodiscard]] Status FsWrite(uint32_t descriptor, std::span<const uint8_t> buffer,
+[[nodiscard]] Result<uint32_t> FsOpen(FileTable& table, const char* path,
+                                      uint32_t flags = 0) noexcept;
+[[nodiscard]] Status FsRead(FileTable& table, uint32_t descriptor,
+                            std::span<uint8_t> buffer, uint64_t& out_read) noexcept;
+[[nodiscard]] Status FsWrite(FileTable& table, uint32_t descriptor,
+                             std::span<const uint8_t> buffer,
                              uint64_t& out_written) noexcept;
-[[nodiscard]] Status FsSeek(uint32_t descriptor, uint64_t offset) noexcept;
-[[nodiscard]] Status FsClose(uint32_t descriptor) noexcept;
+[[nodiscard]] Status FsSeek(FileTable& table, uint32_t descriptor,
+                            uint64_t offset) noexcept;
+[[nodiscard]] Status FsClose(FileTable& table, uint32_t descriptor) noexcept;
 
 [[nodiscard]] Result<Stat> FsStat(const char* path) noexcept;
 [[nodiscard]] Result<Node*> FsResolve(const char* path) noexcept;

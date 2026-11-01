@@ -206,7 +206,8 @@ void Schedule() noexcept {
 Result<Thread*> CreateThread(const char* name, ThreadEntry entry, void* argument,
                              bool enqueue, uint32_t requested_cpu,
                              bool allocate_stack,
-                             mem::AddressSpace* address_space) noexcept {
+                             mem::AddressSpace* address_space,
+                             void* process) noexcept {
   if (name == nullptr || entry == nullptr) {
     return Result<Thread*>::Err(Status::kInvalidArg);
   }
@@ -279,6 +280,7 @@ Result<Thread*> CreateThread(const char* name, ThreadEntry entry, void* argument
   slot->next_wait = nullptr;
   slot->wait_owner = nullptr;
   slot->address_space = address_space;
+  slot->process = process;
   slot->in_ready_queue = 0;
 
   const std::size_t length = mem::Length(name);
@@ -344,7 +346,7 @@ Status SchedulerInit() noexcept {
   g_cpu[0].initialized = 1;
 
   const Result<Thread*> idle =
-    CreateThread("idle", &IdleEntry, nullptr, false, 0, true, nullptr);
+    CreateThread("idle", &IdleEntry, nullptr, false, 0, true, nullptr, nullptr);
   if (idle.is_err()) {
     return idle.status();
   }
@@ -370,7 +372,7 @@ Status SchedulerInitCpu() noexcept {
   g_lock.unlock();
 
   const Result<Thread*> idle =
-    CreateThread("idle", &IdleEntry, nullptr, false, index, false, nullptr);
+    CreateThread("idle", &IdleEntry, nullptr, false, index, false, nullptr, nullptr);
   if (idle.is_err()) {
     return idle.status();
   }
@@ -392,15 +394,15 @@ Result<Thread*> ThreadCreate(const char* name, ThreadEntry entry,
   if (!g_initialized) {
     return Result<Thread*>::Err(Status::kNotInit);
   }
-  return CreateThread(name, entry, argument, true, kAnyCpu, true, nullptr);
+  return CreateThread(name, entry, argument, true, kAnyCpu, true, nullptr, nullptr);
 }
 
 Result<Thread*> ThreadCreateIn(const char* name, ThreadEntry entry, void* argument,
-                               mem::AddressSpace* space) noexcept {
+                               mem::AddressSpace* space, void* process) noexcept {
   if (!g_initialized) {
     return Result<Thread*>::Err(Status::kNotInit);
   }
-  return CreateThread(name, entry, argument, true, kAnyCpu, true, space);
+  return CreateThread(name, entry, argument, true, kAnyCpu, true, space, process);
 }
 
 void SchedulerStart() noexcept {
@@ -508,6 +510,60 @@ bool ThreadFinished(const Thread* thread) noexcept {
   const bool finished = thread->state == ThreadState::kFinished;
   g_lock.unlock();
   return finished;
+}
+
+Thread* ThreadCurrentOnCpu(uint32_t cpu) noexcept {
+  if (cpu >= kMaxCpus) {
+    return nullptr;
+  }
+  g_lock.lock();
+  Thread* current = g_cpu[cpu].current;
+  g_lock.unlock();
+  return current;
+}
+
+Status ThreadReclaim(Thread* thread) noexcept {
+  if (thread == nullptr) {
+    return Status::kInvalidArg;
+  }
+
+  g_lock.lock();
+  if (thread->id == 0U) {
+    g_lock.unlock();
+    return Status::kNotFound;
+  }
+  if (thread->state != ThreadState::kFinished) {
+    g_lock.unlock();
+    return Status::kBusy;
+  }
+  if (thread->stack_base == 0U) {
+    g_lock.unlock();
+    return Status::kInvalidArg;
+  }
+  for (uint32_t cpu = 0; cpu < kMaxCpus; ++cpu) {
+    if (g_cpu[cpu].current == thread) {
+      g_lock.unlock();
+      return Status::kBusy;
+    }
+  }
+
+  if (thread->stack_base != 0U) {
+    for (uint64_t address = thread->stack_base + kPageSize;
+         address < thread->stack_top; address += kPageSize) {
+      const Result<uint64_t> physical = mem::VmmTranslate(address);
+      if (physical.is_err()) {
+        continue;
+      }
+      const Status unmapped = mem::VmmUnmap(address, kPageSize);
+      if (IsOk(unmapped)) {
+        (void)mem::PmmFreePage(physical.value());
+      }
+    }
+  }
+
+  mem::Zero(thread, sizeof(*thread));
+  g_lock.unlock();
+  return Status::kOk;
 }
 
 uint32_t ThreadCount() noexcept {

@@ -84,10 +84,23 @@ check "smp: worker cpus: 3"
 check "mem: address space switch ok"
 check "sched: round robin ok"
 check "uart: rx ok"
-check "hello from el0"
-check "mmap ok"
-check "user: exit ok"
+check "user: spawn pid"
+check "process: remaining: 0"
 check "kernel: halt"
+
+count_check() {
+  local found
+  found="$(grep -c "$1" "$LOG" 2>/dev/null || true)"
+  if [ "${found:-0}" -lt "$2" ]; then
+    echo "qemu test: FAIL expected $2 of '$1', got ${found:-0}"
+    FAILED=1
+  fi
+}
+
+count_check "hello from el0" 2
+count_check "file ok" 2
+count_check "mmap ok" 2
+count_check "user: exit status: 0" 2
 
 if [ "$SCREEN_STATUS" -ne 0 ]; then
   echo "qemu test: FAIL framebuffer screen"

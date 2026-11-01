@@ -60,6 +60,7 @@ set(OG_KGEMA_ARCHIVE ${CMAKE_BINARY_DIR}/libkgema.a)
 add_library(og_kgema_user OBJECT
   packages/libkgema/src/syscall.cpp
   packages/libkgema/src/io.cpp
+  packages/libkgema/src/file.cpp
   packages/libkgema/src/memory.cpp
   packages/libkgema/src/process.cpp
   packages/libkgema/src/start.cpp)
@@ -198,9 +199,13 @@ og_add_module(og_sched
   SOURCES kernel/sched/scheduler.cpp
   DEPS og_events og_time og_mem og_core og_inc_kernel)
 
+og_add_module(og_process
+  SOURCES kernel/process/process.cpp
+  DEPS og_fs og_sched og_mem og_core og_inc_kernel)
+
 og_add_module(og_syscall
   SOURCES kernel/syscall/syscall.cpp
-  DEPS og_sched og_events og_mem og_core og_inc_kernel)
+  DEPS og_process og_sched og_events og_mem og_core og_inc_kernel)
 
 og_add_module(og_sync
   SOURCES kernel/sync/sync.cpp
@@ -217,7 +222,7 @@ og_add_module(og_platform
 
 og_add_module(og_kernel
   SOURCES kernel/core/init.cpp
-  DEPS og_sync og_platform og_syscall og_sched og_fs og_mem og_events og_time og_dma og_drivers og_inc_kernel)
+  DEPS og_process og_sync og_platform og_syscall og_sched og_fs og_mem og_events og_time og_dma og_drivers og_inc_kernel)
 
 og_add_module(og_boot
   SOURCES
@@ -237,6 +242,7 @@ set(OG_IMAGE_OBJECTS
   $<TARGET_OBJECTS:og_drivers>
   $<TARGET_OBJECTS:og_fs>
   $<TARGET_OBJECTS:og_sched>
+  $<TARGET_OBJECTS:og_process>
   $<TARGET_OBJECTS:og_sync>
   $<TARGET_OBJECTS:og_syscall>
   $<TARGET_OBJECTS:og_platform>
@@ -260,7 +266,7 @@ add_custom_command(
     /out:${CMAKE_BINARY_DIR}/BOOTAA64.EFI
     ${OG_IMAGE_OBJECTS}
   COMMAND_EXPAND_LISTS
-  DEPENDS og_boot og_kernel og_drivers og_fs og_sched og_sync og_syscall og_platform og_time og_dma og_events og_mem og_core og_io og_arch og_lib_core
+  DEPENDS og_boot og_kernel og_drivers og_fs og_sched og_process og_sync og_syscall og_platform og_time og_dma og_events og_mem og_core og_io og_arch og_lib_core
   COMMENT "lld-link BOOTAA64.EFI"
 )
 
