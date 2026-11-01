@@ -90,6 +90,7 @@ timer: periodic tick ok
 sched: threads: 5
 sched: workers done: 2
 smp: worker cpus: 3
+mem: address space switch ok
 sched: round robin ok
 sync: mutex, semaphore, refcount, once ok
 time: timeout ok
@@ -103,8 +104,9 @@ kernel: halt
 ```
 
 Framebuffer console memakai virtio-gpu 1280x800 dan diuji otomatis dengan
-`screendump` dari monitor QEMU.
+`screendump` dari monitor QEMU. Program user berjalan di address space
+sendiri pada 1 TiB, dengan ASID yang dipasang saat context switch.
 
-Berikutnya: address space per proses.
+Roadmap inti selesai. Berikutnya: pengembangan lanjutan di atas fondasi ini.
 
 Roadmap lengkap ada di `docs/ROADMAP.md`.

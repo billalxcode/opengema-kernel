@@ -90,6 +90,10 @@ Panic sudah mencetak `esr_el1`, `esr_ec`, `esr_iss`, `far_el1`, `elr_el1`,
   group.
 - `IrqSpinlock` harus menyimpan DAIF per-CPU. Menyimpannya di objek lock
   membuat core yang menunggu menimpa state core pemilik.
+- Address space per proses memakai slot level 0 di 1 TiB. Entri kernel
+  dibagi, jadi stack kernel yang dibuat setelah proses tetap terlihat.
+  TTBR0 memakai ASID, dan `TCR_EL1.A1` harus nol agar ASID diambil dari
+  TTBR0.
 - Fault yang terjadi saat print lock dipegang membuat panic menunggu lock
   yang sama. Saat memburu kasus seperti ini, simpan ESR, FAR, dan ELR ke
   variabel global di stub vektor sebelum panic, lalu baca lewat monitor.

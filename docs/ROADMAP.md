@@ -90,7 +90,7 @@ kernel/
   arch/aarch64/   barriers.cpp, cache.S, context.S, vectors.S, mmu_primitives.cpp
   io/             mmio.cpp, console.cpp, print.cpp, framebuffer.cpp
   core/           log.cpp, panic.cpp, assert.cpp, init.cpp, version.cpp
-  mem/            pmm.cpp, vmm.cpp, heap.cpp, address_space.cpp
+  mem/            pmm.cpp, vmm.cpp, heap.cpp
   events/         vector.cpp, trap.cpp, irq.cpp, workqueue.cpp, waitqueue.cpp
   time/           clocksource.cpp, timer.cpp, delay.cpp
   dma/            dma.cpp, cache.cpp, pool.cpp
@@ -270,9 +270,9 @@ Catatan hasil Fase 2:
       `HeapFree`, `GetHeapStats`.
 - [x] MEM-06 Slab untuk 16 sampai 2048 byte, alokasi page langsung untuk
       yang lebih besar. Header 16 byte menyimpan kelas dan jumlah page.
-- [ ] MEM-07 `address_space`: ditunda. Pemetaan user dan validasi alamat
-      sudah ada di vmm, tetapi objek ruang alamat per proses belum perlu
-      sebelum ada banyak proses.
+- [x] MEM-07 `AddressSpace`: level 0 table per proses, entri kernel tetap
+      dibagi, ruang user di 1 TiB, ASID dipasang saat context switch,
+      salinan user lewat page table, plus `AddressSpaceDestroy`.
 - [x] MEM-08 Guard page stack kernel lewat region VA terpisah dengan
       halaman pertama tidak termap.
 - [x] MEM-09 Uji QEMU: 256 page alokasi dan free, 10000 churn page,
@@ -290,6 +290,16 @@ Catatan hasil Fase 3:
    `check-arch.sh`. Itu satu satunya file yang boleh include modul atas.
 3. Self test berjalan saat boot dan hasilnya terverifikasi di QEMU:
    131072 frame total, 122093 bebas, semua tes pmm, vmm, dan heap lolos.
+4. User space ditempatkan di 1 TiB, pada slot level 0 yang tidak dipakai
+   kernel. Setiap `AddressSpace` menyalin root level 0, berbagi semua entri
+   kernel, lalu memiliki tabel user sendiri. Kernel stack yang dibuat
+   belakangan tetap terlihat karena entri level 0 kernel dipakai bersama.
+5. Context switch memasang TTBR0 dengan ASID unik per ruang alamat. Salinan
+   user berjalan lewat translasi page table, jadi tidak bergantung pada
+   ruang mana yang sedang aktif.
+6. Uji QEMU memetakan alamat user yang sama di dua ruang alamat dengan isi
+   berbeda, menjalankan satu thread pada masing masing, dan memastikan
+   keduanya membaca nilai yang benar.
 
 ### Fase 4 - Events dan interrupt
 
@@ -507,12 +517,13 @@ Catatan hasil Fase 10:
 - [x] SYS-02 ABI `svc #0`: nomor di `x8`, argumen di `x0..x5`, hasil di `x0`.
 - [x] SYS-03 Syscall awal: `write`, `read`, `exit`, `yield`. `read` belum
       punya sumber input sehingga mengembalikan error.
-- [x] SYS-04 `VmmCopyIn` dan `VmmCopyOut` dengan validasi terhadap region
-      user yang terdaftar.
+- [x] SYS-04 `VmmCopyIn` dan `VmmCopyOut` dengan validasi region user dan
+      translasi lewat page table ruang alamat pemanggil.
 - [x] SYS-05 Loader program user dari filesystem: `GEMABOX.BIN` dibaca dari
       FAT, disalin ke ramfs, lalu dimuat ke halaman user.
-- [x] SYS-06 `mmap` dan `munmap` untuk user. Region dialokasikan naik dari
-      `0x101000000`; `munmap` membebaskan frame dan menghapus mapping.
+- [x] SYS-06 `mmap` dan `munmap` untuk user. Region dialokasikan dari
+      `mmap_next` milik address space; `munmap` membebaskan frame dan
+      menghapus mapping.
 
 **Selesai bila:** satu program EL0 bisa print lalu exit bersih.
 
@@ -528,6 +539,9 @@ Catatan hasil Fase 11:
    dikunci di urutan instruksi stub.
 4. Program user 147 byte dibangun dari `pubs/gemabox/main.S`, dipanggil
    dengan `svc`, mencetak `hello from el0`, lalu `exit`.
+5. Program user ditautkan di 1 TiB dan dijalankan di `AddressSpace` milik
+   sendiri. Loader dan syscall memakai pointer ruang alamat itu, bukan
+   variabel global.
 
 ### Fase 12 - Platform dan SMP
 
@@ -682,10 +696,9 @@ yang belum selesai, supaya tidak ada yang hilang di antara fase.
 - [x] MEM-08 guard page stack kernel lewat region VA terpisah.
 - [x] EV-06 waitqueue dengan `WaitQueueWait`, `WakeOne`, `WakeAll`.
 
-### 9.2 Ditunda karena butuh user mode (Fase 11)
+### 9.2 Selesai setelah user mode
 
-- [ ] MEM-07 objek ruang alamat per proses, setelah ada lebih dari satu
-      proses user.
+- [x] MEM-07 objek ruang alamat per proses, dipakai loader dan syscall.
 
 ### 9.3 Ditunda karena belum ada pemakai nyata
 
