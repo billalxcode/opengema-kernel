@@ -1,6 +1,6 @@
 #!/bin/bash
-# QEMU smoke test. Boots the kernel, waits for known markers, and fails if
-# any marker is missing or a panic appears.
+# QEMU smoke test. Boots the kernel, waits for known markers, injects four
+# bytes into the UART to exercise RX, and fails on missing markers or panic.
 
 set -euo pipefail
 
@@ -18,13 +18,16 @@ if [ ! -f "$ESP" ]; then
   exit 1
 fi
 
-LOG="$(mktemp)"
+SERIAL_DIR="$(mktemp -d)"
+SOCKET="$SERIAL_DIR/serial.sock"
+LOG="$SERIAL_DIR/serial.log"
 VARS_TMP="$(mktemp /tmp/AAVMF_VARS.XXXXXX.fd)"
 cleanup() {
   if [ -n "${QEMU_PID:-}" ]; then
     kill "$QEMU_PID" 2>/dev/null || true
   fi
   rm -f "$VARS_TMP"
+  rm -rf "$SERIAL_DIR"
 }
 trap cleanup EXIT
 
@@ -39,25 +42,22 @@ qemu-system-aarch64 \
   -drive if=pflash,format=raw,file="$CODE",readonly=on \
   -drive if=pflash,format=raw,file="$VARS_TMP" \
   -drive file="$ESP",format=raw,if=virtio \
-  -serial "file:$LOG" \
+  -serial "unix:$SOCKET,server=on,wait=off" \
   -display none \
   -monitor none \
   2>/dev/null &
 QEMU_PID=$!
 
-for _ in $(seq 1 120); do
-  if grep -q "kernel: halt" "$LOG" 2>/dev/null; then
-    break
-  fi
-  if ! kill -0 "$QEMU_PID" 2>/dev/null; then
-    break
-  fi
-  sleep 1
-done
+CLIENT_STATUS=0
+python3 "$ROOT/scripts/uart_test_client.py" "$SOCKET" "$LOG" 120 || CLIENT_STATUS=$?
 
 kill "$QEMU_PID" 2>/dev/null || true
 wait "$QEMU_PID" 2>/dev/null || true
 QEMU_PID=""
+
+if [ "$CLIENT_STATUS" -ne 0 ]; then
+  echo "qemu test: serial client failed"
+fi
 
 FAILED=0
 check() {
@@ -71,7 +71,9 @@ check "fs: fat32 file read ok"
 check "hardening: wx attributes ok"
 check "smp: cpus online: 2"
 check "sched: round robin ok"
+check "uart: rx ok"
 check "hello from el0"
+check "mmap ok"
 check "user: exit ok"
 check "kernel: halt"
 
@@ -83,9 +85,7 @@ fi
 if [ "$FAILED" -ne 0 ]; then
   echo "--- serial tail ---"
   tail -n 40 "$LOG" || true
-  rm -f "$LOG"
   exit 1
 fi
 
-rm -f "$LOG"
 echo "qemu test: OK"
