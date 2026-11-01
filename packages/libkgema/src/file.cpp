@@ -25,6 +25,15 @@ i64 read(i64 descriptor, void* buffer, usize size) noexcept {
                           static_cast<i64>(size));
 }
 
+i64 write(i64 descriptor, const void* data, usize size) noexcept {
+  if (data == nullptr || size == 0U) {
+    return -1;
+  }
+  return syscall::invoke3(syscall::kWrite, descriptor,
+                          reinterpret_cast<i64>(data),
+                          static_cast<i64>(size));
+}
+
 bool seek(i64 descriptor, u64 offset) noexcept {
   return syscall::invoke3(syscall::kSeek, descriptor,
                           static_cast<i64>(offset), 0) == 0;
@@ -36,6 +45,13 @@ bool stat(const char* path, Stat& result) noexcept {
   }
   return syscall::invoke3(syscall::kStat, reinterpret_cast<i64>(path),
                           reinterpret_cast<i64>(&result), 0) == 0;
+}
+
+bool chdir(const char* path) noexcept {
+  if (path == nullptr) {
+    return false;
+  }
+  return syscall::invoke3(syscall::kChdir, reinterpret_cast<i64>(path), 0, 0) == 0;
 }
 
 }  // namespace kgema

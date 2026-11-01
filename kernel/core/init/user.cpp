@@ -37,6 +37,12 @@ void RunUserSelfTest() noexcept {
   if (second.is_err()) {
     Panic("user: second spawn failed");
   }
+  const char* writer_argv[] = {"gemabox", "writer"};
+  const Result<uint32_t> writer =
+    process::SpawnWithArgs("/ram/gemabox", process::kKernelPid, writer_argv, 2);
+  if (writer.is_err()) {
+    Panic("user: writer spawn failed");
+  }
 
   int32_t exit_code = 0;
   Result<uint32_t> waited = process::WaitFor(first.value(), exit_code);
@@ -50,6 +56,14 @@ void RunUserSelfTest() noexcept {
   waited = process::WaitFor(second.value(), exit_code);
   if (waited.is_err()) {
     Panic("user: second wait failed");
+  }
+  LogDec(LogLevel::kInfo, "user: exit pid", waited.value());
+  LogDec(LogLevel::kInfo, "user: exit status", static_cast<uint64_t>(exit_code));
+
+  exit_code = 0;
+  waited = process::WaitFor(writer.value(), exit_code);
+  if (waited.is_err()) {
+    Panic("user: writer wait failed");
   }
   LogDec(LogLevel::kInfo, "user: exit pid", waited.value());
   LogDec(LogLevel::kInfo, "user: exit status", static_cast<uint64_t>(exit_code));

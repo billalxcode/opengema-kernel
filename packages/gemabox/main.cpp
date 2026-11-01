@@ -16,6 +16,36 @@ constexpr char kMmapMessage[] = "mmap ok\n";
 constexpr char kMmapFailed[] = "mmap failed\n";
 constexpr char kChildOk[] = "child ok\n";
 constexpr char kSpawnOk[] = "spawn ok\n";
+constexpr char kWriteMessage[] = "write ok\n";
+
+int run_writer() {
+  if (!kgema::chdir("/ram")) {
+    return 1;
+  }
+  const kgema::i64 descriptor = kgema::open("writer", kgema::kOpenWrite);
+  if (descriptor < 0) {
+    return 1;
+  }
+  const kgema::i64 written =
+    kgema::write(descriptor, kWriteMessage, sizeof(kWriteMessage) - 1U);
+  if (written != static_cast<kgema::i64>(sizeof(kWriteMessage) - 1U)) {
+    (void)kgema::close(descriptor);
+    return 1;
+  }
+  if (!kgema::seek(descriptor, 0)) {
+    (void)kgema::close(descriptor);
+    return 1;
+  }
+  char readback[16];
+  const kgema::i64 read = kgema::read(descriptor, readback, sizeof(readback));
+  (void)kgema::close(descriptor);
+  if (read < static_cast<kgema::i64>(sizeof(kWriteMessage) - 1U) ||
+      readback[0] != 'w') {
+    return 1;
+  }
+  kgema::write(kWriteMessage);
+  return 0;
+}
 
 bool same(const char* lhs, const char* rhs) {
   if (lhs == nullptr || rhs == nullptr) {
@@ -34,6 +64,9 @@ int main(int argc, char** argv, char** /*envp*/) {
   if (argc > 1 && same(argv[1], "child")) {
     kgema::write(kChildOk);
     return 0;
+  }
+  if (argc > 1 && same(argv[1], "writer")) {
+    return run_writer();
   }
   if (kgema::getpid() == 0U) {
     return 1;

@@ -20,6 +20,7 @@ constexpr i64 kStat = 10;
 constexpr i64 kGetPid = 11;
 constexpr i64 kWait = 12;
 constexpr i64 kSpawn = 13;
+constexpr i64 kChdir = 14;
 
 // Number in x8, arguments in x0..x2, result in x0.
 [[nodiscard]] i64 invoke3(i64 number, i64 arg0, i64 arg1, i64 arg2) noexcept;

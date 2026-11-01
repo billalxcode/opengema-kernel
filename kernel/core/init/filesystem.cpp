@@ -83,6 +83,10 @@ Status PopulateRamfs() noexcept {
   if (hello.is_err()) {
     return hello.status();
   }
+  const Result<fs::Node*> writer = fs::ramfs::CreateFile(g_ram_root, "writer", nullptr, 0);
+  if (writer.is_err()) {
+    return writer.status();
+  }
 
   const Result<uint32_t> hello_file = fs::FsOpen(g_boot_files, "/ram/hello");
   if (hello_file.is_err()) {
