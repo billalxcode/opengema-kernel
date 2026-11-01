@@ -418,7 +418,8 @@ Status VmmProtectRange(uint64_t base, uint64_t size, bool executable,
   return Status::kOk;
 }
 
-Status VmmMapDevice(uint64_t base, uint64_t size) noexcept {  if (g_root == nullptr) {
+Status VmmMapDevice(uint64_t base, uint64_t size) noexcept {
+  if (g_root == nullptr) {
     return Status::kNotInit;
   }
   if (size == 0) {

@@ -118,17 +118,18 @@ Commit: `refactor(process): extract interpreter environment`.
 
 Tujuan: modul besar dipecah tanpa mengubah perilaku.
 
+- [x] Perbaiki formatting `VmmMapDevice`.
+- [x] Dokumentasikan lock ordering di `docs/LOCKING.md`.
 - [ ] Pisahkan address space init/destroy dari mapping.
 - [ ] Pisahkan copy/query dari map/unmap.
 - [ ] Pisahkan thread creation, run queue, dan wait queue.
-- [ ] Dokumentasikan lock ordering.
 - [ ] Compile-check grup.
 
-Status: ditunda. Perubahan ini menyentuh MMU, TLB, dan context switch.
-Tanpa QEMU, risiko regresi terlalu tinggi. Kerjakan setelah toolchain
-kembali.
+Status: dokumentasi dan formatting selesai. Pemisahan file ditunda karena
+menyentuh MMU, TLB, dan context switch. Tanpa QEMU, risiko regresi terlalu
+tinggi.
 
-Commit: `refactor(mem): split vmm and scheduler responsibilities`.
+Commit: `docs(mem): document kernel lock ordering`.
 
 ## Grup 5 - Driver dan platform
 
