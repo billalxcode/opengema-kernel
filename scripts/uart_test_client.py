@@ -39,6 +39,7 @@ def main(argv):
     buffer = bytearray()
     help_sent = False
     ls_sent = False
+    ls_error_sent = False
     hello_sent = False
     exit_sent = False
     halted = False
@@ -63,7 +64,11 @@ def main(argv):
                 client.sendall(b"ls /\n")
                 ls_sent = True
 
-            if ls_sent and not hello_sent and b"system/" in buffer:
+            if ls_sent and not ls_error_sent and b"system/" in buffer:
+                client.sendall(b"ls /missing\n")
+                ls_error_sent = True
+
+            if ls_error_sent and not hello_sent and b"ls: list failed" in buffer:
                 client.sendall(b"hello\n")
                 hello_sent = True
 

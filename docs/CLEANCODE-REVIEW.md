@@ -139,6 +139,30 @@ sudah dikompilasi dengan `clang++ --target=aarch64-linux-gnu`. Full
 tidak tersedia di sesi ini. Jalankan `./scripts/test.sh` di environment
 build sebelum merge.
 
+## Refactor branch dev
+
+Perubahan yang sudah dikerjakan di branch `dev`:
+
+- `libs/core/endian.h` menjadi satu sumber reader little-endian.
+  `efi_image.cpp`, `gslfs.cpp`, `partition.cpp`, dan `elf.cpp` memakainya.
+- `ldgem/text.h` dan `text.cpp` menjadi satu sumber helper teks untuk
+  `ld-gem`.
+- `gslfs::Mount` dipecah menjadi `ReadSuperblock`, `LoadNodes`,
+  `ValidateTree`, dan `VerifyNodeData`.
+- `SetupWritableFs` dipecah menjadi `CreateWritableTree`,
+  `MountWritableTree`, `SeedEtcConfig`, dan `VerifyTmpWrite`.
+- `SpawnWithArgs` memakai `BuildInterpreterEnvironment` agar state
+  environment tidak berserakan.
+- Test host baru: endian reader dan image GSLFS valid/rusak/deterministik.
+- Test QEMU baru: `ls /missing` diharapkan menghasilkan
+  `ls: list failed`.
+
+Verifikasi branch `dev`:
+
+- `python3 scripts/compile-check.py`: 90 file OK, 1 entri lama dilewati.
+- `./scripts/test-host.sh`: host tests dan GSLFS test OK.
+- `test.sh` penuh belum dijalankan karena podman/QEMU tidak tersedia.
+
 ## Kesimpulan
 
 Basis kode sudah mengikuti banyak prinsip Clean Code: nama jelas, modul

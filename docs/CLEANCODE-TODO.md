@@ -150,12 +150,12 @@ Commit: `refactor(userland): split linker and applet helpers`.
 
 - [x] Tambah test image GSLFS valid dan rusak.
 - [x] Tambah test host untuk `endian.h`.
-- [ ] Tambah test negative syscall.
+- [x] Tambah test negative `ls /missing` di test QEMU (menunggu QEMU).
 - [ ] Update `docs/CLEANCODE-REVIEW.md`.
 - [ ] Jalankan `test.sh` di environment build.
 - [ ] Merge checklist.
 
-Commit: `test(dev): add gslfs and endian host tests`.
+Commit: `test(dev): add gslfs endian and list error tests`.
 
 ## Aturan commit
 
