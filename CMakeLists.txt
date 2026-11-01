@@ -85,7 +85,11 @@ og_add_module(og_arch
   DEPS og_lib_core og_inc_kernel)
 
 og_add_module(og_io
-  SOURCES kernel/io/mmio.cpp kernel/io/console.cpp kernel/io/print.cpp
+  SOURCES
+    kernel/io/mmio.cpp
+    kernel/io/console.cpp
+    kernel/io/print.cpp
+    kernel/io/framebuffer.cpp
   DEPS og_arch og_inc_kernel)
 
 og_add_module(og_core
@@ -125,6 +129,7 @@ og_add_module(og_drivers
     kernel/drivers/pci/ecam.cpp
     kernel/drivers/virtio/virtio_common.cpp
     kernel/drivers/virtio/virtio_blk.cpp
+    kernel/drivers/virtio/virtio_gpu.cpp
   DEPS og_events og_time og_dma og_core og_inc_kernel)
 
 og_add_module(og_fs

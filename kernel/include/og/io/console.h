@@ -46,4 +46,43 @@ void SetConsole(Console console) noexcept;
 [[nodiscard]] Status ConsoleWriteActive(std::span<const uint8_t> bytes) noexcept;
 [[nodiscard]] Status ConsoleWriteTextActive(const char* text) noexcept;
 
+// Forwards to two consoles, for example serial plus framebuffer. The owner
+// keeps the Tee alive and hands console() to SetConsole.
+class Tee {
+ public:
+  constexpr Tee() noexcept = default;
+  constexpr Tee(Console first, Console second) noexcept
+    : first_(first), second_(second) {}
+
+  void Set(Console first, Console second) noexcept {
+    first_ = first;
+    second_ = second;
+  }
+
+  [[nodiscard]] Console console() noexcept { return Console(&WriteTrampoline, this); }
+
+  [[nodiscard]] Status write(std::span<const uint8_t> bytes) noexcept {
+    if (bytes.empty()) {
+      return Status::kInvalidArg;
+    }
+    if (!first_.valid() && !second_.valid()) {
+      return Status::kNotInit;
+    }
+    const Status first = first_.valid() ? first_.Write(bytes) : Status::kOk;
+    const Status second = second_.valid() ? second_.Write(bytes) : Status::kOk;
+    return IsErr(first) ? first : second;
+  }
+
+ private:
+  static Status WriteTrampoline(void* context, std::span<const uint8_t> bytes) noexcept {
+    if (context == nullptr) {
+      return Status::kInvalidArg;
+    }
+    return static_cast<Tee*>(context)->write(bytes);
+  }
+
+  Console first_{};
+  Console second_{};
+};
+
 }  // namespace og::io

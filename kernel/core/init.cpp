@@ -15,6 +15,7 @@
 #include "og/drivers/rtc.h"
 #include "og/drivers/uart.h"
 #include "og/drivers/virtio_blk.h"
+#include "og/drivers/virtio_gpu.h"
 #include "og/events/event_selftest.h"
 #include "og/events/irq.h"
 #include "og/events/trap.h"
@@ -26,6 +27,7 @@
 #include "og/fs/procfs.h"
 #include "og/fs/ramfs.h"
 #include "og/fs/vfs.h"
+#include "og/io/console.h"
 #include "og/io/print.h"
 #include "og/mem/heap.h"
 #include "og/mem/mem_selftest.h"
@@ -70,7 +72,9 @@ uint64_t g_uart_rx_bytes = 0;
 sync::Mutex g_test_mutex;
 sync::Semaphore g_test_semaphore;
 drivers::virtio::Blk g_block_device;
+drivers::virtio::Gpu g_gpu;
 drivers::rtc::Pl031 g_rtc;
+io::Tee g_console_tee;
 
 void InitRtc() noexcept {
   const platform::Platform& board = platform::Current();
@@ -387,6 +391,51 @@ void InitBlockDevice() noexcept {
   Log(LogLevel::kInfo, "virtio-blk: gpt header ok\n");
 }
 
+void InitGpu() noexcept {
+  if (!drivers::pci::PciReady()) {
+    Log(LogLevel::kWarn, "virtio-gpu: pci not ready\n");
+    return;
+  }
+
+  const Result<drivers::pci::Info> info =
+    drivers::pci::FindFirst(&drivers::virtio::IsVirtioGpu);
+  if (info.is_err()) {
+    Log(LogLevel::kWarn, "virtio-gpu: no device on pci\n");
+    return;
+  }
+  LogDec(LogLevel::kInfo, "pci: virtio-gpu device id", info.value().device_id);
+
+  Status status = drivers::pci::EnableDevice(info.value().address);
+  if (IsErr(status)) {
+    Log(LogLevel::kError, "virtio-gpu: pci enable failed\n");
+    return;
+  }
+
+  status = g_gpu.init(info.value());
+  if (IsErr(status)) {
+    LogHex(LogLevel::kError, "virtio-gpu: init status", static_cast<uint64_t>(status));
+    return;
+  }
+  LogDec(LogLevel::kInfo, "virtio-gpu: display width", g_gpu.width());
+  LogDec(LogLevel::kInfo, "virtio-gpu: display height", g_gpu.height());
+  LogDec(LogLevel::kInfo, "virtio-gpu: scanouts", g_gpu.num_scanouts());
+
+  drivers::Device device{};
+  device.name = "virtio-gpu0";
+  device.device_class = drivers::DeviceClass::kDisplay;
+  device.capacity = static_cast<uint64_t>(g_gpu.width()) * g_gpu.height();
+  device.driver_data = &g_gpu;
+  status = drivers::RegisterDevice(device);
+  if (IsErr(status)) {
+    Log(LogLevel::kError, "virtio-gpu: register failed\n");
+    return;
+  }
+
+  g_console_tee.Set(io::ActiveConsole(), g_gpu.console());
+  io::SetConsole(g_console_tee.console());
+  Log(LogLevel::kInfo, "virtio-gpu: scanout ok\n");
+}
+
 Status BlockReadAdapter(void* context, uint64_t sector,
                         std::span<uint8_t> buffer) noexcept {
   if (context == nullptr) {
@@ -590,6 +639,7 @@ void kmain(BootInfo* info) noexcept {
   }
 
   InitBlockDevice();
+  InitGpu();
   InitRtc();
   InitFilesystem();
 
