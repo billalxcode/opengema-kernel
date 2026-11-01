@@ -355,9 +355,8 @@ Catatan hasil Fase 6:
       dengan CPU address selama identity map berlaku.
 - [x] DMA-03 `MapStreaming` dan `UnmapStreaming` dengan cache maintenance
       sesuai arah data.
-- [ ] DMA-04 `dma/pool.cpp`: pool per device belum ada. Alokasi langsung
-      masih cukup untuk satu device blok. Pool menyusul saat ada beberapa
-      device yang alokasi bersamaan.
+- [x] DMA-04 `dma::Pool`: blok ukuran tetap, bitmap pemakaian, deteksi
+      double free, dan `release`. Diuji di self test DMA.
 - [x] DMA-05 Terverifikasi lewat virtio-blk: buffer request dan queue
       memakai `AllocCoherent`, dan baca GPT berhasil.
 
@@ -373,8 +372,8 @@ alamat CPU, pola data bertahan, dan jumlah frame bebas kembali setelah
 
 - [x] DRV-01 `og/device.h`: registry dengan nama, kelas, kapasitas, dan
       `driver_data`. Dipakai virtio-blk saat mendaftar.
-- [~] DRV-02 PL011: TX polling selesai. RX lewat IRQ, pengaturan baud, dan
-      ring buffer belum.
+- [x] DRV-02 PL011: TX polling, RX lewat IRQ 33, ring buffer 256 byte, dan
+      baud 115200 dari clock 24 MHz. Diuji dengan injeksi serial.
 - [x] DRV-03 GICv3: distributor, redistributor, CPU interface, enable,
       disable, acknowledge, end. Single core.
 - [x] DRV-04 RTC PL031 di `0x09010000`. Waktu Unix dicetak saat boot dan
@@ -648,13 +647,11 @@ yang belum selesai, supaya tidak ada yang hilang di antara fase.
 - [ ] PLT-03 parser DTB: konduit PSCI dan alamat device masih memakai
       deskripsi platform. Parser dibutuhkan saat menambah board lain.
 - [ ] SMP penjadwalan lintas core (SCH-05): butuh per-CPU scheduler.
-- [ ] DMA-04 pool per device: menunggu lebih dari satu device aktif.
 - [ ] DRV-08 virtio-gpu: menunggu kebutuhan framebuffer.
 
-### 9.4 Sebagian selesai, perlu dilengkapi
+### 9.4 Selesai
 
-- [ ] DRV-02 PL011 RX lewat IRQ, pengaturan baud, dan ring buffer TX dan RX.
-      TX polling sudah jalan dan dipakai seluruh kernel.
+- [x] DRV-02 UART RX lewat IRQ dengan ring buffer dan baud.
 
 ### 9.5 Fase yang belum dimulai
 

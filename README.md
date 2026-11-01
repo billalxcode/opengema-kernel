@@ -61,6 +61,7 @@ mem test: vmm 2m ok
 mem test: heap ok
 dma test: coherent ok
 dma test: streaming ok
+dma test: pool ok
 hardening: wx attributes ok
 pci: virtio device id: 4097
 virtio-blk: queue size: 256
