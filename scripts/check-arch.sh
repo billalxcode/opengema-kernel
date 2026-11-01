@@ -24,6 +24,7 @@ rank_of_path() {
     kernel/arch/*) echo 1 ;;
     kernel/io/*) echo 2 ;;
     kernel/core/init.cpp) echo 15 ;;
+    kernel/core/init/*) echo 15 ;;
     kernel/core/*) echo 3 ;;
     kernel/mem/*) echo 4 ;;
     kernel/events/*) echo 5 ;;

@@ -221,7 +221,12 @@ og_add_module(og_platform
   DEPS og_drivers og_events og_time og_sched og_mem og_core og_inc_kernel)
 
 og_add_module(og_kernel
-  SOURCES kernel/core/init.cpp
+  SOURCES
+    kernel/core/init.cpp
+    kernel/core/init/devices.cpp
+    kernel/core/init/filesystem.cpp
+    kernel/core/init/self_test.cpp
+    kernel/core/init/user.cpp
   DEPS og_process og_sync og_platform og_syscall og_sched og_fs og_mem og_events og_time og_dma og_drivers og_inc_kernel)
 
 og_add_module(og_boot

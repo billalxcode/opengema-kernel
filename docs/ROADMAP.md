@@ -93,6 +93,7 @@ kernel/
   arch/aarch64/   barriers.cpp, cache.S, context.S, vectors.S, mmu_primitives.cpp
   io/             mmio.cpp, console.cpp, print.cpp, framebuffer.cpp
   core/           log.cpp, panic.cpp, assert.cpp, init.cpp, version.cpp
+  core/init/      devices.cpp, filesystem.cpp, self_test.cpp, user.cpp
   mem/            pmm.cpp, vmm.cpp, heap.cpp
   events/         vector.cpp, trap.cpp, irq.cpp, workqueue.cpp, waitqueue.cpp
   time/           clocksource.cpp, timer.cpp, delay.cpp

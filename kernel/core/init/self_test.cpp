@@ -1,0 +1,336 @@
+#include "boot.h"
+
+#include "memory.h"
+#include "og/arch/registers.h"
+#include "og/core/log.h"
+#include "og/core/panic.h"
+#include "og/core/status.h"
+#include "og/drivers/uart.h"
+#include "og/events/workqueue.h"
+#include "og/io/print.h"
+#include "og/mem/vmm.h"
+#include "og/platform/smp.h"
+#include "og/sched/sched.h"
+#include "og/sync/sync.h"
+#include "og/time/timer.h"
+
+namespace og::boot {
+
+namespace {
+
+constexpr uint64_t kTargetTicks = 10;
+constexpr uint64_t kTimeoutSeconds = 20;
+constexpr uint64_t kAddressSpaceTestVa = mem::kUserSpaceBase + 0x3000000ULL;
+
+uint64_t g_work_runs = 0;
+uint64_t g_workers_done = 0;
+uint64_t g_worker_cpu_mask = 0;
+uint64_t g_mutex_counter = 0;
+uint64_t g_mutex_done = 0;
+uint64_t g_semaphore_seen = 0;
+uint64_t g_once_runs = 0;
+uint64_t g_timeout_fired = 0;
+uint64_t g_uart_rx_bytes = 0;
+sync::Mutex g_test_mutex;
+sync::Semaphore g_test_semaphore;
+
+struct AddressSpaceTestState {
+  uint64_t expected;
+  uint64_t observed;
+  uint32_t done;
+};
+
+mem::AddressSpace g_as_a;
+mem::AddressSpace g_as_b;
+AddressSpaceTestState g_as_state_a{};
+AddressSpaceTestState g_as_state_b{};
+
+void CountWork(void* /*context*/) noexcept {
+  ++g_work_runs;
+}
+
+void MutexWorker(void* /*argument*/) noexcept {
+  for (uint32_t index = 0; index < 50U; ++index) {
+    if (IsErr(g_test_mutex.lock())) {
+      break;
+    }
+    const uint64_t value = g_mutex_counter;
+    g_mutex_counter = value + 1U;
+    g_test_mutex.unlock();
+    (void)sched::ThreadSleep(1);
+  }
+  (void)__atomic_add_fetch(&g_mutex_done, 1U, __ATOMIC_RELAXED);
+}
+
+void SemaphoreWorker(void* /*argument*/) noexcept {
+  (void)g_test_semaphore.wait();
+  (void)__atomic_add_fetch(&g_semaphore_seen, 1U, __ATOMIC_RELAXED);
+}
+
+void OnceHandler(void* /*argument*/) noexcept {
+  (void)__atomic_add_fetch(&g_once_runs, 1U, __ATOMIC_RELAXED);
+}
+
+void TimeoutHandler(void* /*argument*/) noexcept {
+  (void)__atomic_add_fetch(&g_timeout_fired, 1U, __ATOMIC_RELAXED);
+}
+
+void UartRxWorker(void* /*argument*/) noexcept {
+  char buffer[4];
+  for (uint32_t waits = 0; waits < 5000U; ++waits) {
+    drivers::uart::Pl011* uart = drivers::uart::Active();
+    if (uart != nullptr) {
+      const uint32_t received = uart->read(std::span<char>(buffer, sizeof(buffer)));
+      if (received == sizeof(buffer)) {
+        __atomic_store_n(&g_uart_rx_bytes, 4U, __ATOMIC_RELEASE);
+        return;
+      }
+    }
+    (void)sched::ThreadSleep(1);
+  }
+}
+
+void WorkerA(void* /*argument*/) noexcept {
+  for (uint32_t index = 0; index < 3U; ++index) {
+    (void)__atomic_or_fetch(&g_worker_cpu_mask,
+                            1ULL << smp::CurrentIndex(), __ATOMIC_RELAXED);
+    (void)PrintLn("sched: worker a");
+    (void)sched::ThreadSleep(3);
+  }
+  (void)__atomic_add_fetch(&g_workers_done, 1U, __ATOMIC_RELAXED);
+}
+
+void WorkerB(void* /*argument*/) noexcept {
+  for (uint32_t index = 0; index < 3U; ++index) {
+    (void)__atomic_or_fetch(&g_worker_cpu_mask,
+                            1ULL << smp::CurrentIndex(), __ATOMIC_RELAXED);
+    (void)PrintLn("sched: worker b");
+    (void)sched::ThreadSleep(3);
+  }
+  (void)__atomic_add_fetch(&g_workers_done, 1U, __ATOMIC_RELAXED);
+}
+
+void AddressSpaceWorker(void* argument) noexcept {
+  auto* state = static_cast<AddressSpaceTestState*>(argument);
+  uint64_t observed = 0;
+  mem::Copy(&observed, reinterpret_cast<const void*>(kAddressSpaceTestVa),
+            sizeof(observed));
+  state->observed = observed;
+  __atomic_store_n(&state->done, 1U, __ATOMIC_RELEASE);
+}
+
+}  // namespace
+
+void RunTimerSelfTest() noexcept {
+  (void)events::ScheduleWork(&CountWork, nullptr);
+  arch::aarch64::EnableIrq();
+
+  // Bounded wait so a missing interrupt reports instead of hanging.
+  const uint64_t start = arch::aarch64::ReadCntpctEl0();
+  const uint64_t timeout = arch::aarch64::ReadCntfrqEl0() * kTimeoutSeconds;
+  while (time::TimerTicks() < kTargetTicks) {
+    if ((arch::aarch64::ReadCntpctEl0() - start) > timeout) {
+      break;
+    }
+  }
+  arch::aarch64::DisableIrq();
+
+  const uint64_t ticks = time::TimerTicks();
+  LogDec(LogLevel::kInfo, "timer: ticks", ticks);
+  LogDec(LogLevel::kInfo, "timer: work runs", g_work_runs);
+  if (ticks == 0U) {
+    Log(LogLevel::kError, "timer: no interrupts received\n");
+    Panic("timer: irq not working");
+  }
+  if (ticks < kTargetTicks) {
+    Log(LogLevel::kWarn, "timer: few ticks under host load\n");
+  } else {
+    Log(LogLevel::kInfo, "timer: periodic tick ok\n");
+  }
+}
+
+void RunSchedulerSelfTest() noexcept {
+  const Result<sched::Thread*> worker_a =
+    sched::ThreadCreate("worker-a", &WorkerA, nullptr);
+  if (worker_a.is_err()) {
+    Panic("sched: create worker a failed");
+  }
+  const Result<sched::Thread*> worker_b =
+    sched::ThreadCreate("worker-b", &WorkerB, nullptr);
+  if (worker_b.is_err()) {
+    Panic("sched: create worker b failed");
+  }
+  LogDec(LogLevel::kInfo, "sched: threads", sched::ThreadCount());
+
+  arch::aarch64::DisableIrq();
+  sched::SchedulerStart();
+  arch::aarch64::EnableIrq();
+
+  uint32_t waits = 0;
+  while (__atomic_load_n(&g_workers_done, __ATOMIC_ACQUIRE) < 2U && waits < 2000U) {
+    (void)sched::ThreadSleep(1);
+    ++waits;
+  }
+  LogDec(LogLevel::kInfo, "sched: workers done",
+         __atomic_load_n(&g_workers_done, __ATOMIC_ACQUIRE));
+  if (__atomic_load_n(&g_workers_done, __ATOMIC_ACQUIRE) < 2U) {
+    Panic("sched: workers did not finish");
+  }
+  const uint64_t worker_cpus =
+    __atomic_load_n(&g_worker_cpu_mask, __ATOMIC_ACQUIRE);
+  LogDec(LogLevel::kInfo, "smp: worker cpus", worker_cpus);
+  const uint32_t online = smp::OnlineCount();
+  if (online < 64U) {
+    const uint64_t expected = (1ULL << online) - 1ULL;
+    if ((worker_cpus & expected) != expected) {
+      Panic("sched: workers stayed on one cpu");
+    }
+  }
+  Log(LogLevel::kInfo, "sched: round robin ok\n");
+
+  g_test_mutex.set_name("self-test");
+  g_test_semaphore.init(0);
+  if (sched::ThreadCreate("mutex-a", &MutexWorker, nullptr).is_err() ||
+      sched::ThreadCreate("mutex-b", &MutexWorker, nullptr).is_err() ||
+      sched::ThreadCreate("semaphore", &SemaphoreWorker, nullptr).is_err()) {
+    Panic("sync: thread create failed");
+  }
+  g_test_semaphore.signal();
+
+  uint32_t sync_waits = 0;
+  while ((__atomic_load_n(&g_mutex_done, __ATOMIC_ACQUIRE) < 2U ||
+          __atomic_load_n(&g_semaphore_seen, __ATOMIC_ACQUIRE) < 1U) &&
+         sync_waits < 5000U) {
+    (void)sched::ThreadSleep(1);
+    ++sync_waits;
+  }
+  if (g_mutex_counter != 100U) {
+    Panic("sync: mutex lost updates");
+  }
+  if (__atomic_load_n(&g_semaphore_seen, __ATOMIC_ACQUIRE) != 1U) {
+    Panic("sync: semaphore failed");
+  }
+
+  sync::RefCount refs;
+  refs.reset(1);
+  if (refs.add(2) != 3U) {
+    Panic("sync: refcount add failed");
+  }
+  if (refs.release() || refs.release()) {
+    Panic("sync: refcount released early");
+  }
+  if (!refs.release()) {
+    Panic("sync: refcount did not reach zero");
+  }
+
+  sync::OnceFlag once{};
+  sync::CallOnce(once, &OnceHandler, nullptr);
+  sync::CallOnce(once, &OnceHandler, nullptr);
+  if (__atomic_load_n(&g_once_runs, __ATOMIC_ACQUIRE) != 1U) {
+    Panic("sync: once ran twice");
+  }
+  Log(LogLevel::kInfo, "sync: mutex, semaphore, refcount, once ok\n");
+
+  const Result<time::Timeout*> scheduled_timeout =
+    time::ScheduleAfter(5, &TimeoutHandler, nullptr);
+  if (scheduled_timeout.is_err()) {
+    Panic("time: schedule failed");
+  }
+  uint32_t timeout_waits = 0;
+  while (__atomic_load_n(&g_timeout_fired, __ATOMIC_ACQUIRE) == 0U &&
+         timeout_waits < 500U) {
+    (void)sched::ThreadSleep(1);
+    ++timeout_waits;
+  }
+  if (__atomic_load_n(&g_timeout_fired, __ATOMIC_ACQUIRE) != 1U) {
+    Panic("time: timeout did not fire");
+  }
+  Log(LogLevel::kInfo, "time: timeout ok\n");
+
+  (void)PrintLn("uart: ready");
+  if (sched::ThreadCreate("uart-rx", &UartRxWorker, nullptr).is_err()) {
+    Panic("uart: rx thread create failed");
+  }
+  uint32_t uart_waits = 0;
+  while (__atomic_load_n(&g_uart_rx_bytes, __ATOMIC_ACQUIRE) < 4U &&
+         uart_waits < 5000U) {
+    (void)sched::ThreadSleep(1);
+    ++uart_waits;
+  }
+  if (__atomic_load_n(&g_uart_rx_bytes, __ATOMIC_ACQUIRE) == 4U) {
+    Log(LogLevel::kInfo, "uart: rx ok\n");
+  } else {
+    Log(LogLevel::kWarn, "uart: rx timeout\n");
+  }
+}
+
+void RunAddressSpaceSelfTest() noexcept {
+  Status status = mem::AddressSpaceInit(g_as_a);
+  if (IsErr(status)) {
+    Panic("mem: address space a init failed");
+  }
+  status = mem::AddressSpaceInit(g_as_b);
+  if (IsErr(status)) {
+    Panic("mem: address space b init failed");
+  }
+
+  constexpr uint64_t kValueA = 0x1122334455667788ULL;
+  constexpr uint64_t kValueB = 0x99AABBCCDDEEFF00ULL;
+  status = mem::VmmMapUser(g_as_a, kAddressSpaceTestVa, 4096, false);
+  if (IsErr(status)) {
+    Panic("mem: address space a map failed");
+  }
+  status = mem::VmmMapUser(g_as_b, kAddressSpaceTestVa, 4096, false);
+  if (IsErr(status)) {
+    Panic("mem: address space b map failed");
+  }
+  status = mem::VmmCopyOut(g_as_a, kAddressSpaceTestVa, &kValueA, sizeof(kValueA));
+  if (IsErr(status)) {
+    Panic("mem: address space a copy failed");
+  }
+  status = mem::VmmCopyOut(g_as_b, kAddressSpaceTestVa, &kValueB, sizeof(kValueB));
+  if (IsErr(status)) {
+    Panic("mem: address space b copy failed");
+  }
+
+  g_as_state_a.expected = kValueA;
+  g_as_state_a.done = 0;
+  g_as_state_b.expected = kValueB;
+  g_as_state_b.done = 0;
+
+  const Result<sched::Thread*> thread_a =
+    sched::ThreadCreateIn("as-a", &AddressSpaceWorker, &g_as_state_a, &g_as_a);
+  const Result<sched::Thread*> thread_b =
+    sched::ThreadCreateIn("as-b", &AddressSpaceWorker, &g_as_state_b, &g_as_b);
+  if (thread_a.is_err() || thread_b.is_err()) {
+    Panic("mem: address space thread create failed");
+  }
+
+  uint32_t waits = 0;
+  while ((__atomic_load_n(&g_as_state_a.done, __ATOMIC_ACQUIRE) == 0U ||
+          __atomic_load_n(&g_as_state_b.done, __ATOMIC_ACQUIRE) == 0U) &&
+         waits < 1000U) {
+    (void)sched::ThreadSleep(1);
+    ++waits;
+  }
+  if (__atomic_load_n(&g_as_state_a.done, __ATOMIC_ACQUIRE) == 0U ||
+      __atomic_load_n(&g_as_state_b.done, __ATOMIC_ACQUIRE) == 0U) {
+    Panic("mem: address space workers did not finish");
+  }
+  if (g_as_state_a.observed != kValueA || g_as_state_b.observed != kValueB) {
+    Panic("mem: address spaces overlap");
+  }
+
+  waits = 0;
+  while ((!sched::ThreadFinished(thread_a.value()) ||
+          !sched::ThreadFinished(thread_b.value())) &&
+         waits < 1000U) {
+    (void)sched::ThreadSleep(1);
+    ++waits;
+  }
+  (void)mem::AddressSpaceDestroy(g_as_a);
+  (void)mem::AddressSpaceDestroy(g_as_b);
+  Log(LogLevel::kInfo, "mem: address space switch ok\n");
+}
+
+}  // namespace og::boot
