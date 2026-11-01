@@ -411,13 +411,14 @@ Catatan hasil Fase 8:
 - [x] FS-02 `kernel/fs/vfs.cpp`: resolusi path, mount table dengan
       pencocokan prefix terpanjang. `..` ditolak, bukan ditebak.
 - [x] FS-03 `kernel/fs/devfs.cpp`: `/dev/console`, `/dev/null`, `/dev/zero`.
-- [ ] FS-04 `kernel/fs/ramfs.cpp`: ditunda ke Fase 11, menunggu initramfs.
+- [x] FS-04 `kernel/fs/ramfs.cpp`: file di memori dengan write, grow, dan
+      batas kapasitas.
 - [x] FS-05 `kernel/fs/fat32.cpp`: baca saja, BPB, FAT chain, LFN,
       pemetaan nama 8.3.
 - [x] FS-06 `kernel/fs/vfs.cpp`: `FsOpen`, `FsRead`, `FsWrite`, `FsSeek`,
-      `FsClose`, `FsStat`. Write hanya untuk node device, file masih baca.
+      `FsClose`, `FsStat`. Write berlaku untuk device dan file ramfs.
 - [x] FS-07 ESP dipasang sebagai root read-only saat boot.
-- [ ] FS-08 `procfs`: opsional, ditunda.
+- [x] FS-08 `procfs`: `/proc/uptime` dan `/proc/threads`.
 
 **Selesai bila:** bisa `open("/dev/console")` dan `read("/init")` dari FAT.
 
@@ -471,8 +472,8 @@ Catatan hasil Fase 10:
       punya sumber input sehingga mengembalikan error.
 - [x] SYS-04 `VmmCopyIn` dan `VmmCopyOut` dengan validasi terhadap region
       user yang terdaftar.
-- [x] SYS-05 Loader program user dari binary datar yang dibangun CMake,
-      dilink di `0x100000000`, lalu ditanam sebagai header.
+- [x] SYS-05 Loader program user dari filesystem: `INIT.BIN` dibaca dari
+      FAT, disalin ke ramfs, lalu dimuat ke halaman user.
 - [ ] SYS-06 `mmap` dan `munmap`: ditunda, belum ada kebutuhan alokasi
       dinamis di user.
 
@@ -642,7 +643,6 @@ yang belum selesai, supaya tidak ada yang hilang di antara fase.
 - [ ] SYS-06 `mmap` dan `munmap` untuk user.
 - [ ] MEM-07 objek ruang alamat per proses, setelah ada lebih dari satu
       proses user.
-- [ ] Loader dari filesystem, bukan binary tertanam. Menunggu ramfs.
 
 ### 9.3 Ditunda karena belum ada pemakai nyata
 
@@ -651,20 +651,17 @@ yang belum selesai, supaya tidak ada yang hilang di antara fase.
 - [ ] SMP penjadwalan lintas core (SCH-05): butuh per-CPU scheduler.
 - [ ] DMA-04 pool per device: menunggu lebih dari satu device aktif.
 - [ ] DRV-08 virtio-gpu: menunggu kebutuhan framebuffer.
-- [ ] FS-04 ramfs: menunggu initramfs di Fase 11.
-- [ ] FS-08 procfs: opsional, menunggu kebutuhan info kernel.
 
 ### 9.4 Sebagian selesai, perlu dilengkapi
 
 - [ ] DRV-02 PL011 RX lewat IRQ, pengaturan baud, dan ring buffer TX dan RX.
       TX polling sudah jalan dan dipakai seluruh kernel.
-- [ ] FS-06 `write` untuk berkas biasa. Saat ini write hanya untuk device.
 
 ### 9.5 Fase yang belum dimulai
 
-- [ ] Fase 9 sisa: FS-04 ramfs dan FS-08 procfs (lihat 9.3).
+- [x] Fase 9 selesai.
 - [ ] Fase 10 sisa: SCH-05 load balancing SMP (lihat 9.1).
-- [ ] Fase 11 sisa: SYS-06 mmap dan loader dari filesystem (lihat 9.2).
+- [ ] Fase 11 sisa: SYS-06 mmap (lihat 9.2).
 - [ ] Fase 12 sisa: PLT-03 parser DTB dan SMP scheduling (lihat 9.3).
 - [x] Fase 13 selesai.
 - [x] Fase 14 selesai.
