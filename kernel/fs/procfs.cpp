@@ -13,6 +13,7 @@ enum class ProcKind : uint32_t {
   kUptime = 0,
   kThreads = 1,
   kAcpi = 2,
+  kProcesses = 3,
 };
 
 struct ProcFile {
@@ -23,12 +24,13 @@ struct ProcFile {
 
 struct ProcDir {
   Node node;
-  ProcFile files[3];
+  ProcFile files[4];
   uint32_t count;
 };
 
 ProcDir g_root;
 ThreadCountFn g_thread_count = nullptr;
+ProcessTextFn g_process_text = nullptr;
 
 void GenerateAcpi(og::fmt::LineBuilder& line) noexcept {
   const acpi::Info& info = acpi::GetInfo();
@@ -85,6 +87,13 @@ Status Generate(const ProcFile& file, char* buffer, std::size_t capacity,
       break;
     case ProcKind::kAcpi:
       GenerateAcpi(line);
+      break;
+    case ProcKind::kProcesses:
+      if (g_process_text == nullptr) {
+        line.Text("no processes\n");
+      } else {
+        return g_process_text(buffer, capacity, length);
+      }
       break;
     default:
       return Status::kInvalidArg;
@@ -179,8 +188,10 @@ void AddFile(uint32_t index, const char* name, ProcKind kind) noexcept {
 
 }  // namespace
 
-Result<Node*> Create(ThreadCountFn thread_count) noexcept {
+Result<Node*> Create(ThreadCountFn thread_count,
+                     ProcessTextFn process_text) noexcept {
   g_thread_count = thread_count;
+  g_process_text = process_text;
   mem::Zero(&g_root, sizeof(g_root));
   g_root.node.name = "/";
   g_root.node.type = NodeType::kDirectory;
@@ -192,7 +203,8 @@ Result<Node*> Create(ThreadCountFn thread_count) noexcept {
   AddFile(0, "uptime", ProcKind::kUptime);
   AddFile(1, "threads", ProcKind::kThreads);
   AddFile(2, "acpi", ProcKind::kAcpi);
-  g_root.count = 3;
+  AddFile(3, "processes", ProcKind::kProcesses);
+  g_root.count = 4;
   return Result<Node*>::Ok(&g_root.node);
 }
 

@@ -548,4 +548,26 @@ uint32_t Count() noexcept {
   return count;
 }
 
+uint32_t Snapshot(ProcessInfo* out, uint32_t capacity) noexcept {
+  if (out == nullptr || capacity == 0U) {
+    return 0;
+  }
+  uint32_t count = 0;
+  g_lock.lock();
+  for (uint32_t index = 0; index < kMaxProcesses && count < capacity; ++index) {
+    const Process& process = g_processes[index];
+    if (process.used == 0U) {
+      continue;
+    }
+    out[count].pid = process.pid;
+    out[count].parent_pid = process.parent_pid;
+    out[count].state = process.state;
+    mem::Copy(out[count].name, process.name, sizeof(out[count].name));
+    out[count].name[sizeof(out[count].name) - 1U] = '\0';
+    ++count;
+  }
+  g_lock.unlock();
+  return count;
+}
+
 }  // namespace og::process

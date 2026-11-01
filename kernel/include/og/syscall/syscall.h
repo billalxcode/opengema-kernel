@@ -24,6 +24,8 @@ constexpr uint64_t kSysChdir = 14;
 constexpr uint64_t kSysList = 15;
 constexpr uint64_t kSysShutdown = 16;
 constexpr uint64_t kSysReboot = 17;
+constexpr uint64_t kSysTime = 18;
+constexpr uint64_t kSysSleep = 19;
 
 void SyscallInit() noexcept;
 

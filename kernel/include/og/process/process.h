@@ -48,6 +48,14 @@ struct Process {
   char cwd[fs::kMaxPath];
 };
 
+// Copy of the fields a user visible process listing needs.
+struct ProcessInfo {
+  uint32_t pid;
+  uint32_t parent_pid;
+  ProcessState state;
+  char name[32];
+};
+
 [[nodiscard]] Status Init() noexcept;
 
 // Loads a static ELF64 executable from path and starts it in a new address
@@ -70,5 +78,8 @@ struct Process {
 [[nodiscard]] Process* Current() noexcept;
 [[nodiscard]] Status SetCwd(Process& process, const char* path) noexcept;
 [[nodiscard]] uint32_t Count() noexcept;
+
+// Copies used process entries into out. Returns the number copied.
+[[nodiscard]] uint32_t Snapshot(ProcessInfo* out, uint32_t capacity) noexcept;
 
 }  // namespace og::process

@@ -89,4 +89,8 @@ namespace og::syscall {
 
 [[nodiscard]] Status DoReboot(uint64_t& result) noexcept;
 
+[[nodiscard]] Status DoTime(uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoSleep(uint64_t milliseconds, uint64_t& result) noexcept;
+
 }  // namespace og::syscall

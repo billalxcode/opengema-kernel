@@ -10,4 +10,5 @@
 #include "gemapi/paths.h"
 #include "gemapi/process.h"
 #include "gemapi/system.h"
+#include "gemapi/time.h"
 #include "gemapi/types.h"

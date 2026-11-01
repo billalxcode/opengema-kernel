@@ -235,10 +235,12 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   perintah `.` yang menunjuk directory menghasilkan `run: spawn failed`.
 - Test QEMU power: `shutdown` mematikan QEMU dan `reboot` memicu boot kedua
   lewat ACPI FADT dan PSCI.
+- Test QEMU waktu: `sleep` menunggu dan `uptime` mencetak waktu sejak boot.
+- Test QEMU proses: `ps` mencetak header dan daftar proses dari kernel.
 
 Verifikasi branch `dev`:
 
-- `python3 scripts/compile-check.py`: 124 file OK, 1 entri lama dilewati.
+- `python3 scripts/compile-check.py`: 129 file OK, 1 entri lama dilewati.
 - `./scripts/build.sh` lewat podman: kernel build dan link OK,
   `arch-check` dan `gsl-check` OK.
 - `./scripts/test-host.sh`: host tests, ramfs, procfs, devfs, HID, ACPI, FAT32,

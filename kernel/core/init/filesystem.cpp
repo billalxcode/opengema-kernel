@@ -1,5 +1,6 @@
 #include "og/boot/init.h"
 
+#include "format.h"
 #include "gsl/layout.h"
 #include "memory.h"
 #include "og/core/log.h"
@@ -16,6 +17,7 @@
 #include "og/fs/vfs.h"
 #include "og/io/print.h"
 #include "og/mem/heap.h"
+#include "og/process/process.h"
 #include "og/sched/sched.h"
 
 namespace og::boot {
@@ -234,8 +236,39 @@ Status MountFat32(const fs::BlockDevice& disk) noexcept {
   return Status::kOk;
 }
 
+const char* ProcessStateName(process::ProcessState state) noexcept {
+  switch (state) {
+    case process::ProcessState::kReady:
+      return "ready";
+    case process::ProcessState::kExited:
+      return "exited";
+    case process::ProcessState::kReaping:
+      return "reaping";
+    default:
+      return "unknown";
+  }
+}
+
+Status FormatProcesses(char* buffer, std::size_t capacity,
+                       std::size_t& length) noexcept {
+  og::fmt::LineBuilder line(buffer, capacity);
+  line.Text("pid ppid state name\n");
+  process::ProcessInfo info[process::kMaxProcesses];
+  const uint32_t count =
+    process::Snapshot(info, process::kMaxProcesses);
+  for (uint32_t index = 0; index < count; ++index) {
+    line.Dec(info[index].pid).Char(' ')
+        .Dec(info[index].parent_pid).Char(' ')
+        .Text(ProcessStateName(info[index].state)).Char(' ')
+        .Text(info[index].name).Char('\n');
+  }
+  length = line.size();
+  return Status::kOk;
+}
+
 Status MountProcfs() noexcept {
-  Result<fs::Node*> proc = fs::procfs::Create(&sched::ThreadCount);
+  Result<fs::Node*> proc =
+    fs::procfs::Create(&sched::ThreadCount, &FormatProcesses);
   if (proc.is_err()) {
     return proc.status();
   }

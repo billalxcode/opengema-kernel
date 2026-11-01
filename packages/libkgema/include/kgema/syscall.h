@@ -24,6 +24,8 @@ constexpr i64 kChdir = 14;
 constexpr i64 kList = 15;
 constexpr i64 kShutdown = 16;
 constexpr i64 kReboot = 17;
+constexpr i64 kTime = 18;
+constexpr i64 kSleep = 19;
 
 // Number in x8, arguments in x0..x2, result in x0.
 [[nodiscard]] i64 invoke3(i64 number, i64 arg0, i64 arg1, i64 arg2) noexcept;

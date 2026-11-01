@@ -123,6 +123,13 @@ check() {
   fi
 }
 
+check_absent() {
+  if grep -q "$1" "$LOG" 2>/dev/null; then
+    echo "qemu test: FAIL unexpected '$1'"
+    FAILED=1
+  fi
+}
+
 check "fs: fat32 file read ok"
 check "virtio-gpu: scanout ok"
 check "virtio-input: ready"
@@ -134,7 +141,13 @@ check "mem: address space switch ok"
 check "sched: round robin ok"
 check "user: spawn pid"
 check "gemabox> "
-check "commands: help, echo, cat, ls, clear, acpi, halt, shutdown, reboot"
+check "commands: help, echo, cat, ls, clear, acpi, uptime, sleep, ps, halt, shutdown, reboot"
+check "uptime: "
+check "pid ppid"
+check "/system/boot/init"
+check_absent "sleep: missing"
+check_absent "sleep: invalid"
+check_absent "sleep: failed"
 check "system/"
 check "ls: list failed"
 check "run: spawn failed"

@@ -4,6 +4,7 @@
 #include "gemapi/io.h"
 #include "gemapi/process.h"
 #include "gemapi/system.h"
+#include "gemapi/time.h"
 
 namespace {
 
@@ -91,6 +92,50 @@ gemapi::usize append_text(char* out, gemapi::usize capacity,
     ++cursor;
   }
   return cursor;
+}
+
+gemapi::usize append_dec(char* out, gemapi::usize capacity,
+                         gemapi::usize cursor, gemapi::u64 value) {
+  char digits[20];
+  gemapi::usize count = 0;
+  if (value == 0U) {
+    digits[count] = '0';
+    ++count;
+  }
+  while (value > 0U) {
+    digits[count] = static_cast<char>('0' + (value % 10U));
+    ++count;
+    value /= 10U;
+  }
+  while (count > 0U) {
+    if (cursor >= capacity) {
+      return capacity;
+    }
+    --count;
+    out[cursor] = digits[count];
+    ++cursor;
+  }
+  return cursor;
+}
+
+bool parse_u64(const char* text, gemapi::usize length, gemapi::u64& value) {
+  if (text == nullptr || length == 0U) {
+    return false;
+  }
+  gemapi::u64 result = 0;
+  for (gemapi::usize index = 0; index < length; ++index) {
+    const char symbol = text[index];
+    if (symbol < '0' || symbol > '9') {
+      return false;
+    }
+    const gemapi::u64 digit = static_cast<gemapi::u64>(symbol - '0');
+    if (result > ((~0ULL - digit) / 10U)) {
+      return false;
+    }
+    result = (result * 10U) + digit;
+  }
+  value = result;
+  return true;
 }
 
 bool finish_path(char* path, gemapi::usize capacity, gemapi::usize cursor) {
@@ -216,6 +261,37 @@ CommandResult RunReboot(const char* /*args*/, gemapi::usize /*args_length*/) {
   return CommandResult::kContinue;
 }
 
+CommandResult RunUptime(const char* /*args*/, gemapi::usize /*args_length*/) {
+  char text[64];
+  gemapi::usize cursor =
+    append_text(text, sizeof(text), 0, "uptime: ");
+  cursor = append_dec(text, sizeof(text), cursor, gemapi::time::now_ms());
+  cursor = append_text(text, sizeof(text), cursor, " ms\n");
+  gemapi::io::write(text, cursor);
+  return CommandResult::kContinue;
+}
+
+CommandResult RunPs(const char* /*args*/, gemapi::usize /*args_length*/) {
+  cat_file("/proc/processes", "ps");
+  return CommandResult::kContinue;
+}
+
+CommandResult RunSleep(const char* args, gemapi::usize args_length) {
+  if (args_length == 0U) {
+    gemapi::io::write("sleep: missing milliseconds\n");
+    return CommandResult::kContinue;
+  }
+  gemapi::u64 milliseconds = 0;
+  if (!parse_u64(args, args_length, milliseconds)) {
+    gemapi::io::write("sleep: invalid milliseconds\n");
+    return CommandResult::kContinue;
+  }
+  if (gemapi::time::sleep_ms(milliseconds) != gemapi::Status::ok) {
+    gemapi::io::write("sleep: failed\n");
+  }
+  return CommandResult::kContinue;
+}
+
 constexpr Command kCommands[] = {
   {"help", &RunHelp},
   {"echo", &RunEcho},
@@ -223,6 +299,9 @@ constexpr Command kCommands[] = {
   {"ls", &RunList},
   {"clear", &RunClear},
   {"acpi", &RunAcpi},
+  {"uptime", &RunUptime},
+  {"sleep", &RunSleep},
+  {"ps", &RunPs},
   {"halt", &RunHalt},
   {"shutdown", &RunShutdown},
   {"reboot", &RunReboot},

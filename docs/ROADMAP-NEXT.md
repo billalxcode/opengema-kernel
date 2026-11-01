@@ -109,17 +109,19 @@ Tujuan: userland punya API yang layak dan gemabox menjadi shell nyata.
 - [x] SDK-01 `libkgema` API berkas: open, read, write, close, stat, seek,
       dan chdir sudah.
 - [x] SDK-02 API proses: getpid, wait, exit, spawn, dan argv sudah.
+- [x] SDK-03a API waktu: `now_ms` dan `sleep_ms` di libkgema dan libgemapi.
+- [ ] SDK-03b Error/errno yang konsisten untuk semua syscall.
 - [ ] SDK-03 API waktu dan error yang konsisten, tanpa libc.
 - [ ] SDK-04 Jalankan `.init_array` di `_start`, dukung konstruktor global
       sederhana tanpa exception dan tanpa RTTI.
 - [x] SDK-05 `_start` meneruskan argc/argv ke `main`.
-- [~] SDK-06 gemabox shell: `help`, `echo`, `cat`, `ls`, `clear`, `acpi`,
-      `halt`, `shutdown`, dan `reboot` sudah. `ps` dan `sleep` belum.
+- [x] SDK-06 gemabox shell: `help`, `echo`, `cat`, `ls`, `clear`, `acpi`,
+      `uptime`, `sleep`, `ps`, `halt`, `shutdown`, dan `reboot` sudah.
 - [x] SDK-07 Input UART ke TTY: line buffer, backspace, echo, read blocking.
 - [ ] SDK-08 Packaging: install header dan `libkgema.a`, CMake package
       config, satu contoh program baru, dan dokumentasi link.
-- [x] SDK-09 Uji: shell menerima `help`, `ls`, `acpi`, `shutdown`, `reboot`,
-      dan `halt`. Uji `ps` dan `sleep` belum.
+- [x] SDK-09 Uji: shell menerima `help`, `ls`, `acpi`, `uptime`, `sleep`,
+      `ps`, `shutdown`, `reboot`, dan `halt`.
 
 **Selesai bila:** shell interaktif berjalan di atas UART dan perintah dasar
 bisa dijalankan tanpa menyalin kode syscall.

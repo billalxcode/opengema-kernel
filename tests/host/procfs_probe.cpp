@@ -19,6 +19,20 @@ uint32_t ThreadCount() noexcept {
   return 7U;
 }
 
+og::Status ProcessText(char* buffer, std::size_t capacity,
+                       std::size_t& length) noexcept {
+  constexpr char kText[] = "pid ppid state name\n7 1 ready test\n";
+  constexpr std::size_t kSize = sizeof(kText) - 1U;
+  if (buffer == nullptr || capacity < kSize) {
+    return og::Status::kNoMem;
+  }
+  for (std::size_t index = 0; index < kSize; ++index) {
+    buffer[index] = kText[index];
+  }
+  length = kSize;
+  return og::Status::kOk;
+}
+
 bool ReadAll(og::fs::Node* node, uint64_t offset, char* buffer,
              std::size_t capacity, uint64_t& read) {
   if (node == nullptr || node->ops == nullptr || node->ops->read == nullptr) {
@@ -32,7 +46,7 @@ bool ReadAll(og::fs::Node* node, uint64_t offset, char* buffer,
 }  // namespace
 
 int main() {
-  const auto root = og::fs::procfs::Create(&ThreadCount);
+  const auto root = og::fs::procfs::Create(&ThreadCount, &ProcessText);
   if (root.is_err()) {
     std::printf("procfs probe: create failed\n");
     return 1;
@@ -44,7 +58,7 @@ int main() {
     std::printf("procfs probe: uptime lookup failed\n");
     return 1;
   }
-  char text[32]{};
+  char text[64]{};
   uint64_t read = 0;
   if (!ReadAll(uptime, 0, text, sizeof(text), read) || read != 8U ||
       text[0] != '1' || text[3] != '4' || text[4] != ' ' || text[5] != 'm' ||
@@ -89,6 +103,20 @@ int main() {
     return 1;
   }
 
+  og::fs::Node* processes = nullptr;
+  if (og::IsErr(root.value()->ops->lookup(root.value(), "processes",
+                                          &processes)) ||
+      processes == nullptr) {
+    std::printf("procfs probe: processes lookup failed\n");
+    return 1;
+  }
+  if (!ReadAll(processes, 0, text, sizeof(text), read) || read != 35U ||
+      text[0] != 'p' || text[4] != 'p' || text[19] != '\n' ||
+      text[20] != '7' || text[34] != '\n') {
+    std::printf("procfs probe: processes content mismatch\n");
+    return 1;
+  }
+
   if (root.value()->ops->lookup(root.value(), "missing", &threads) !=
       og::Status::kNotFound) {
     std::printf("procfs probe: missing lookup was not rejected\n");
@@ -113,6 +141,11 @@ int main() {
     return 1;
   }
   if (og::IsErr(root.value()->ops->iterate(root.value(), 3, entry, found)) ||
+      !found || entry.name[0] != 'p') {
+    std::printf("procfs probe: iterate fourth entry failed\n");
+    return 1;
+  }
+  if (og::IsErr(root.value()->ops->iterate(root.value(), 4, entry, found)) ||
       found) {
     std::printf("procfs probe: iterate past end failed\n");
     return 1;
