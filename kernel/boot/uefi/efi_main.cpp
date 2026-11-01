@@ -1,7 +1,9 @@
 #include "efi.h"
 #include "efi_boot.h"
+#include "efi_console.h"
 
 #include "og/bootinfo.h"
+#include "og/console.h"
 #include "og/kmain.h"
 #include "og/log.h"
 #include "og/memory_map.h"
@@ -21,19 +23,20 @@ extern "C" EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* system_table)
   }
 
   og::drivers::uart::Pl011 uart;
-  const og::Status uart_status = uart.init(og::memmap::kUart0Base);
+  const og::Status uart_status = uart.init(og::memmap::kUart0Base, og::memmap::kUart0Size);
   if (og::IsErr(uart_status)) {
     return 1;
   }
-  og::drivers::uart::RegisterAsLogSink(uart);
+  og::io::SetConsole(og::drivers::uart::MakeConsole(uart));
   og::Log(og::LogLevel::kInfo, "opengema-kernel: uefi entry\n");
 
-  // Firmware console is only valid before ExitBootServices.
+  // The firmware console dies with ExitBootServices, so use it only here.
   if (system_table->con_out == nullptr) {
-    og::Log(og::LogLevel::kWarn, "uefi: no ConOut, uart only\n");
+    og::Log(og::LogLevel::kWarn, "uefi: no ConOut\n");
   } else {
-    (void)system_table->con_out->output_string(
-      system_table->con_out, L"opengema-kernel: UEFI console ready\r\n");
+    const og::io::Console firmware_console =
+      og::boot::uefi::MakeFirmwareConsole(system_table->con_out);
+    (void)og::io::ConsoleWriteText(firmware_console, "opengema-kernel: UEFI console ready\n");
   }
 
   g_boot_info.uart_base = uart.base();

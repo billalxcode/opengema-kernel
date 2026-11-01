@@ -1,7 +1,6 @@
 #include "og/uart.h"
 
-#include "og/log.h"
-#include "og/mmio.h"
+#include "og/register.h"
 
 namespace og::drivers::uart {
 
@@ -9,89 +8,95 @@ namespace {
 
 constexpr uint64_t kDataRegister = 0x00;
 constexpr uint64_t kFlagRegister = 0x18;
-constexpr uint32_t kTxFifoFull = 1U << 5;
+constexpr uint64_t kPeripheralId0 = 0xFE0;
+constexpr uint64_t kPeripheralId1 = 0xFE4;
+constexpr uint64_t kMinimumSpan = 0x1000;
 
-void LogSinkAdapter(void* context, LogLevel /*level*/, const char* text) noexcept {
+constexpr uint32_t kExpectedId0 = 0x11;
+constexpr uint32_t kExpectedId1 = 0x10;
+
+// FR bit 5: TX FIFO full.
+using TxFifoFull = io::Field<uint32_t, 5, 1>;
+
+constexpr uint32_t kTxSpinLimit = 100000U;
+
+Status WriteTrampoline(void* context, std::span<const uint8_t> bytes) noexcept {
   if (context == nullptr) {
-    return;
+    return Status::kInvalidArg;
   }
-  if (text == nullptr) {
-    return;
-  }
-  static_cast<Pl011*>(context)->puts(text);
+  return static_cast<Pl011*>(context)->write(bytes);
 }
 
 }  // namespace
 
-Status Pl011::init(uint64_t base) noexcept {
+Status Pl011::init(uint64_t base, uint64_t size) noexcept {
   if (base == 0) {
     return Status::kInvalidArg;
   }
-  base_ = base;
-  is_init_ = true;
-  return Status::kOk;
-}
-
-Status Pl011::write_poll(std::span<const uint8_t> buffer) noexcept {
-  if (!is_init_) {
-    return Status::kNotInit;
-  }
-  if (buffer.empty()) {
+  if (size < kMinimumSpan) {
     return Status::kInvalidArg;
   }
-  for (uint8_t byte : buffer) {
-    putc(static_cast<char>(byte));
+
+  regs_ = io::MmioRegion(base, size);
+
+  // PrimeCell IDs prove the device is really there, not just mapped.
+  const Result<uint32_t> id0 = regs_.Read32(kPeripheralId0);
+  if (id0.is_err()) {
+    return id0.status();
+  }
+  if (id0.value() != kExpectedId0) {
+    return Status::kNoDevice;
+  }
+  const Result<uint32_t> id1 = regs_.Read32(kPeripheralId1);
+  if (id1.is_err()) {
+    return id1.status();
+  }
+  if (id1.value() != kExpectedId1) {
+    return Status::kNoDevice;
+  }
+
+  ready_ = true;
+  return Status::kOk;
+}
+
+Status Pl011::write(std::span<const uint8_t> bytes) noexcept {
+  if (!ready_) {
+    return Status::kNotInit;
+  }
+  if (bytes.empty()) {
+    return Status::kInvalidArg;
+  }
+  for (uint8_t byte : bytes) {
+    const Status status = wait_tx_ready();
+    if (IsErr(status)) {
+      return status;
+    }
+    const Status write_status = regs_.Write32(kDataRegister, static_cast<uint32_t>(byte));
+    if (IsErr(write_status)) {
+      return write_status;
+    }
   }
   return Status::kOk;
 }
 
-void Pl011::putc(char value) noexcept {
-  if (!is_init_) {
-    return;
-  }
-  // Wait until the TX FIFO has room. Bounded to avoid an infinite loop if
-  // the device is misconfigured.
-  for (uint32_t spin = 0; spin < 100000U; ++spin) {
-    if ((io::MmioRead32(base_ + kFlagRegister) & kTxFifoFull) == 0U) {
-      io::MmioWrite32(base_ + kDataRegister, static_cast<uint32_t>(value));
-      return;
+Status Pl011::wait_tx_ready() noexcept {
+  for (uint32_t spin = 0; spin < kTxSpinLimit; ++spin) {
+    const Result<uint32_t> flags = regs_.Read32(kFlagRegister);
+    if (flags.is_err()) {
+      return flags.status();
+    }
+    if (TxFifoFull::Decode(flags.value()) == 0U) {
+      return Status::kOk;
     }
   }
+  return Status::kTimeout;
 }
 
-void Pl011::puts(const char* text) noexcept {
-  if (!is_init_) {
-    return;
-  }
-  if (text == nullptr) {
-    return;
-  }
-  while (*text != '\0') {
-    if (*text == '\n') {
-      putc('\r');
-    }
-    putc(*text);
-    ++text;
-  }
-}
-
-void Pl011::puthex(uint64_t value) noexcept {
-  if (!is_init_) {
-    return;
-  }
-  puts("0x");
-  for (int shift = 60; shift >= 0; shift -= 4) {
-    const uint32_t nibble = static_cast<uint32_t>((value >> shift) & 0xFU);
-    const char digit = static_cast<char>(nibble < 10U ? '0' + nibble : 'a' + (nibble - 10U));
-    putc(digit);
-  }
-}
-
-void RegisterAsLogSink(Pl011& uart) noexcept {
+io::Console MakeConsole(Pl011& uart) noexcept {
   if (!uart.is_ready()) {
-    return;
+    return io::Console{};
   }
-  SetLogSink(&LogSinkAdapter, &uart);
+  return io::Console(&WriteTrampoline, &uart);
 }
 
 }  // namespace og::drivers::uart

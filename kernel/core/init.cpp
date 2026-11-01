@@ -2,6 +2,7 @@
 #include "og/log.h"
 #include "og/mmu.h"
 #include "og/panic.h"
+#include "og/print.h"
 #include "og/status.h"
 
 #include "og/arch/registers.h"
@@ -23,7 +24,7 @@ void kmain(BootInfo* info) noexcept {
 
   Log(LogLevel::kInfo, "kernel: kmain entered\n");
   LogDec(LogLevel::kInfo, "memory ranges", info->memory_count);
-  LogHex(LogLevel::kInfo, "uart base", info->uart_base);
+  (void)PrintHex("uart base", info->uart_base);
 
   arch::aarch64::Mmu mmu;
   const Status mmu_status = mmu.init_identity();
@@ -31,7 +32,7 @@ void kmain(BootInfo* info) noexcept {
     Log(LogLevel::kWarn, "mmu: identity map not ready\n");
   }
 
-  Log(LogLevel::kInfo, "kernel: halt\n");
+  (void)PrintLn("kernel: halt");
   arch::aarch64::HaltForever();
 }
 

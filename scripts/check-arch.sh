@@ -44,7 +44,7 @@ rank_of_header() {
     og/status.h | og/log.h | og/panic.h | og/assert.h | og/bootinfo.h | og/kmain.h) echo 0 ;;
     og/arch/*) echo 1 ;;
     og/mmu.h) echo 1 ;;
-    og/mmio.h) echo 2 ;;
+    og/mmio.h | og/console.h | og/print.h | og/register.h) echo 2 ;;
     og/memory_map.h) echo 13 ;;
     og/uart.h) echo 8 ;;
     *) echo -1 ;;

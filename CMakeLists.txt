@@ -46,7 +46,7 @@ function(og_add_module name)
 endfunction()
 
 og_add_module(og_lib_core
-  SOURCES libs/core/memory.cpp
+  SOURCES libs/core/memory.cpp libs/core/format.cpp
   DEPS og_inc_core)
 
 og_add_module(og_arch
@@ -54,7 +54,7 @@ og_add_module(og_arch
   DEPS og_lib_core og_inc_kernel)
 
 og_add_module(og_io
-  SOURCES kernel/io/mmio.cpp
+  SOURCES kernel/io/mmio.cpp kernel/io/console.cpp kernel/io/print.cpp
   DEPS og_arch og_inc_kernel)
 
 og_add_module(og_core
@@ -72,6 +72,7 @@ og_add_module(og_kernel
 og_add_module(og_boot
   SOURCES
     kernel/boot/uefi/efi_main.cpp
+    kernel/boot/uefi/efi_console.cpp
     kernel/boot/uefi/efi_memmap.cpp
     kernel/boot/uefi/efi_exit.cpp
   DEPS og_kernel og_inc_efi og_inc_kernel)

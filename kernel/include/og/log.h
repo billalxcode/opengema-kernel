@@ -1,7 +1,7 @@
 #pragma once
 
-// Canonical owner of logging. Sinks are registered by boot code, so this
-// header stays free of any driver dependency.
+// Canonical owner of logging. Formatting and output are delegated to
+// og/print.h so there is one implementation of both.
 
 #include <cstdint>
 
@@ -14,11 +14,7 @@ enum class LogLevel : uint8_t {
   kDebug = 3,
 };
 
-using LogSink = void (*)(void* context, LogLevel level, const char* text);
-
-// Safe before any sink is set: messages are dropped.
-void SetLogSink(LogSink sink, void* context) noexcept;
-
+// Safe before a console is set: messages are dropped.
 void Log(LogLevel level, const char* text) noexcept;
 void LogDec(LogLevel level, const char* label, uint64_t value) noexcept;
 void LogHex(LogLevel level, const char* label, uint64_t value) noexcept;
