@@ -7,6 +7,7 @@
 #include "gemapi/fs.h"
 #include "gemapi/io.h"
 #include "gemapi/memory.h"
+#include "gemapi/paths.h"
 #include "gemapi/process.h"
 #include "gemapi/system.h"
 #include "gemapi/types.h"

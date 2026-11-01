@@ -1,5 +1,6 @@
 #include "boot.h"
 
+#include "layout.h"
 #include "memory.h"
 #include "og/core/log.h"
 #include "og/core/status.h"
@@ -24,6 +25,9 @@ namespace {
 fs::Node* g_tmp_root = nullptr;
 fs::FileTable g_boot_files;
 
+// Test file under the fixed /tmp mount.
+constexpr char kHelloPath[] = "/tmp/hello";
+
 Status BlockReadAdapter(void* context, uint64_t sector,
                         std::span<uint8_t> buffer) noexcept {
   if (context == nullptr) {
@@ -38,7 +42,7 @@ Status SetupTmpfs() noexcept {
     return ram.status();
   }
   g_tmp_root = ram.value();
-  Status status = fs::FsMount("/tmp", g_tmp_root);
+  Status status = fs::FsMount(gsl::layout::kTmp, g_tmp_root);
   if (IsErr(status)) {
     return status;
   }
@@ -54,7 +58,7 @@ Status SetupTmpfs() noexcept {
     return writer.status();
   }
 
-  const Result<uint32_t> hello_file = fs::FsOpen(g_boot_files, "/tmp/hello", 1U);
+  const Result<uint32_t> hello_file = fs::FsOpen(g_boot_files, kHelloPath, 1U);
   if (hello_file.is_err()) {
     return hello_file.status();
   }
@@ -101,7 +105,7 @@ Status MountFat32(const fs::BlockDevice& disk) noexcept {
   if (IsErr(status)) {
     return status;
   }
-  status = fs::FsMount("/volumes/boot", fat_root);
+  status = fs::FsMount(gsl::layout::kBootVolume, fat_root);
   if (IsErr(status)) {
     return status;
   }
@@ -139,7 +143,7 @@ Status MountProcfs() noexcept {
   if (proc.is_err()) {
     return proc.status();
   }
-  const Status status = fs::FsMount("/proc", proc.value());
+  const Status status = fs::FsMount(gsl::layout::kProc, proc.value());
   if (IsErr(status)) {
     return status;
   }
@@ -205,7 +209,7 @@ void InitFilesystem() noexcept {
     Log(LogLevel::kError, "fs: gslfs mount failed\n");
     return;
   }
-  status = fs::FsMount("/", system_root.value());
+  status = fs::FsMount(gsl::layout::kRoot, system_root.value());
   if (IsErr(status)) {
     Log(LogLevel::kError, "fs: root mount failed\n");
     return;
@@ -213,7 +217,7 @@ void InitFilesystem() noexcept {
   Log(LogLevel::kInfo, "fs: gslfs mounted\n");
 
   const Result<fs::Stat> library_stat =
-    fs::FsStat("/system/libraries/libgemapi.so.1");
+    fs::FsStat(gsl::layout::kLibGemapi);
   if (library_stat.is_ok()) {
     LogDec(LogLevel::kInfo, "fs: libgemapi bytes", library_stat.value().size);
   } else {
@@ -221,7 +225,7 @@ void InitFilesystem() noexcept {
            static_cast<uint64_t>(library_stat.status()));
   }
   const Result<uint32_t> library_file =
-    fs::FsOpen(g_boot_files, "/system/libraries/libgemapi.so.1");
+    fs::FsOpen(g_boot_files, gsl::layout::kLibGemapi);
   if (library_file.is_ok()) {
     uint8_t magic[4] = {};
     uint64_t read = 0;
@@ -244,7 +248,7 @@ void InitFilesystem() noexcept {
     Log(LogLevel::kError, "fs: devfs create failed\n");
     return;
   }
-  status = fs::FsMount("/dev", dev_root.value());
+  status = fs::FsMount(gsl::layout::kDev, dev_root.value());
   if (IsErr(status)) {
     Log(LogLevel::kError, "fs: devfs mount failed\n");
     return;

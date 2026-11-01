@@ -33,14 +33,15 @@ berjalan, mounting tambahan dilakukan user space melalui API mount.
 
 ## 3. Mengapa init di user space
 
-- Kebijakan mount bukan tugas kernel.
+- Urutan dan penanganan kegagalan mount volume writable bukan tugas kernel.
+  Daftar mount point tetap dan tidak bisa diubah user.
 - Service dapat di-restart tanpa reboot.
 - Kesalahan service tidak mematikan kernel.
-- Layout filesystem dapat berubah tanpa mengubah kernel.
+- Layout filesystem tidak berubah tanpa system image baru.
 - Init dapat memilih shell grafis atau text.
 
-Kernel tetap memiliki VFS dan syscall mount. Yang dipindahkan adalah
-kebijakan dan urutan mount.
+Kernel tetap memiliki VFS dan syscall mount. Init memasang tabel mount tetap;
+user tidak dapat menambah atau memindahkan mount point sistem.
 
 ## 4. Alur exec
 

@@ -45,6 +45,7 @@ set(OG_USER_CXX_FLAGS
   -ffreestanding
   -nostdlib
   -nostdinc
+  -I${CMAKE_SOURCE_DIR}/libs/core
   -mgeneral-regs-only
   -fno-exceptions
   -fno-rtti

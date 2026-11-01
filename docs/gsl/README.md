@@ -75,6 +75,7 @@ selesai.
 | Mount | Satu volume system, bukan satu mount per library |
 | System volume | Filesystem GSL khusus, read-only |
 | Layout | Unix-like lowercase, satu root, system read-only |
+| Sifat layout | Mutlak, bagian ABI; user tidak dapat mengubah mount point |
 | Home | `/users/<user>` writable |
 | Aplikasi | `/applications/<package>`, command di `/commands` |
 | Init | Kernel menjalankan `/system/boot/init` sebagai proses pertama |
@@ -108,3 +109,5 @@ selesai.
 5. Semua yang bukan kernel harus berasal dari filesystem yang sudah
    dipasang.
 6. Setiap kegagalan harus berhenti di proses yang gagal jika memungkinkan.
+7. Layout filesystem mutlak dan bagian dari ABI. User tidak dapat mengubah
+   mount point atau menambah path sistem.

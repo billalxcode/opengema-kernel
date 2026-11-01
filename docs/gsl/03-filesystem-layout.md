@@ -17,6 +17,22 @@ aplikasi read-only. Data pengguna, konfigurasi, state, dan temp writable.
 7. Setiap path punya pemilik, mode, dan capability.
 8. Library hanya dimuat dari `/system/libraries`.
 
+### 1.1 Sifat mutlak
+
+Layout ini adalah bagian dari ABI GSL, bukan konfigurasi pengguna.
+
+- Layout ditentukan saat system image dibuat dan tidak berubah saat runtime.
+- User, aplikasi, dan service tidak boleh menambah, menghapus, memindahkan,
+  atau mengganti nama mount point sistem.
+- `gsl.conf`, environment, dan manifest package tidak boleh mengubah layout.
+- `init` memakai tabel mount tetap. Direktori wajib yang hilang di image
+  adalah boot error, bukan kesempatan membuat path baru.
+- Volume tambahan hanya boleh dipasang di `/volumes/<name>`.
+- Aplikasi menyimpan data pribadi di `/users/<user>` atau file sementara di
+  `/tmp`, bukan membuat direktori top-level baru.
+- Perubahan layout memerlukan system image dan versi ABI baru, bukan
+  konfigurasi user.
+
 ## 2. Pohon final
 
 ```

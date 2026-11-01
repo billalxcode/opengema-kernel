@@ -111,6 +111,7 @@ user belum ada.
 Tujuan: kernel menyerahkan kebijakan ke user space.
 
 - [ ] `/system/boot/init` sebagai PID 1.
+- [ ] Init memasang layout tetap; user tidak dapat mengubah mount point.
 - [ ] Init memasang `/etc`, `/users`, `/var`, dan `/tmp`.
 - [ ] Service manager minimal.
 - [ ] Shell dijalankan oleh init.

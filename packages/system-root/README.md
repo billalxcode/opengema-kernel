@@ -46,5 +46,9 @@ Image ditulis ke partisi GPT kedua oleh `scripts/make-esp.sh`. Root
 di-mount read-only oleh kernel; `/dev`, `/proc`, `/tmp`, dan `/volumes/boot`
 di-mount setelahnya.
 
+Layout bersifat mutlak dan bagian dari ABI sistem. `gsl.conf` tidak boleh
+mengubah mount point atau menambah path sistem. Volume tambahan hanya boleh
+di bawah `/volumes`.
+
 Layout lengkap ada di `docs/gsl/03-filesystem-layout.md`. Format image ada
 di `docs/gsl/08-gslfs-format.md`.

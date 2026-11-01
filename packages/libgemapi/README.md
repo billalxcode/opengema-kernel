@@ -15,6 +15,7 @@ header `kgema/`, nomor syscall, atau instruksi `svc`.
 | `gemapi/io.h` | Console, `print`, dan `read_line` |
 | `gemapi/fs.h` | `File`, `open`, `read`, `write`, `seek`, `stat`, `chdir` |
 | `gemapi/memory.h` | `map` dan `unmap` |
+| `gemapi/paths.h` | Path tetap GSL: `/system`, `/applications`, `/tmp`, dan lainnya |
 | `gemapi/process.h` | `id`, `spawn`, `wait`, dan `exit` |
 | `gemapi/system.h` | Versi API |
 | `gemapi/gemapi.h` | Umbrella header |

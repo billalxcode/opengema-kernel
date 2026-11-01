@@ -38,7 +38,8 @@ Opsi:
 
 Keputusan: A. Satu root Unix-like lowercase, tanpa drive letter.
 
-Status: diputuskan. Detail di `03-filesystem-layout.md`.
+Status: diputuskan. Detail di `03-filesystem-layout.md`. Layout bersifat
+mutlak dan tidak dapat diubah user.
 
 ## 4. Busybox atau binary terpisah
 
@@ -148,7 +149,8 @@ Keputusan: lowercase Unix.
 /volumes
 ```
 
-Status: diputuskan. Detail ada di `03-filesystem-layout.md`.
+Status: diputuskan. Detail ada di `03-filesystem-layout.md`. Nama path
+mutlak dan bukan konfigurasi user.
 
 ## 12. API namespace
 

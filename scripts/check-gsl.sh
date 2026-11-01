@@ -77,6 +77,14 @@ else
   fi
 fi
 
+# 8. The filesystem layout is fixed. Configuration files must not redefine
+# mount points or top-level system paths.
+MOUNT_HITS="$(grep -RIn --include='gsl.conf' -E '^[[:space:]]*mount\.' packages/system-root 2>/dev/null)"
+if [ -n "$MOUNT_HITS" ]; then
+  echo "$MOUNT_HITS"
+  fail "gsl.conf defines a mount point; the layout is fixed"
+fi
+
 if [ "$FAILED" -ne 0 ]; then
   echo "gsl-check: FAILED"
   exit 1

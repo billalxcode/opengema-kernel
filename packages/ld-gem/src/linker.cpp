@@ -1,6 +1,7 @@
 #include "ldgem/linker.h"
 
 #include "kgema/io.h"
+#include "layout.h"
 #include "ldgem/elf.h"
 #include "ldgem/image.h"
 
@@ -10,7 +11,6 @@ namespace {
 
 constexpr u64 kMaxPath = 96;
 constexpr u32 kMaxDynamicEntries = 128;
-constexpr char kLibraryDirectory[] = "/system/libraries/";
 
 [[nodiscard]] u64 Length(const char* text) noexcept {
   if (text == nullptr) {
@@ -169,19 +169,20 @@ bool Linker::AddLibrary(const char* name) noexcept {
     return name != nullptr && name[0] != '\0';
   }
   const u64 name_length = Length(name);
-  const u64 directory_length = sizeof(kLibraryDirectory) - 1U;
-  if ((directory_length + name_length + 1U) > kMaxPath) {
+  const u64 directory_length = Length(gsl::layout::kLibraries);
+  if ((directory_length + 1U + name_length + 1U) > kMaxPath) {
     ReportSymbol("ld-gem: library name too long: ", name);
     return false;
   }
   char path[kMaxPath]{};
   for (u64 index = 0; index < directory_length; ++index) {
-    path[index] = kLibraryDirectory[index];
+    path[index] = gsl::layout::kLibraries[index];
   }
+  path[directory_length] = '/';
   for (u64 index = 0; index < name_length; ++index) {
-    path[directory_length + index] = name[index];
+    path[directory_length + 1U + index] = name[index];
   }
-  path[directory_length + name_length] = '\0';
+  path[directory_length + 1U + name_length] = '\0';
 
   Image image{};
   u64 base = 0;
