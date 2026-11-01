@@ -152,6 +152,8 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 - Applet gemabox dipisah menjadi `shell.cpp` dan `writer.cpp`; `main.cpp`
   hanya menangani mode proses dan self test EL0. Shell memakai tabel
   `kCommands` sebagai registry, dan daftar `help` dibangun dari tabel itu.
+- Command eksternal menerima path langsung dan argumen; pencarian otomatis
+  tetap mencoba `/commands/<nama>` lalu `/applications/<nama>/<nama>`.
 - `gemapi::fs` memakai `ConvertKind` untuk `stat` dan `list`.
 - `gslfs::Mount` dipecah menjadi `ReadSuperblock`, `LoadNodes`,
   `ValidateTree`, dan `VerifyNodeData`.

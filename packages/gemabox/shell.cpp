@@ -7,6 +7,8 @@
 namespace {
 
 constexpr char kPrompt[] = "gemabox> ";
+constexpr gemapi::usize kMaxArgs = 8;
+constexpr gemapi::usize kMaxName = 128;
 
 enum class CommandResult {
   kContinue,
@@ -62,9 +64,9 @@ void list_dir(const char* path) {
   }
 }
 
-bool run_path(const char* path, const char* name) {
-  const char* argv[] = {name};
-  auto child = gemapi::process::spawn(path, argv, 1);
+bool run_path(const char* path, const char* const* argv,
+              gemapi::usize argc) {
+  auto child = gemapi::process::spawn(path, argv, argc);
   if (!child) {
     gemapi::io::write("run: spawn failed\n");
     return true;
@@ -96,31 +98,64 @@ bool finish_path(char* path, gemapi::usize capacity, gemapi::usize cursor) {
   return true;
 }
 
-bool run_external(const char* name) {
-  char path[128];
-
-  gemapi::usize cursor = 0;
-  cursor = append_text(path, sizeof(path), cursor, "/commands/");
-  cursor = append_text(path, sizeof(path), cursor, name);
-  if (!finish_path(path, sizeof(path), cursor)) {
+bool FindExternalPath(const char* name, char* buffer,
+                      gemapi::usize capacity, const char** out_path) {
+  if (name == nullptr || name[0] == '\0') {
     return false;
   }
-  if (gemapi::fs::stat(path)) {
-    return run_path(path, name);
+  if (name[0] == '/') {
+    if (!gemapi::fs::stat(name)) {
+      return false;
+    }
+    *out_path = name;
+    return true;
+  }
+
+  gemapi::usize cursor = 0;
+  cursor = append_text(buffer, capacity, cursor, "/commands/");
+  cursor = append_text(buffer, capacity, cursor, name);
+  if (finish_path(buffer, capacity, cursor) && gemapi::fs::stat(buffer)) {
+    *out_path = buffer;
+    return true;
   }
 
   cursor = 0;
-  cursor = append_text(path, sizeof(path), cursor, "/applications/");
-  cursor = append_text(path, sizeof(path), cursor, name);
-  cursor = append_text(path, sizeof(path), cursor, "/");
-  cursor = append_text(path, sizeof(path), cursor, name);
-  if (!finish_path(path, sizeof(path), cursor)) {
+  cursor = append_text(buffer, capacity, cursor, "/applications/");
+  cursor = append_text(buffer, capacity, cursor, name);
+  cursor = append_text(buffer, capacity, cursor, "/");
+  cursor = append_text(buffer, capacity, cursor, name);
+  if (!finish_path(buffer, capacity, cursor) || !gemapi::fs::stat(buffer)) {
     return false;
   }
-  if (!gemapi::fs::stat(path)) {
-    return false;
+  *out_path = buffer;
+  return true;
+}
+
+gemapi::usize BuildArgv(char* text, gemapi::usize length,
+                        const char* argv[], gemapi::usize capacity) {
+  gemapi::usize argc = 0;
+  gemapi::usize index = 0;
+  while (index < length) {
+    while (index < length && text[index] == ' ') {
+      ++index;
+    }
+    if (index >= length) {
+      break;
+    }
+    if (argc >= capacity) {
+      break;
+    }
+    argv[argc] = text + index;
+    ++argc;
+    while (index < length && text[index] != ' ') {
+      ++index;
+    }
+    if (index < length) {
+      text[index] = '\0';
+      ++index;
+    }
   }
-  return run_path(path, name);
+  return argc;
 }
 
 CommandResult RunExit(const char* /*args*/, gemapi::usize /*args_length*/) {
@@ -236,8 +271,23 @@ int run_shell() {
       continue;
     }
 
-    if (args_length == 0U && run_external(line)) {
-      continue;
+    char name[kMaxName];
+    const gemapi::usize name_copy =
+      name_length < (sizeof(name) - 1U) ? name_length : (sizeof(name) - 1U);
+    for (gemapi::usize index = 0; index < name_copy; ++index) {
+      name[index] = line[index];
+    }
+    name[name_copy] = '\0';
+
+    char path_buffer[kMaxName];
+    const char* path = nullptr;
+    if (FindExternalPath(name, path_buffer, sizeof(path_buffer), &path)) {
+      const char* argv[kMaxArgs];
+      const gemapi::usize argc = BuildArgv(line, size, argv, kMaxArgs);
+      if (argc > 0U) {
+        (void)run_path(path, argv, argc);
+        continue;
+      }
     }
 
     gemapi::io::write("unknown: ");

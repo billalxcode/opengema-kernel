@@ -210,6 +210,7 @@ Commit: `test(dev): add fdt host test`.
 - [x] Pisahkan applet gemabox ke `shell.cpp` dan `writer.cpp`.
 - [x] Tambah command registry di `shell.cpp` (`kCommands`), bukan
   rantai `if` hardcoded.
+- [x] Dukung path langsung dan argumen untuk command eksternal.
 - [x] Tambah host test endian.
 - [x] Compile-check grup.
 
