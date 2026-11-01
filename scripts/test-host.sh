@@ -13,8 +13,9 @@ trap 'rm -rf "$BUILD_DIR"' EXIT
 CXX="${CXX:-clang++}"
 
 "$CXX" -std=c++20 -O1 -Wall -Wextra -Werror \
-  -I libs/core \
+  -I libs/core -I kernel/include \
   tests/host/main.cpp libs/core/memory.cpp libs/core/format.cpp \
+  kernel/fs/partition.cpp \
   -o "$BUILD_DIR/host_tests"
 
 "$BUILD_DIR/host_tests"

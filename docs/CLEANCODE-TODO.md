@@ -159,6 +159,7 @@ Commit: `refactor(core): share endian and linker text helpers`.
 
 - [x] Tambah test image GSLFS valid dan rusak.
 - [x] Tambah test host untuk `endian.h`.
+- [x] Tambah test host GPT/partition (`FindEspPartition`, `FindPartitionByMagic`).
 - [x] Tambah test negative `ls /missing` di test QEMU (menunggu QEMU).
 - [ ] Update `docs/CLEANCODE-REVIEW.md`.
 - [ ] Jalankan `test.sh` di environment build.

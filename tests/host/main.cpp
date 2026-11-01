@@ -1,11 +1,14 @@
 // Host unit tests for pure libs/core code. No kernel, no hardware.
 
 #include <cstdio>
+#include <span>
+#include <vector>
 
 #include "bit.h"
 #include "endian.h"
 #include "format.h"
 #include "memory.h"
+#include "og/fs/partition.h"
 
 namespace {
 
@@ -97,6 +100,76 @@ void TestEndian() {
   CHECK(og::endian::ReadLe64(data) == 0x90ABCDEF12345678ULL);
 }
 
+void PutLe32(uint8_t* data, uint32_t value) {
+  for (uint32_t index = 0; index < 4; ++index) {
+    data[index] = static_cast<uint8_t>(value >> (index * 8U));
+  }
+}
+
+void PutLe64(uint8_t* data, uint64_t value) {
+  for (uint32_t index = 0; index < 8; ++index) {
+    data[index] = static_cast<uint8_t>(value >> (index * 8U));
+  }
+}
+
+struct FakeDisk {
+  const uint8_t* data;
+  uint64_t sectors;
+};
+
+og::Status ReadFakeDisk(void* context, uint64_t sector,
+                        std::span<uint8_t> buffer) {
+  auto* disk = static_cast<FakeDisk*>(context);
+  const uint64_t offset = sector * 512U;
+  if (disk == nullptr || offset + buffer.size() > disk->sectors * 512U) {
+    return og::Status::kIoError;
+  }
+  for (std::size_t index = 0; index < buffer.size(); ++index) {
+    buffer[index] = disk->data[offset + index];
+  }
+  return og::Status::kOk;
+}
+
+void TestGpt() {
+  constexpr uint64_t kSectors = 16384;
+  std::vector<uint8_t> image(kSectors * 512U, 0);
+
+  uint8_t* header = image.data() + 512U;
+  og::mem::Copy(header, "EFI PART", 8);
+  PutLe64(header + 72U, 2);
+  PutLe32(header + 80U, 128);
+  PutLe32(header + 84U, 128);
+
+  uint8_t* entries = image.data() + (2U * 512U);
+  const uint8_t esp_guid[16] = {0x28, 0x73, 0x2A, 0xC1, 0x1F, 0xF8, 0xD2, 0x11,
+                                0xBA, 0x4B, 0x00, 0xA0, 0xC9, 0x3E, 0xC9, 0x3B};
+  og::mem::Copy(entries, esp_guid, sizeof(esp_guid));
+  PutLe64(entries + 32U, 2048);
+  PutLe64(entries + 40U, 4095);
+
+  uint8_t* system = entries + 128U;
+  for (uint32_t index = 0; index < 16U; ++index) {
+    system[index] = static_cast<uint8_t>(0xA0U + index);
+  }
+  PutLe64(system + 32U, 4096);
+  PutLe64(system + 40U, 6143);
+  og::mem::Copy(image.data() + (4096U * 512U), "GSLFS1\0\0", 8);
+
+  FakeDisk disk{image.data(), kSectors};
+  const og::fs::BlockDevice device{&ReadFakeDisk, &disk, kSectors, 0};
+
+  const auto esp = og::fs::FindEspPartition(device);
+  CHECK(esp.is_ok());
+  CHECK(esp.value().start_sector == 2048U);
+  CHECK(esp.value().sector_count == 2048U);
+
+  const uint8_t magic[8] = {'G', 'S', 'L', 'F', 'S', '1', '\0', '\0'};
+  const auto gslfs = og::fs::FindPartitionByMagic(device, magic, sizeof(magic));
+  CHECK(gslfs.is_ok());
+  CHECK(gslfs.value().start_sector == 4096U);
+  CHECK(gslfs.value().sector_count == 2048U);
+}
+
 }  // namespace
 
 int main() {
@@ -104,6 +177,7 @@ int main() {
   TestFormat();
   TestBits();
   TestEndian();
+  TestGpt();
 
   if (g_failures != 0) {
     std::printf("host tests: %d failure(s)\n", g_failures);
