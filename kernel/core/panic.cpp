@@ -1,8 +1,8 @@
-#include "og/panic.h"
+#include "og/core/panic.h"
 
 #include "og/arch/cpu.h"
 #include "og/arch/registers.h"
-#include "og/log.h"
+#include "og/core/log.h"
 
 namespace og {
 

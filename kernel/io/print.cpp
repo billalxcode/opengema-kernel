@@ -1,8 +1,8 @@
-#include "og/print.h"
+#include "og/io/print.h"
 
 #include "format.h"
 #include "og/arch/spinlock.h"
-#include "og/console.h"
+#include "og/io/console.h"
 
 namespace og {
 

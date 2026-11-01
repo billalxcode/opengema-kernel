@@ -1,4 +1,4 @@
-#include "og/partition.h"
+#include "og/fs/partition.h"
 
 #include "memory.h"
 

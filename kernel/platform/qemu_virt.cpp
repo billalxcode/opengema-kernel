@@ -1,8 +1,8 @@
-#include "og/platform.h"
+#include "og/platform/platform.h"
 
-#include "og/bootinfo.h"
-#include "og/fdt.h"
-#include "og/memory_map.h"
+#include "og/core/bootinfo.h"
+#include "og/platform/fdt.h"
+#include "og/platform/memory_map.h"
 
 namespace og::platform {
 

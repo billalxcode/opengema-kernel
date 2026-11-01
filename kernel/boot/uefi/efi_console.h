@@ -3,7 +3,7 @@
 // UEFI firmware console adapter. Only valid before ExitBootServices.
 
 #include "efi.h"
-#include "og/console.h"
+#include "og/io/console.h"
 
 namespace og::boot::uefi {
 

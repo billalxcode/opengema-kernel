@@ -1,4 +1,4 @@
-#include "og/device.h"
+#include "og/drivers/device.h"
 
 #include "memory.h"
 #include "og/arch/spinlock.h"

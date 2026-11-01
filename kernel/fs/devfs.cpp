@@ -1,7 +1,7 @@
-#include "og/devfs.h"
+#include "og/fs/devfs.h"
 
 #include "memory.h"
-#include "og/console.h"
+#include "og/io/console.h"
 
 namespace og::fs::devfs {
 

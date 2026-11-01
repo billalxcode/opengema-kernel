@@ -1,6 +1,6 @@
-#include "og/log.h"
+#include "og/core/log.h"
 
-#include "og/print.h"
+#include "og/io/print.h"
 
 namespace og {
 

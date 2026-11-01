@@ -1,4 +1,4 @@
-#include "og/vfs.h"
+#include "og/fs/vfs.h"
 
 #include "memory.h"
 

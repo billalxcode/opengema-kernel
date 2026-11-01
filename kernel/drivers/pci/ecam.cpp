@@ -1,7 +1,7 @@
-#include "og/pci.h"
+#include "og/drivers/pci.h"
 
-#include "og/mmio.h"
-#include "og/vmm.h"
+#include "og/io/mmio.h"
+#include "og/mem/vmm.h"
 
 namespace og::drivers::pci {
 

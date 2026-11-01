@@ -1,11 +1,11 @@
-#include "og/vmm.h"
+#include "og/mem/vmm.h"
 
 #include "memory.h"
 #include "og/arch/cache.h"
 #include "og/arch/descriptor.h"
+#include "og/arch/mmu.h"
 #include "og/arch/tlb.h"
-#include "og/mmu.h"
-#include "og/pmm.h"
+#include "og/mem/pmm.h"
 
 namespace og::mem {
 

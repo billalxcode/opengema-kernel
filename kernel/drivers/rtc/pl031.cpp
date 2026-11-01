@@ -1,4 +1,4 @@
-#include "og/rtc.h"
+#include "og/drivers/rtc.h"
 
 namespace og::drivers::rtc {
 

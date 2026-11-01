@@ -1,4 +1,4 @@
-#include "og/fdt.h"
+#include "og/platform/fdt.h"
 
 #include "memory.h"
 

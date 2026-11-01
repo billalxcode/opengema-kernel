@@ -1,7 +1,7 @@
-#include "og/irq.h"
-#include "og/log.h"
-#include "og/status.h"
-#include "og/workqueue.h"
+#include "og/core/log.h"
+#include "og/core/status.h"
+#include "og/events/irq.h"
+#include "og/events/workqueue.h"
 
 namespace og::events {
 

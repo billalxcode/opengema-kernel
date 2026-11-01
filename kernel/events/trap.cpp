@@ -1,11 +1,11 @@
-#include "og/trap.h"
+#include "og/events/trap.h"
 
 #include "og/arch/barriers.h"
 #include "og/arch/registers.h"
 #include "og/arch/trap.h"
-#include "og/irq.h"
-#include "og/log.h"
-#include "og/panic.h"
+#include "og/core/log.h"
+#include "og/core/panic.h"
+#include "og/events/irq.h"
 
 // Defined in vectors.S.
 extern "C" char g_vector_table[];

@@ -1,13 +1,13 @@
-#include "og/syscall.h"
+#include "og/syscall/syscall.h"
 
 #include "og/arch/registers.h"
 #include "og/arch/trap.h"
-#include "og/console.h"
-#include "og/irq.h"
-#include "og/log.h"
-#include "og/sched.h"
-#include "og/status.h"
-#include "og/vmm.h"
+#include "og/core/log.h"
+#include "og/core/status.h"
+#include "og/events/irq.h"
+#include "og/io/console.h"
+#include "og/mem/vmm.h"
+#include "og/sched/sched.h"
 
 namespace og::syscall {
 

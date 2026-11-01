@@ -1,9 +1,9 @@
-#include "og/timer.h"
+#include "og/time/timer.h"
 
 #include "og/arch/barriers.h"
 #include "og/arch/registers.h"
 #include "og/arch/spinlock.h"
-#include "og/irq.h"
+#include "og/events/irq.h"
 
 namespace og::time {
 

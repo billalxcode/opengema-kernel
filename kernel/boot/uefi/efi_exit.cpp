@@ -1,7 +1,7 @@
 #include "efi_boot.h"
 
-#include "og/bootinfo.h"
-#include "og/log.h"
+#include "og/core/bootinfo.h"
+#include "og/core/log.h"
 
 namespace og::boot::uefi {
 

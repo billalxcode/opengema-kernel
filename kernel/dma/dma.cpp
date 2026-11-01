@@ -1,8 +1,8 @@
-#include "og/dma.h"
+#include "og/dma/dma.h"
 
 #include "memory.h"
 #include "og/arch/cache.h"
-#include "og/pmm.h"
+#include "og/mem/pmm.h"
 
 namespace og::dma {
 

@@ -1,8 +1,8 @@
-#include "og/virtio_blk.h"
+#include "og/drivers/virtio_blk.h"
 
 #include "memory.h"
 #include "og/arch/registers.h"
-#include "og/dma.h"
+#include "og/dma/dma.h"
 
 namespace og::drivers::virtio {
 

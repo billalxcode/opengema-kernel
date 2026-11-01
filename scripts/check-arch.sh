@@ -44,23 +44,19 @@ rank_of_path() {
 # layer may use them, as documented in the roadmap.
 rank_of_header() {
   case "$1" in
-    og/status.h | og/log.h | og/panic.h | og/assert.h | og/bootinfo.h | og/kmain.h) echo 0 ;;
+    og/core/*) echo 0 ;;
     og/arch/*) echo 1 ;;
-    og/mmu.h) echo 1 ;;
-    og/mmio.h | og/console.h | og/print.h | og/register.h) echo 2 ;;
-    og/pmm.h | og/vmm.h | og/heap.h | og/mem_selftest.h) echo 4 ;;
-    og/irq.h | og/trap.h | og/workqueue.h | og/event_selftest.h) echo 5 ;;
-    og/timer.h) echo 6 ;;
-    og/delay.h) echo 6 ;;
-    og/dma.h | og/dma_selftest.h) echo 7 ;;
-    og/device.h | og/pci.h | og/virtio.h | og/virtio_blk.h | og/gic.h | og/rtc.h) echo 8 ;;
-    og/block_device.h | og/vfs.h | og/fat32.h | og/devfs.h | og/partition.h | og/ramfs.h | og/procfs.h) echo 9 ;;
-    og/sched.h) echo 10 ;;
-    og/sync.h) echo 11 ;;
-    og/syscall.h) echo 12 ;;
-    og/platform.h | og/psci.h | og/smp.h | og/fdt.h) echo 13 ;;
-    og/memory_map.h) echo 13 ;;
-    og/uart.h) echo 8 ;;
+    og/io/*) echo 2 ;;
+    og/mem/*) echo 4 ;;
+    og/events/*) echo 5 ;;
+    og/time/*) echo 6 ;;
+    og/dma/*) echo 7 ;;
+    og/drivers/*) echo 8 ;;
+    og/fs/*) echo 9 ;;
+    og/sched/*) echo 10 ;;
+    og/sync/*) echo 11 ;;
+    og/syscall/*) echo 12 ;;
+    og/platform/*) echo 13 ;;
     *) echo -1 ;;
   esac
 }
@@ -115,7 +111,7 @@ fi
 
 # 5. Board addresses only in memory_map.h.
 ADDR_HITS="$(grep -RIn --include='*.cpp' --include='*.h' -E '0x09000000|0x08000000|0x40000000' kernel 2>/dev/null \
-  | grep -v '^kernel/include/og/memory_map.h' \
+  | grep -v '^kernel/include/og/platform/memory_map.h' \
   | grep -vE ':[0-9]+:[[:space:]]*(//|\*|/\*)')"
 if [ -n "$ADDR_HITS" ]; then
   echo "$ADDR_HITS"

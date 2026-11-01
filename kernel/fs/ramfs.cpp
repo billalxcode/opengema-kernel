@@ -1,7 +1,7 @@
-#include "og/ramfs.h"
+#include "og/fs/ramfs.h"
 
 #include "memory.h"
-#include "og/heap.h"
+#include "og/mem/heap.h"
 
 namespace og::fs::ramfs {
 

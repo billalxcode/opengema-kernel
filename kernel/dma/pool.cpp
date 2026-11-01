@@ -1,4 +1,4 @@
-#include "og/dma.h"
+#include "og/dma/dma.h"
 
 #include "memory.h"
 

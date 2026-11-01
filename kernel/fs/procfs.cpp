@@ -1,8 +1,8 @@
-#include "og/procfs.h"
+#include "og/fs/procfs.h"
 
 #include "format.h"
 #include "memory.h"
-#include "og/timer.h"
+#include "og/time/timer.h"
 
 namespace og::fs::procfs {
 

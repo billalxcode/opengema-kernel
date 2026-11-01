@@ -4,7 +4,7 @@
 // Not part of the kernel public API.
 
 #include "efi.h"
-#include "og/status.h"
+#include "og/core/status.h"
 
 namespace og {
 

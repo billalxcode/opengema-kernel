@@ -1,8 +1,8 @@
-#include "og/gic.h"
+#include "og/drivers/gic.h"
 
 #include "og/arch/barriers.h"
 #include "og/arch/registers.h"
-#include "og/delay.h"
+#include "og/time/delay.h"
 
 namespace og::drivers::irq {
 

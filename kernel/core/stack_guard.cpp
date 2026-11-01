@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-#include "og/panic.h"
+#include "og/core/panic.h"
 
 namespace {
 

@@ -1,6 +1,6 @@
-#include "og/virtio.h"
+#include "og/drivers/virtio.h"
 
-#include "og/vmm.h"
+#include "og/mem/vmm.h"
 
 namespace og::drivers::virtio {
 

@@ -1,14 +1,14 @@
-#include "og/sched.h"
+#include "og/sched/sched.h"
 
 #include "memory.h"
 #include "og/arch/context.h"
 #include "og/arch/registers.h"
 #include "og/arch/spinlock.h"
-#include "og/irq.h"
-#include "og/log.h"
-#include "og/pmm.h"
-#include "og/timer.h"
-#include "og/vmm.h"
+#include "og/core/log.h"
+#include "og/events/irq.h"
+#include "og/mem/pmm.h"
+#include "og/mem/vmm.h"
+#include "og/time/timer.h"
 
 namespace og::sched {
 

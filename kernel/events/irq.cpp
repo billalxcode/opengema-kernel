@@ -1,8 +1,8 @@
-#include "og/irq.h"
+#include "og/events/irq.h"
 
 #include "og/arch/cpu.h"
 #include "og/arch/spinlock.h"
-#include "og/workqueue.h"
+#include "og/events/workqueue.h"
 
 namespace og::events {
 

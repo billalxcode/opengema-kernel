@@ -1,10 +1,10 @@
-#include "og/mem_selftest.h"
+#include "og/mem/mem_selftest.h"
 
 #include "memory.h"
-#include "og/heap.h"
-#include "og/log.h"
-#include "og/pmm.h"
-#include "og/vmm.h"
+#include "og/core/log.h"
+#include "og/mem/heap.h"
+#include "og/mem/pmm.h"
+#include "og/mem/vmm.h"
 
 namespace og::mem {
 

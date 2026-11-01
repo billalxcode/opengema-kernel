@@ -1,7 +1,7 @@
-#include "og/fat32.h"
+#include "og/fs/fat32.h"
 
 #include "memory.h"
-#include "og/heap.h"
+#include "og/mem/heap.h"
 
 namespace og::fs::fat32 {
 

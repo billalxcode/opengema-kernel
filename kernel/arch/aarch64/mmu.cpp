@@ -1,4 +1,4 @@
-#include "og/mmu.h"
+#include "og/arch/mmu.h"
 
 #include "og/arch/barriers.h"
 #include "og/arch/cache.h"

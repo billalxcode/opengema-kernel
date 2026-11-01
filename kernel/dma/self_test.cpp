@@ -1,10 +1,10 @@
-#include "og/dma_selftest.h"
+#include "og/dma/dma_selftest.h"
 
 #include "memory.h"
-#include "og/dma.h"
-#include "og/heap.h"
-#include "og/log.h"
-#include "og/pmm.h"
+#include "og/core/log.h"
+#include "og/dma/dma.h"
+#include "og/mem/heap.h"
+#include "og/mem/pmm.h"
 
 namespace og::dma {
 

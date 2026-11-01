@@ -2,14 +2,14 @@
 #include "efi_boot.h"
 #include "efi_console.h"
 
-#include "og/bootinfo.h"
-#include "og/console.h"
-#include "og/kmain.h"
-#include "og/log.h"
-#include "og/memory_map.h"
-#include "og/panic.h"
-#include "og/status.h"
-#include "og/uart.h"
+#include "og/core/bootinfo.h"
+#include "og/core/kmain.h"
+#include "og/core/log.h"
+#include "og/core/panic.h"
+#include "og/core/status.h"
+#include "og/drivers/uart.h"
+#include "og/io/console.h"
+#include "og/platform/memory_map.h"
 
 namespace {
 

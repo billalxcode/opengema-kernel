@@ -1,7 +1,7 @@
 #include "efi_boot.h"
 
-#include "og/bootinfo.h"
-#include "og/memory_map.h"
+#include "og/core/bootinfo.h"
+#include "og/platform/memory_map.h"
 
 namespace {
 

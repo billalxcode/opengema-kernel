@@ -1,7 +1,7 @@
-#include "og/uart.h"
+#include "og/drivers/uart.h"
 
-#include "og/irq.h"
-#include "og/register.h"
+#include "og/events/irq.h"
+#include "og/io/register.h"
 
 namespace og::drivers::uart {
 

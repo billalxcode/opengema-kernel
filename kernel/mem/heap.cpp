@@ -1,7 +1,7 @@
-#include "og/heap.h"
+#include "og/mem/heap.h"
 
 #include "memory.h"
-#include "og/pmm.h"
+#include "og/mem/pmm.h"
 
 namespace og::mem {
 

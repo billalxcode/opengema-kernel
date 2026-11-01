@@ -1,4 +1,4 @@
-#include "og/sync.h"
+#include "og/sync/sync.h"
 
 #include "og/arch/registers.h"
 

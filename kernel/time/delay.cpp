@@ -1,4 +1,4 @@
-#include "og/delay.h"
+#include "og/time/delay.h"
 
 #include "og/arch/registers.h"
 

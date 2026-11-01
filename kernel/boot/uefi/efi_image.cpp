@@ -1,6 +1,6 @@
 #include "efi_boot.h"
 
-#include "og/bootinfo.h"
+#include "og/core/bootinfo.h"
 
 namespace {
 
