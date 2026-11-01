@@ -27,8 +27,9 @@ target_include_directories(og_inc_efi INTERFACE
   ${CMAKE_SOURCE_DIR}/libs/efi)
 target_link_libraries(og_inc_efi INTERFACE og_inc_cxx)
 
-# gemabox: the base command program for user mode. Assembled, linked at
-# its virtual address, then flattened to a raw binary for the ESP.
+# gemabox: the base command program for user mode. Compiled as freestanding
+# C, linked at its virtual address, then flattened to a raw binary for the
+# ESP.
 find_program(OG_GEMABOX_LD NAMES aarch64-linux-gnu-ld REQUIRED)
 find_program(OG_GEMABOX_OBJCOPY NAMES aarch64-linux-gnu-objcopy REQUIRED)
 set(OG_GEMABOX_OBJECT ${CMAKE_BINARY_DIR}/gemabox.o)
@@ -38,11 +39,15 @@ set(OG_GEMABOX_BIN ${CMAKE_BINARY_DIR}/gemabox.bin)
 add_custom_command(
   OUTPUT ${OG_GEMABOX_BIN}
   COMMAND ${CMAKE_C_COMPILER} --target=aarch64-linux-gnu -ffreestanding -nostdlib
-          -c ${CMAKE_SOURCE_DIR}/pubs/gemabox/main.S -o ${OG_GEMABOX_OBJECT}
-  COMMAND ${OG_GEMABOX_LD} -Ttext=0x10000000000 -e _start ${OG_GEMABOX_OBJECT}
-          -o ${OG_GEMABOX_ELF}
+          -nostdinc -std=c11 -O2 -Wall -Wextra -mgeneral-regs-only
+          -fno-stack-protector -fno-builtin -fno-unwind-tables
+          -fno-asynchronous-unwind-tables
+          -c ${CMAKE_SOURCE_DIR}/pubs/gemabox/main.c -o ${OG_GEMABOX_OBJECT}
+  COMMAND ${OG_GEMABOX_LD} -T ${CMAKE_SOURCE_DIR}/pubs/gemabox/link.ld -e _start
+          ${OG_GEMABOX_OBJECT} -o ${OG_GEMABOX_ELF}
   COMMAND ${OG_GEMABOX_OBJCOPY} -O binary ${OG_GEMABOX_ELF} ${OG_GEMABOX_BIN}
-  DEPENDS ${CMAKE_SOURCE_DIR}/pubs/gemabox/main.S
+  DEPENDS ${CMAKE_SOURCE_DIR}/pubs/gemabox/main.c
+          ${CMAKE_SOURCE_DIR}/pubs/gemabox/link.ld
   COMMENT "build gemabox")
 
 add_custom_target(og_gemabox DEPENDS ${OG_GEMABOX_BIN})

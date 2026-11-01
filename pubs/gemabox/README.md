@@ -1,12 +1,23 @@
 # gemabox
 
-Program user mode dasar untuk opengema-kernel. Sumbernya dirakit menjadi
-`build/gemabox.bin`, disalin ke ESP sebagai `GEMABOX.BIN`, lalu dibaca kernel
-ke ramfs sebagai `/ram/gemabox` sebelum dijalankan di EL0.
+Program user mode dasar untuk opengema-kernel. Ditulis dalam C freestanding,
+dikompilasi menjadi `build/gemabox.bin`, disalin ke ESP sebagai
+`GEMABOX.BIN`, lalu dibaca kernel ke ramfs sebagai `/ram/gemabox` sebelum
+dijalankan di EL0.
+
+## Berkas
+
+| Berkas | Isi |
+|---|---|
+| `main.c` | Program utama dan pembungkus syscall |
+| `link.ld` | Menempatkan `_start` di 1 TiB dan menyusun section |
+| `README.md` | Dokumen ini |
+
+Hanya instruksi `svc #0` di pembungkus syscall yang memakai inline
+assembly. Logika program seluruhnya C. Tidak ada startup libc dan tidak ada
+file `.S`.
 
 ## Isi saat ini
-
-`main.S` adalah program uji jalur syscall:
 
 1. `write` ke stdout.
 2. `mmap` satu halaman.
