@@ -302,6 +302,85 @@ struct Superblock {
   return Result<Superblock>::Ok(super);
 }
 
+[[nodiscard]] Status LoadNode(const BlockDevice& device,
+                              const Superblock& super,
+                              uint32_t index) noexcept {
+  uint8_t raw[kNodeSize];
+  Status status = ReadBytes(
+    device, super.node_offset + (static_cast<uint64_t>(index) * kNodeSize),
+    std::span<uint8_t>(raw, sizeof(raw)));
+  if (IsErr(status)) {
+    return status;
+  }
+  if (Crc32(raw, kNodeCrcSize) != endian::ReadLe32(raw + 48U)) {
+    return Status::kIoError;
+  }
+
+  const uint32_t type = endian::ReadLe32(raw);
+  const uint32_t parent = endian::ReadLe32(raw + 16U);
+  const uint32_t name_entry = endian::ReadLe32(raw + 20U);
+  const uint64_t size = endian::ReadLe64(raw + 24U);
+  const uint64_t data_block = endian::ReadLe64(raw + 32U);
+  const uint64_t blocks = endian::ReadLe64(raw + 40U);
+  const uint32_t data_checksum = endian::ReadLe32(raw + 52U);
+
+  if (type != kNodeTypeFile && type != kNodeTypeDirectory) {
+    return Status::kInvalidArg;
+  }
+  if (parent >= super.node_count ||
+      (index == super.root && parent != super.root)) {
+    return Status::kInvalidArg;
+  }
+
+  GslfsNode& node = g_nodes[index];
+  node.index = index;
+  node.parent = parent;
+  node.mode = endian::ReadLe32(raw + 4U);
+  node.data_checksum = data_checksum;
+  node.node.type = type == kNodeTypeFile ? NodeType::kFile
+                                         : NodeType::kDirectory;
+  node.node.size = size;
+
+  if (index == super.root) {
+    node.node.name = "/";
+    if (type != kNodeTypeDirectory) {
+      return Status::kInvalidArg;
+    }
+  } else {
+    status = ReadName(device, super.name_offset, super.name_table_size,
+                      name_entry, node.name);
+    if (IsErr(status) || node.name[0] == '\0') {
+      return IsErr(status) ? status : Status::kInvalidArg;
+    }
+    node.node.name = node.name;
+  }
+
+  if (type == kNodeTypeFile) {
+    node.node.ops = &kFileOps;
+    if (size == 0U) {
+      if (blocks != 0U) {
+        return Status::kInvalidArg;
+      }
+      node.data_offset = 0;
+    } else {
+      if (data_block < (super.data_offset / kBlockSize) ||
+          blocks != ((size + kBlockSize - 1U) / kBlockSize) ||
+          blocks > (super.block_count - data_block)) {
+        return Status::kInvalidArg;
+      }
+      node.data_offset = data_block * kBlockSize;
+    }
+  } else {
+    node.node.ops = &kDirectoryOps;
+    if (size != 0U || blocks != 0U) {
+      return Status::kInvalidArg;
+    }
+    node.data_offset = 0;
+  }
+  node.node.fs_data = &node;
+  return Status::kOk;
+}
+
 [[nodiscard]] Status LoadNodes(const BlockDevice& device,
                                const Superblock& super) noexcept {
   mem::Zero(g_nodes, sizeof(g_nodes));
@@ -309,79 +388,10 @@ struct Superblock {
   g_device = device;
 
   for (uint32_t index = 0; index < super.node_count; ++index) {
-    uint8_t raw[kNodeSize];
-    Status status = ReadBytes(
-      device, super.node_offset + (static_cast<uint64_t>(index) * kNodeSize),
-      std::span<uint8_t>(raw, sizeof(raw)));
+    const Status status = LoadNode(device, super, index);
     if (IsErr(status)) {
       return status;
     }
-    if (Crc32(raw, kNodeCrcSize) != endian::ReadLe32(raw + 48U)) {
-      return Status::kIoError;
-    }
-
-    const uint32_t type = endian::ReadLe32(raw);
-    const uint32_t parent = endian::ReadLe32(raw + 16U);
-    const uint32_t name_entry = endian::ReadLe32(raw + 20U);
-    const uint64_t size = endian::ReadLe64(raw + 24U);
-    const uint64_t data_block = endian::ReadLe64(raw + 32U);
-    const uint64_t blocks = endian::ReadLe64(raw + 40U);
-    const uint32_t data_checksum = endian::ReadLe32(raw + 52U);
-
-    if (type != kNodeTypeFile && type != kNodeTypeDirectory) {
-      return Status::kInvalidArg;
-    }
-    if (parent >= super.node_count ||
-        (index == super.root && parent != super.root)) {
-      return Status::kInvalidArg;
-    }
-
-    GslfsNode& node = g_nodes[index];
-    node.index = index;
-    node.parent = parent;
-    node.mode = endian::ReadLe32(raw + 4U);
-    node.data_checksum = data_checksum;
-    node.node.type = type == kNodeTypeFile ? NodeType::kFile
-                                           : NodeType::kDirectory;
-    node.node.size = size;
-
-    if (index == super.root) {
-      node.node.name = "/";
-      if (type != kNodeTypeDirectory) {
-        return Status::kInvalidArg;
-      }
-    } else {
-      status = ReadName(device, super.name_offset, super.name_table_size,
-                        name_entry, node.name);
-      if (IsErr(status) || node.name[0] == '\0') {
-        return IsErr(status) ? status : Status::kInvalidArg;
-      }
-      node.node.name = node.name;
-    }
-
-    if (type == kNodeTypeFile) {
-      node.node.ops = &kFileOps;
-      if (size == 0U) {
-        if (blocks != 0U) {
-          return Status::kInvalidArg;
-        }
-        node.data_offset = 0;
-      } else {
-        if (data_block < (super.data_offset / kBlockSize) ||
-            blocks != ((size + kBlockSize - 1U) / kBlockSize) ||
-            blocks > (super.block_count - data_block)) {
-          return Status::kInvalidArg;
-        }
-        node.data_offset = data_block * kBlockSize;
-      }
-    } else {
-      node.node.ops = &kDirectoryOps;
-      if (size != 0U || blocks != 0U) {
-        return Status::kInvalidArg;
-      }
-      node.data_offset = 0;
-    }
-    node.node.fs_data = &node;
   }
   return Status::kOk;
 }

@@ -156,6 +156,8 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 - `vfs.cpp` memisahkan `FindBestMount` dan `ResolveSegments`.
 - `partition.cpp` memisahkan `ReadGptHeader`, `ParsePartition`, dan
   `CheckMagic` dari loop pencarian.
+- `gslfs.cpp` memisahkan `LoadNode` sehingga loop `LoadNodes` hanya
+  mengatur state global.
 - `devfs.cpp` memakai satu tabel `g_devices` untuk lookup dan iteration.
 - FD table dipindah ke `fd_table.cpp`; `vfs_internal.h` hanya membawa
   `IsReady()` untuk kode kernel, bukan header publik.
