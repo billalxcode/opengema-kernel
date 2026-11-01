@@ -67,6 +67,7 @@ struct QueueBuffer {
 class Queue {
  public:
   static constexpr uint32_t kMaxChain = 4;
+  static constexpr uint32_t kMaxBuffers = 64;
 
   Queue() noexcept = default;
   ~Queue() = default;
@@ -80,13 +81,22 @@ class Queue {
   // Publishes a descriptor chain and notifies the device.
   [[nodiscard]] Status submit(const QueueBuffer* buffers, uint32_t count) noexcept;
 
+  // Publishes each buffer as its own available chain. Used by devices such
+  // as virtio-input that consume one descriptor per event.
+  [[nodiscard]] Status submit_each(const QueueBuffer* buffers,
+                                   uint32_t count) noexcept;
+
   // Waits for the device to consume the chain, then invalidates the
   // buffers so the CPU sees device writes. Times out after one second.
   [[nodiscard]] Status wait() noexcept;
 
+  // Checks whether the device consumed the chain without blocking.
+  [[nodiscard]] Status poll(bool& ready) noexcept;
+
   [[nodiscard]] uint32_t used_length() const noexcept { return used_length_; }
   [[nodiscard]] uint16_t size() const noexcept { return size_; }
   [[nodiscard]] bool is_ready() const noexcept { return ready_; }
+  [[nodiscard]] bool has_pending() const noexcept { return pending_count_ != 0U; }
 
  private:
   PciTransport* transport_ = nullptr;
@@ -98,7 +108,7 @@ class Queue {
   uint16_t size_ = 0;
   uint16_t avail_index_ = 0;
   uint16_t used_index_ = 0;
-  QueueBuffer pending_[kMaxChain]{};
+  QueueBuffer pending_[kMaxBuffers]{};
   uint32_t pending_count_ = 0;
   uint32_t used_length_ = 0;
   bool ready_ = false;

@@ -52,7 +52,7 @@ Status PrintLn(const char* text) noexcept {
   fmt::LineBuilder line(buffer, sizeof(buffer));
   line.Text(LabelOrEmpty(text));
   line.Char('\n');
-  return io::ConsoleWriteTextActive(line.c_str());
+  return io::ConsoleWriteText(io::LogConsole(), line.c_str());
 }
 
 Status PrintDec(const char* label, uint64_t value) noexcept {

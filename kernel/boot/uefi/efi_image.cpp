@@ -1,5 +1,6 @@
-#include "efi_boot.h"
+#include "og/boot/uefi/efi_boot.h"
 
+#include "endian.h"
 #include "og/core/bootinfo.h"
 
 namespace {
@@ -11,16 +12,6 @@ constexpr uint32_t kPeSignature = 0x00004550U;
 constexpr uint32_t kSectionExecute = 0x20000000U;
 constexpr uint32_t kMaxSections = 32;
 constexpr uint16_t kSectionHeaderSize = 40;
-
-[[nodiscard]] uint16_t Read16(const uint8_t* data) noexcept {
-  return static_cast<uint16_t>(static_cast<uint16_t>(data[0]) |
-                               (static_cast<uint16_t>(data[1]) << 8U));
-}
-
-[[nodiscard]] uint32_t Read32(const uint8_t* data) noexcept {
-  return static_cast<uint32_t>(data[0]) | (static_cast<uint32_t>(data[1]) << 8U) |
-         (static_cast<uint32_t>(data[2]) << 16U) | (static_cast<uint32_t>(data[3]) << 24U);
-}
 
 }  // namespace
 
@@ -58,13 +49,13 @@ Status QueryImageSections(EFI_HANDLE image, EFI_SYSTEM_TABLE* system_table,
   if (base[0] != 'M' || base[1] != 'Z') {
     return Status::kNoDevice;
   }
-  const uint32_t pe_offset = Read32(base + 0x3C);
-  if (Read32(base + pe_offset) != kPeSignature) {
+  const uint32_t pe_offset = endian::ReadLe32(base + 0x3C);
+  if (endian::ReadLe32(base + pe_offset) != kPeSignature) {
     return Status::kNoDevice;
   }
 
-  const uint16_t section_count = Read16(base + pe_offset + 6);
-  const uint16_t optional_size = Read16(base + pe_offset + 20);
+  const uint16_t section_count = endian::ReadLe16(base + pe_offset + 6);
+  const uint16_t optional_size = endian::ReadLe16(base + pe_offset + 20);
   if (section_count == 0 || section_count > kMaxSections) {
     return Status::kInvalidArg;
   }
@@ -73,10 +64,10 @@ Status QueryImageSections(EFI_HANDLE image, EFI_SYSTEM_TABLE* system_table,
   uint64_t text_start = 0;
   uint64_t text_end = 0;
   for (uint16_t index = 0; index < section_count; ++index) {
-    const uint32_t virtual_size = Read32(section + 8);
-    const uint32_t virtual_address = Read32(section + 12);
-    const uint32_t raw_size = Read32(section + 16);
-    const uint32_t characteristics = Read32(section + 36);
+    const uint32_t virtual_size = endian::ReadLe32(section + 8);
+    const uint32_t virtual_address = endian::ReadLe32(section + 12);
+    const uint32_t raw_size = endian::ReadLe32(section + 16);
+    const uint32_t characteristics = endian::ReadLe32(section + 36);
 
     if ((characteristics & kSectionExecute) != 0U) {
       const uint64_t size = (virtual_size != 0U) ? virtual_size : raw_size;

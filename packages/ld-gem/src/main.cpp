@@ -1,28 +1,12 @@
 #include "kgema/io.h"
 #include "ldgem/elf.h"
 #include "ldgem/linker.h"
+#include "ldgem/text.h"
 #include "ldgem/types.h"
 
 namespace ldgem {
 
 namespace {
-
-[[nodiscard]] u64 Length(const char* text) noexcept {
-  if (text == nullptr) {
-    return 0;
-  }
-  u64 length = 0;
-  while (text[length] != '\0') {
-    ++length;
-  }
-  return length;
-}
-
-void Write(const char* text) noexcept {
-  if (text != nullptr) {
-    kgema::write(text, static_cast<kgema::usize>(Length(text)));
-  }
-}
 
 [[nodiscard]] bool ParseHex(const char* text, u64& out) noexcept {
   if (text == nullptr) {
@@ -64,7 +48,7 @@ void Write(const char* text) noexcept {
   if (envp == nullptr || prefix == nullptr) {
     return false;
   }
-  const u64 prefix_length = Length(prefix);
+  const u64 prefix_length = TextLength(prefix);
   for (u32 index = 0; envp[index] != nullptr; ++index) {
     if (elf::StartsWith(envp[index], prefix)) {
       return ParseHex(envp[index] + prefix_length, out);
@@ -80,7 +64,7 @@ int run(long argc, char** argv, char** envp) noexcept {
   u64 entry = 0;
   if (!FindEnvironment(envp, "GEM_DYNAMIC=", dynamic) ||
       !FindEnvironment(envp, "GEM_ENTRY=", entry)) {
-    Write("ld-gem: missing GEM_DYNAMIC or GEM_ENTRY\n");
+    WriteText("ld-gem: missing GEM_DYNAMIC or GEM_ENTRY\n");
     return 2;
   }
 
@@ -88,25 +72,25 @@ int run(long argc, char** argv, char** envp) noexcept {
     (argc > 0 && argv != nullptr && argv[0] != nullptr) ? argv[0] : "main";
   Linker linker;
   if (!linker.AddMain(dynamic, name)) {
-    Write("ld-gem: cannot read the main executable\n");
+    WriteText("ld-gem: cannot read the main executable\n");
     return 3;
   }
   if (!linker.LoadLibraries()) {
-    Write("ld-gem: cannot load dependencies\n");
+    WriteText("ld-gem: cannot load dependencies\n");
     return 4;
   }
   if (!linker.RelocateAll()) {
-    Write("ld-gem: relocation failed\n");
+    WriteText("ld-gem: relocation failed\n");
     return 5;
   }
   if (!linker.RunInitializers()) {
-    Write("ld-gem: initializer failed\n");
+    WriteText("ld-gem: initializer failed\n");
     return 6;
   }
 
   using Entry = void (*)(long, char**, char**);
   reinterpret_cast<Entry>(entry)(argc, argv, envp);
-  Write("ld-gem: main returned\n");
+  WriteText("ld-gem: main returned\n");
   return 7;
 }
 

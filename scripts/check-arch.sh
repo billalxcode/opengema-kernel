@@ -27,6 +27,7 @@ rank_of_path() {
     kernel/core/init/*) echo 15 ;;
     kernel/core/*) echo 3 ;;
     kernel/mem/*) echo 4 ;;
+    kernel/acpi/*) echo 4 ;;
     kernel/events/*) echo 5 ;;
     kernel/time/*) echo 6 ;;
     kernel/dma/*) echo 7 ;;
@@ -50,6 +51,7 @@ rank_of_header() {
     og/arch/*) echo 1 ;;
     og/io/*) echo 2 ;;
     og/mem/*) echo 4 ;;
+    og/acpi/*) echo 4 ;;
     og/events/*) echo 5 ;;
     og/time/*) echo 6 ;;
     og/dma/*) echo 7 ;;
@@ -60,6 +62,7 @@ rank_of_header() {
     og/process/*) echo 12 ;;
     og/syscall/*) echo 13 ;;
     og/platform/*) echo 14 ;;
+    og/boot/*) echo 15 ;;
     *) echo -1 ;;
   esac
 }

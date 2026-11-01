@@ -2,6 +2,7 @@
 
 // System information exposed to applications.
 
+#include "gemapi/error.h"
 #include "gemapi/types.h"
 
 namespace gemapi::system {
@@ -17,5 +18,9 @@ struct Version {
 [[nodiscard]] constexpr Version version() noexcept {
   return Version{kVersionMajor, kVersionMinor};
 }
+
+// These return only when the kernel rejects the request.
+[[nodiscard]] Status shutdown() noexcept;
+[[nodiscard]] Status reboot() noexcept;
 
 }  // namespace gemapi::system

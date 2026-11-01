@@ -16,6 +16,7 @@ enum class DeviceClass : uint32_t {
   kDisplay = 3,
   kSerial = 4,
   kInterrupt = 5,
+  kInput = 6,
 };
 
 struct Device {

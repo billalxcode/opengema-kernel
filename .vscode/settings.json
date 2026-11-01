@@ -7,7 +7,7 @@
 
   "clangd.arguments": [
     "--compile-commands-dir=${workspaceFolder}/build",
-    "--query-driver=/usr/bin/clang*,/usr/bin/clang++,/usr/bin/aarch64-linux-gnu-*",
+    "--query-driver=/opt/homebrew/opt/llvm/bin/clang*,/usr/bin/clang*,/usr/bin/aarch64-linux-gnu-*",
     "--header-insertion=never",
     "--background-index"
   ],

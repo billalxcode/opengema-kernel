@@ -14,6 +14,11 @@ namespace og::io {
 
 constexpr uint32_t kGlyphWidth = 8;
 constexpr uint32_t kGlyphHeight = 8;
+constexpr uint8_t kFirstGlyph = 32;
+constexpr uint8_t kLastGlyph = 126;
+// A two pixel gap keeps adjacent rows readable with an 8x8 font.
+constexpr uint32_t kLineHeight = kGlyphHeight + 2;
+constexpr uint32_t kBytesPerPixel = 4;
 
 // AARRGGBB in a 32 bit word, BGR in memory. Alpha stays opaque.
 [[nodiscard]] constexpr uint32_t Rgb(uint8_t red, uint8_t green, uint8_t blue) noexcept {
@@ -69,6 +74,8 @@ class FramebufferConsole {
   uint32_t dirty_min_y_ = 0;
   uint32_t dirty_max_x_ = 0;
   uint32_t dirty_max_y_ = 0;
+  uint8_t ansi_state_ = 0;
+  uint32_t ansi_param_ = 0;
   PresentFn present_ = nullptr;
   void* present_context_ = nullptr;
   bool ready_ = false;

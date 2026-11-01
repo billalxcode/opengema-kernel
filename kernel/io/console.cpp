@@ -7,6 +7,7 @@ namespace og::io {
 namespace {
 
 Console g_console{};
+Console g_log_console{};
 
 [[nodiscard]] Status WriteRange(Console console, const char* text, std::size_t begin,
                                 std::size_t end) noexcept {
@@ -25,6 +26,14 @@ void SetConsole(Console console) noexcept {
 
 Console ActiveConsole() noexcept {
   return g_console;
+}
+
+void SetLogConsole(Console console) noexcept {
+  g_log_console = console;
+}
+
+Console LogConsole() noexcept {
+  return g_log_console;
 }
 
 Status ConsoleWrite(Console console, std::span<const uint8_t> bytes) noexcept {

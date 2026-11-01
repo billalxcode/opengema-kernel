@@ -4,6 +4,23 @@
 
 namespace gemapi::fs {
 
+namespace {
+
+[[nodiscard]] Kind ConvertKind(u64 type) noexcept {
+  switch (type) {
+    case 0:
+      return Kind::file;
+    case 1:
+      return Kind::directory;
+    case 2:
+      return Kind::device;
+    default:
+      return Kind::other;
+  }
+}
+
+}  // namespace
+
 File::File(File&& other) noexcept : descriptor_(other.descriptor_) {
   other.descriptor_ = -1;
 }
@@ -95,20 +112,7 @@ Result<Info> stat(const char* path) noexcept {
     return Status::not_found;
   }
   Info info{};
-  switch (raw.type) {
-    case 0:
-      info.kind = Kind::file;
-      break;
-    case 1:
-      info.kind = Kind::directory;
-      break;
-    case 2:
-      info.kind = Kind::device;
-      break;
-    default:
-      info.kind = Kind::other;
-      break;
-  }
+  info.kind = ConvertKind(raw.type);
   info.size = raw.size;
   return info;
 }
@@ -138,20 +142,7 @@ Result<bool> list(const char* path, u64 index, DirEntry& entry) noexcept {
     ++length;
   }
   entry.name[length] = '\0';
-  switch (raw.type) {
-    case 0:
-      entry.kind = Kind::file;
-      break;
-    case 1:
-      entry.kind = Kind::directory;
-      break;
-    case 2:
-      entry.kind = Kind::device;
-      break;
-    default:
-      entry.kind = Kind::other;
-      break;
-  }
+  entry.kind = ConvertKind(raw.type);
   entry.size = raw.size;
   return true;
 }

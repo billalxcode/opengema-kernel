@@ -1,8 +1,8 @@
 #include "ldgem/image.h"
 
 #include "kgema/file.h"
-#include "kgema/io.h"
 #include "kgema/memory.h"
+#include "ldgem/text.h"
 
 namespace ldgem {
 
@@ -11,22 +11,12 @@ namespace {
 constexpr u64 kHeaderBufferSize = 1024;
 constexpr u64 kPageMask = kPageSize - 1U;
 
-[[nodiscard]] u64 Length(const char* text) noexcept {
-  u64 length = 0;
-  if (text != nullptr) {
-    while (text[length] != '\0') {
-      ++length;
-    }
-  }
-  return length;
-}
-
 void Report(const char* stage, const char* path) noexcept {
-  kgema::write("ld-gem: ", 8);
-  kgema::write(stage, static_cast<kgema::usize>(Length(stage)));
-  kgema::write(": ", 2);
-  kgema::write(path, static_cast<kgema::usize>(Length(path)));
-  kgema::write("\n", 1);
+  WriteText("ld-gem: ");
+  WriteText(stage);
+  WriteText(": ");
+  WriteText(path);
+  WriteText("\n");
 }
 
 [[nodiscard]] bool ReadExact(kgema::i64 descriptor, void* buffer,

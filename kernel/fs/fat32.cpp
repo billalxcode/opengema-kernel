@@ -30,6 +30,17 @@ struct Volume {
   uint8_t* cluster_buffer;
 };
 
+struct BootInfo {
+  uint32_t sectors_per_cluster;
+  uint32_t cluster_bytes;
+  uint32_t reserved_sectors;
+  uint32_t fat_sectors;
+  uint32_t num_fats;
+  uint32_t root_cluster;
+  uint32_t data_start;
+  uint32_t total_clusters;
+};
+
 struct FatNode {
   Node node;
   char name[kMaxName];
@@ -135,6 +146,30 @@ const NodeOps kDirectoryOps{&Lookup, nullptr, nullptr, &IterateDirectory};
   return Result<uint32_t>::Ok(value);
 }
 
+[[nodiscard]] Result<uint32_t> AdvanceCluster(uint32_t cluster) noexcept {
+  const Result<uint32_t> next = NextCluster(cluster);
+  if (next.is_err()) {
+    return Result<uint32_t>::Err(next.status());
+  }
+  if (next.value() == kClusterEnd) {
+    return Result<uint32_t>::Err(Status::kIoError);
+  }
+  return Result<uint32_t>::Ok(next.value());
+}
+
+[[nodiscard]] Result<uint32_t> SeekCluster(uint32_t first_cluster,
+                                           uint64_t cluster_index) noexcept {
+  uint32_t cluster = first_cluster;
+  for (uint64_t step = 0; step < cluster_index; ++step) {
+    const Result<uint32_t> next = AdvanceCluster(cluster);
+    if (next.is_err()) {
+      return Result<uint32_t>::Err(next.status());
+    }
+    cluster = next.value();
+  }
+  return Result<uint32_t>::Ok(cluster);
+}
+
 [[nodiscard]] Status ReadCluster(uint32_t cluster, uint8_t* buffer) noexcept {
   if (!ValidCluster(cluster)) {
     return Status::kInvalidArg;
@@ -218,6 +253,61 @@ void AccumulateLongName(const uint8_t* entry, char* text, bool& active) noexcept
   }
 }
 
+struct ParsedEntry {
+  DirEntry entry;
+  uint32_t first_cluster;
+};
+
+// Parses one 32-byte directory slot. Returns false for slots that do not
+// produce a node, such as deleted entries, long-name fragments, and volume
+// labels. The end-of-directory marker is handled by the caller because it
+// stops the whole walk.
+[[nodiscard]] Result<bool> ParseEntry(const uint8_t* raw, char* long_name,
+                                      bool& long_name_active,
+                                      ParsedEntry& out) noexcept {
+  if (raw[0] == 0xE5U) {
+    long_name_active = false;
+    return Result<bool>::Ok(false);
+  }
+
+  const uint8_t attribute = raw[11];
+  if (attribute == kAttributeLongName) {
+    AccumulateLongName(raw, long_name, long_name_active);
+    return Result<bool>::Ok(false);
+  }
+  if ((attribute & kAttributeVolumeLabel) != 0U) {
+    long_name_active = false;
+    return Result<bool>::Ok(false);
+  }
+
+  out = ParsedEntry{};
+  if (long_name_active && long_name[0] != '\0') {
+    const std::size_t length = mem::Length(long_name);
+    if (length >= sizeof(out.entry.name)) {
+      return Result<bool>::Err(Status::kInvalidArg);
+    }
+    mem::Copy(out.entry.name, long_name, length + 1U);
+  } else {
+    BuildShortName(raw, out.entry.name);
+  }
+  long_name_active = false;
+
+  const uint32_t cluster_high = static_cast<uint32_t>(raw[20]) |
+                                (static_cast<uint32_t>(raw[21]) << 8U);
+  const uint32_t cluster_low = static_cast<uint32_t>(raw[26]) |
+                               (static_cast<uint32_t>(raw[27]) << 8U);
+  out.first_cluster = (cluster_high << 16U) | cluster_low;
+
+  out.entry.size = static_cast<uint32_t>(raw[28]) |
+                   (static_cast<uint32_t>(raw[29]) << 8U) |
+                   (static_cast<uint32_t>(raw[30]) << 16U) |
+                   (static_cast<uint32_t>(raw[31]) << 24U);
+  out.entry.type = ((attribute & kAttributeDirectory) != 0U)
+                     ? NodeType::kDirectory
+                     : NodeType::kFile;
+  return Result<bool>::Ok(true);
+}
+
 [[nodiscard]] Status WalkDirectory(Node* directory, const Visitor& visitor) noexcept {
   if (directory == nullptr || visitor.visit == nullptr) {
     return Status::kInvalidArg;
@@ -241,49 +331,17 @@ void AccumulateLongName(const uint8_t* entry, char* text, bool& active) noexcept
       if (entry[0] == 0x00U) {
         return Status::kOk;
       }
-      if (entry[0] == 0xE5U) {
-        long_name_active = false;
+
+      ParsedEntry parsed{};
+      const Result<bool> emit =
+        ParseEntry(entry, long_name, long_name_active, parsed);
+      if (emit.is_err()) {
+        return emit.status();
+      }
+      if (!emit.value()) {
         continue;
       }
-
-      const uint8_t attribute = entry[11];
-      if (attribute == kAttributeLongName) {
-        AccumulateLongName(entry, long_name, long_name_active);
-        continue;
-      }
-      if ((attribute & kAttributeVolumeLabel) != 0U) {
-        long_name_active = false;
-        continue;
-      }
-
-      DirEntry result{};
-      if (long_name_active && long_name[0] != '\0') {
-        const std::size_t length = mem::Length(long_name);
-        if (length >= sizeof(result.name)) {
-          return Status::kInvalidArg;
-        }
-        mem::Copy(result.name, long_name, length + 1U);
-      } else {
-        BuildShortName(entry, result.name);
-      }
-      long_name_active = false;
-
-      const uint32_t cluster_high = static_cast<uint32_t>(entry[20]) |
-                                    (static_cast<uint32_t>(entry[21]) << 8U);
-      const uint32_t cluster_low = static_cast<uint32_t>(entry[26]) |
-                                   (static_cast<uint32_t>(entry[27]) << 8U);
-      const uint32_t first_cluster = (cluster_high << 16U) | cluster_low;
-
-      const uint32_t size = static_cast<uint32_t>(entry[28]) |
-                            (static_cast<uint32_t>(entry[29]) << 8U) |
-                            (static_cast<uint32_t>(entry[30]) << 16U) |
-                            (static_cast<uint32_t>(entry[31]) << 24U);
-
-      result.type = ((attribute & kAttributeDirectory) != 0U) ? NodeType::kDirectory
-                                                              : NodeType::kFile;
-      result.size = size;
-
-      if (visitor.visit(visitor.context, result, first_cluster)) {
+      if (visitor.visit(visitor.context, parsed.entry, parsed.first_cluster)) {
         return Status::kOk;
       }
     }
@@ -392,21 +450,16 @@ Status FileRead(Node* node, uint64_t offset, std::span<uint8_t> buffer,
   }
 
   const auto* fat_node = reinterpret_cast<const FatNode*>(node);
-  uint32_t cluster = fat_node->first_cluster;
   const uint64_t cluster_index = offset / g_volume.cluster_bytes;
   if (cluster_index > g_volume.total_clusters) {
     return Status::kInvalidArg;
   }
-  for (uint64_t step = 0; step < cluster_index; ++step) {
-    const Result<uint32_t> next = NextCluster(cluster);
-    if (next.is_err()) {
-      return next.status();
-    }
-    if (next.value() == kClusterEnd) {
-      return Status::kIoError;
-    }
-    cluster = next.value();
+  const Result<uint32_t> start =
+    SeekCluster(fat_node->first_cluster, cluster_index);
+  if (start.is_err()) {
+    return start.status();
   }
+  uint32_t cluster = start.value();
 
   uint64_t within = offset % g_volume.cluster_bytes;
   uint64_t remaining = node->size - offset;
@@ -435,12 +488,9 @@ Status FileRead(Node* node, uint64_t offset, std::span<uint8_t> buffer,
     within = 0;
 
     if (remaining > 0) {
-      const Result<uint32_t> next = NextCluster(cluster);
+      const Result<uint32_t> next = AdvanceCluster(cluster);
       if (next.is_err()) {
         return next.status();
-      }
-      if (next.value() == kClusterEnd) {
-        return Status::kIoError;
       }
       cluster = next.value();
     }
@@ -465,28 +515,16 @@ Status IterateDirectory(Node* directory, uint32_t index, DirEntry& entry,
   return Status::kOk;
 }
 
-}  // namespace
-
-Status Mount(const BlockDevice& device, Node** root_out) noexcept {
-  if (root_out == nullptr) {
-    return Status::kInvalidArg;
-  }
-  *root_out = nullptr;
-  if (device.read == nullptr) {
-    return Status::kInvalidArg;
-  }
-  if (device.sector_count == 0) {
-    return Status::kInvalidArg;
-  }
-
+// Reads and validates the boot sector. The caller sets g_volume.device
+// first because ReadSectors is volume based.
+[[nodiscard]] Result<BootInfo> ParseBootSector() noexcept {
   uint8_t boot_sector[kSectorSize];
-  g_volume.device = device;
-  Status status = ReadSectors(0, boot_sector, 1);
+  const Status status = ReadSectors(0, boot_sector, 1);
   if (IsErr(status)) {
-    return status;
+    return Result<BootInfo>::Err(status);
   }
   if (boot_sector[510] != 0x55U || boot_sector[511] != 0xAAU) {
-    return Status::kNoDevice;
+    return Result<BootInfo>::Err(Status::kNoDevice);
   }
 
   const uint32_t bytes_per_sector = static_cast<uint32_t>(boot_sector[11]) |
@@ -509,40 +547,74 @@ Status Mount(const BlockDevice& device, Node** root_out) noexcept {
                                  (static_cast<uint32_t>(boot_sector[35]) << 24U);
 
   if (bytes_per_sector != kSectorSize) {
-    return Status::kUnsupported;
+    return Result<BootInfo>::Err(Status::kUnsupported);
   }
-  if (sectors_per_cluster == 0U || (sectors_per_cluster & (sectors_per_cluster - 1U)) != 0U) {
-    return Status::kInvalidArg;
+  if (sectors_per_cluster == 0U ||
+      (sectors_per_cluster & (sectors_per_cluster - 1U)) != 0U) {
+    return Result<BootInfo>::Err(Status::kInvalidArg);
   }
   if (reserved_sectors == 0U || num_fats == 0U || fat_sectors == 0U) {
-    return Status::kInvalidArg;
+    return Result<BootInfo>::Err(Status::kInvalidArg);
   }
   if (root_cluster < 2U) {
-    return Status::kInvalidArg;
+    return Result<BootInfo>::Err(Status::kInvalidArg);
   }
   if (total_sectors == 0U) {
-    return Status::kInvalidArg;
+    return Result<BootInfo>::Err(Status::kInvalidArg);
   }
 
   const uint32_t cluster_bytes = sectors_per_cluster * kSectorSize;
   if (cluster_bytes > kMaxClusterBytes) {
-    return Status::kUnsupported;
+    return Result<BootInfo>::Err(Status::kUnsupported);
   }
   const uint32_t data_start = reserved_sectors + (num_fats * fat_sectors);
   if (data_start >= total_sectors) {
+    return Result<BootInfo>::Err(Status::kInvalidArg);
+  }
+
+  BootInfo info{};
+  info.sectors_per_cluster = sectors_per_cluster;
+  info.cluster_bytes = cluster_bytes;
+  info.reserved_sectors = reserved_sectors;
+  info.fat_sectors = fat_sectors;
+  info.num_fats = num_fats;
+  info.root_cluster = root_cluster;
+  info.data_start = data_start;
+  info.total_clusters = (total_sectors - data_start) / sectors_per_cluster;
+  return Result<BootInfo>::Ok(info);
+}
+
+}  // namespace
+
+Status Mount(const BlockDevice& device, Node** root_out) noexcept {
+  if (root_out == nullptr) {
+    return Status::kInvalidArg;
+  }
+  *root_out = nullptr;
+  if (device.read == nullptr) {
+    return Status::kInvalidArg;
+  }
+  if (device.sector_count == 0) {
     return Status::kInvalidArg;
   }
 
-  g_volume.sectors_per_cluster = sectors_per_cluster;
-  g_volume.cluster_bytes = cluster_bytes;
-  g_volume.reserved_sectors = reserved_sectors;
-  g_volume.fat_sectors = fat_sectors;
-  g_volume.num_fats = num_fats;
-  g_volume.root_cluster = root_cluster;
-  g_volume.data_start = data_start;
-  g_volume.total_clusters = (total_sectors - data_start) / sectors_per_cluster;
+  g_volume.device = device;
+  const Result<BootInfo> parsed = ParseBootSector();
+  if (parsed.is_err()) {
+    return parsed.status();
+  }
+  const BootInfo& boot = parsed.value();
 
-  const Result<void*> buffer = mem::HeapAlloc(cluster_bytes);
+  g_volume.sectors_per_cluster = boot.sectors_per_cluster;
+  g_volume.cluster_bytes = boot.cluster_bytes;
+  g_volume.reserved_sectors = boot.reserved_sectors;
+  g_volume.fat_sectors = boot.fat_sectors;
+  g_volume.num_fats = boot.num_fats;
+  g_volume.root_cluster = boot.root_cluster;
+  g_volume.data_start = boot.data_start;
+  g_volume.total_clusters = boot.total_clusters;
+
+  const Result<void*> buffer = mem::HeapAlloc(boot.cluster_bytes);
   if (buffer.is_err()) {
     return buffer.status();
   }
@@ -557,7 +629,7 @@ Status Mount(const BlockDevice& device, Node** root_out) noexcept {
   root->node.type = NodeType::kDirectory;
   root->node.size = 0;
   root->node.ops = &kDirectoryOps;
-  root->first_cluster = root_cluster;
+  root->first_cluster = boot.root_cluster;
 
   *root_out = &root->node;
   return Status::kOk;

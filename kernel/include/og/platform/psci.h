@@ -16,5 +16,10 @@ namespace og::psci {
                                      uint64_t context) noexcept;
 
 [[nodiscard]] uint32_t Version() noexcept;
+[[nodiscard]] bool Ready() noexcept;
+
+// These do not return when the platform accepts them.
+[[nodiscard]] Status SystemOff() noexcept;
+[[nodiscard]] Status SystemReset() noexcept;
 
 }  // namespace og::psci

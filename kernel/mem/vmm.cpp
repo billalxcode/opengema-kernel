@@ -7,10 +7,14 @@
 #include "og/arch/mmu.h"
 #include "og/arch/tlb.h"
 #include "og/mem/pmm.h"
+#include "og/mem/vmm_internal.h"
 
 namespace og::mem {
 
 namespace {
+
+using detail::Index;
+using detail::kTableEntries;
 
 using arch::aarch64::BlockDescriptor;
 using arch::aarch64::DescriptorAddress;
@@ -23,7 +27,6 @@ using arch::aarch64::MemoryKind;
 using arch::aarch64::PageDescriptor;
 using arch::aarch64::TableDescriptor;
 
-constexpr uint64_t kTableEntries = 512;
 constexpr uint32_t kUserSpaceL0Index =
   static_cast<uint32_t>(kUserSpaceBase >> 39U);
 constexpr uint32_t kMaxCpus = 4;
@@ -55,11 +58,6 @@ void DropUserRegion(AddressSpace& space, uint32_t index) noexcept {
   if (space.region_count > 0U) {
     --space.region_count;
   }
-}
-
-[[nodiscard]] uint64_t Index(uint64_t virtual_address, unsigned level) noexcept {
-  const unsigned shift = 39U - (level * 9U);
-  return (virtual_address >> shift) & (kTableEntries - 1U);
 }
 
 [[nodiscard]] Result<uint64_t*> NextTable(uint64_t* table, uint64_t index) noexcept {
@@ -248,38 +246,23 @@ void DropUserRegion(AddressSpace& space, uint32_t index) noexcept {
   return Status::kOk;
 }
 
-[[nodiscard]] Result<uint64_t> TranslateInRoot(uint64_t* root,
-                                               uint64_t virtual_address) noexcept {
-  if (root == nullptr) {
-    return Result<uint64_t>::Err(Status::kNotInit);
-  }
+}  // namespace
 
-  uint64_t* table = root;
-  for (unsigned level = 0; level < 3; ++level) {
-    const uint64_t descriptor = table[Index(virtual_address, level)];
-    if (!DescriptorValid(descriptor)) {
-      return Result<uint64_t>::Err(Status::kNotFound);
-    }
-    if (level >= 1U && DescriptorIsBlock(descriptor)) {
-      const uint64_t block = (level == 1U) ? kBlockSize1G : kBlockSize2M;
-      return Result<uint64_t>::Ok(DescriptorAddress(descriptor) |
-                                  (virtual_address & (block - 1U)));
-    }
-    if (!DescriptorIsTable(descriptor)) {
-      return Result<uint64_t>::Err(Status::kNotFound);
-    }
-    table = reinterpret_cast<uint64_t*>(DescriptorAddress(descriptor));
-  }
+namespace detail {
 
-  const uint64_t descriptor = table[Index(virtual_address, 3)];
-  if (!DescriptorValid(descriptor)) {
-    return Result<uint64_t>::Err(Status::kNotFound);
-  }
-  return Result<uint64_t>::Ok(DescriptorAddress(descriptor) |
-                              (virtual_address & (kPageSize - 1U)));
+uint64_t* KernelRoot() noexcept {
+  return g_root;
 }
 
-}  // namespace
+uint32_t UserSpaceL0Index() noexcept {
+  return kUserSpaceL0Index;
+}
+
+uint32_t AllocateAsid() noexcept {
+  return __atomic_fetch_add(&g_next_asid, 1U, __ATOMIC_RELAXED);
+}
+
+}  // namespace detail
 
 Status VmmInit(const BootInfo& info) noexcept {
   if (g_root != nullptr) {
@@ -418,7 +401,8 @@ Status VmmProtectRange(uint64_t base, uint64_t size, bool executable,
   return Status::kOk;
 }
 
-Status VmmMapDevice(uint64_t base, uint64_t size) noexcept {  if (g_root == nullptr) {
+Status VmmMapDevice(uint64_t base, uint64_t size) noexcept {
+  if (g_root == nullptr) {
     return Status::kNotInit;
   }
   if (size == 0) {
@@ -459,56 +443,6 @@ Status VmmMapDevice(uint64_t base, uint64_t size) noexcept {  if (g_root == null
     }
   }
   return Status::kOk;
-}
-
-namespace {
-
-[[nodiscard]] PageAttributes DecodeAttributes(uint64_t descriptor) noexcept {
-  PageAttributes attributes{};
-  attributes.executable_el1 = (descriptor & arch::aarch64::kPxn) == 0;
-  attributes.executable_el0 = (descriptor & arch::aarch64::kUxn) == 0;
-  const uint64_t access = descriptor & (3ULL << 6U);
-  attributes.writable = access != arch::aarch64::kApEl1Ro;
-  attributes.user = access == arch::aarch64::kApUserRw;
-  return attributes;
-}
-
-}  // namespace
-
-Result<PageAttributes> VmmQueryAttributes(uint64_t virtual_address) noexcept {
-  if (g_root == nullptr) {
-    return Result<PageAttributes>::Err(Status::kNotInit);
-  }
-
-  uint64_t* table = g_root;
-  for (unsigned level = 0; level < 3; ++level) {
-    const uint64_t descriptor = table[Index(virtual_address, level)];
-    if (!DescriptorValid(descriptor)) {
-      return Result<PageAttributes>::Err(Status::kNotFound);
-    }
-    if (level >= 1U && DescriptorIsBlock(descriptor)) {
-      return Result<PageAttributes>::Ok(DecodeAttributes(descriptor));
-    }
-    if (!DescriptorIsTable(descriptor)) {
-      return Result<PageAttributes>::Err(Status::kNotFound);
-    }
-    table = reinterpret_cast<uint64_t*>(DescriptorAddress(descriptor));
-  }
-
-  const uint64_t descriptor = table[Index(virtual_address, 3)];
-  if (!DescriptorValid(descriptor)) {
-    return Result<PageAttributes>::Err(Status::kNotFound);
-  }
-  return Result<PageAttributes>::Ok(DecodeAttributes(descriptor));
-}
-
-Result<uint64_t> VmmTranslate(uint64_t virtual_address) noexcept {
-  return TranslateInRoot(g_root, virtual_address);
-}
-
-Result<uint64_t> VmmTranslateIn(const AddressSpace& space,
-                                uint64_t virtual_address) noexcept {
-  return TranslateInRoot(reinterpret_cast<uint64_t*>(space.root), virtual_address);
 }
 
 Status VmmMapUser(AddressSpace& space, uint64_t virtual_address, uint64_t size,
@@ -623,148 +557,12 @@ Status VmmUnmapUser(AddressSpace& space, uint64_t virtual_address,
   return Status::kOk;
 }
 
-bool VmmUserContains(const AddressSpace& space, uint64_t user_address,
-                     uint64_t size) noexcept {
-  if (size == 0) {
-    return false;
-  }
-  const uint64_t end = user_address + size;
-  if (end < user_address) {
-    return false;
-  }
-  for (uint32_t index = 0; index < space.region_count; ++index) {
-    const UserRegion& region = space.regions[index];
-    const uint64_t region_end = region.base + region.size;
-    if (user_address >= region.base && end <= region_end) {
-      return true;
-    }
-  }
-  return false;
-}
-
-[[nodiscard]] Status CopyUser(const AddressSpace& space, uint64_t user_address,
-                              void* kernel_address, uint64_t size,
-                              bool to_user) noexcept {
-  uint64_t offset = 0;
-  while (offset < size) {
-    const uint64_t current = user_address + offset;
-    const Result<uint64_t> physical = VmmTranslateIn(space, current);
-    if (physical.is_err()) {
-      return physical.status();
-    }
-    const uint64_t page_remaining = kPageSize - (current % kPageSize);
-    const uint64_t chunk =
-      (size - offset) < page_remaining ? (size - offset) : page_remaining;
-    auto* kernel = static_cast<uint8_t*>(kernel_address) + offset;
-    auto* device = reinterpret_cast<uint8_t*>(physical.value());
-    if (to_user) {
-      mem::Copy(device, kernel, chunk);
-    } else {
-      mem::Copy(kernel, device, chunk);
-    }
-    offset += chunk;
-  }
-  return Status::kOk;
-}
-
-Status VmmCopyIn(const AddressSpace& space, uint64_t user_address,
-                 void* destination, uint64_t size) noexcept {
-  if (destination == nullptr) {
-    return Status::kInvalidArg;
-  }
-  if (!VmmUserContains(space, user_address, size)) {
-    return Status::kInvalidArg;
-  }
-  return CopyUser(space, user_address, destination, size, false);
-}
-
-Status VmmCopyOut(const AddressSpace& space, uint64_t user_address,
-                  const void* source, uint64_t size) noexcept {
-  if (source == nullptr) {
-    return Status::kInvalidArg;
-  }
-  if (!VmmUserContains(space, user_address, size)) {
-    return Status::kInvalidArg;
-  }
-  return CopyUser(space, user_address, const_cast<void*>(source), size, true);
-}
-
 bool VmmReady() noexcept {
   return g_root != nullptr;
 }
 
 uint64_t VmmRootAddress() noexcept {
   return reinterpret_cast<uint64_t>(g_root);
-}
-
-Status AddressSpaceInit(AddressSpace& space) noexcept {
-  if (g_root == nullptr) {
-    return Status::kNotInit;
-  }
-  if (space.root != 0) {
-    return Status::kExists;
-  }
-  const uint32_t asid = __atomic_fetch_add(&g_next_asid, 1U, __ATOMIC_RELAXED);
-  if (asid == 0U || asid > 255U) {
-    return Status::kNoMem;
-  }
-
-  const Result<uint64_t> root = PmmAllocPage();
-  if (root.is_err()) {
-    return root.status();
-  }
-  mem::Copy(reinterpret_cast<void*>(root.value()), g_root, kPageSize);
-  auto* table = reinterpret_cast<uint64_t*>(root.value());
-  table[kUserSpaceL0Index] = 0;
-  arch::aarch64::CleanInvalidateDcacheRange(root.value(), root.value() + kPageSize);
-
-  mem::Zero(space.regions, sizeof(space.regions));
-  space.root = root.value();
-  space.mmap_next = kUserSpaceBase + 0x1000000ULL;
-  space.asid = static_cast<uint16_t>(asid);
-  space.region_count = 0;
-  return Status::kOk;
-}
-
-Status AddressSpaceDestroy(AddressSpace& space) noexcept {
-  if (space.root == 0) {
-    return Status::kNotInit;
-  }
-
-  auto* level0 = reinterpret_cast<uint64_t*>(space.root);
-  const uint64_t level1_descriptor = level0[kUserSpaceL0Index];
-  if (DescriptorValid(level1_descriptor) && DescriptorIsTable(level1_descriptor)) {
-    auto* level1 = reinterpret_cast<uint64_t*>(DescriptorAddress(level1_descriptor));
-    for (uint64_t index1 = 0; index1 < kTableEntries; ++index1) {
-      const uint64_t level2_descriptor = level1[index1];
-      if (!DescriptorValid(level2_descriptor) || !DescriptorIsTable(level2_descriptor)) {
-        continue;
-      }
-      auto* level2 = reinterpret_cast<uint64_t*>(DescriptorAddress(level2_descriptor));
-      for (uint64_t index2 = 0; index2 < kTableEntries; ++index2) {
-        const uint64_t level3_descriptor = level2[index2];
-        if (!DescriptorValid(level3_descriptor) || !DescriptorIsTable(level3_descriptor)) {
-          continue;
-        }
-        auto* level3 = reinterpret_cast<uint64_t*>(DescriptorAddress(level3_descriptor));
-        for (uint64_t index3 = 0; index3 < kTableEntries; ++index3) {
-          const uint64_t page = level3[index3];
-          if (DescriptorValid(page)) {
-            (void)PmmFreePage(DescriptorAddress(page));
-          }
-        }
-        (void)PmmFreePage(reinterpret_cast<uint64_t>(level3));
-      }
-      (void)PmmFreePage(reinterpret_cast<uint64_t>(level2));
-    }
-    (void)PmmFreePage(reinterpret_cast<uint64_t>(level1));
-    level0[kUserSpaceL0Index] = 0;
-  }
-
-  (void)PmmFreePage(space.root);
-  mem::Zero(&space, sizeof(space));
-  arch::aarch64::InvalidateTlbAllLocal();
-  return Status::kOk;
 }
 
 void AddressSpaceActivate(const AddressSpace* space) noexcept {

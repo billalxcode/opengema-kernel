@@ -2,7 +2,8 @@
   "configurations": [
     {
       "name": "opengema-aarch64-uefi",
-      "compilerPath": "/usr/bin/clang++",
+      "compilerPath": "/opt/homebrew/opt/llvm/bin/clang++",
+      "compileCommands": "${workspaceFolder}/build/compile_commands.json",
       "compilerArgs": [
         "--target=aarch64-unknown-windows",
         "-ffreestanding",
@@ -21,21 +22,25 @@
         "${workspaceFolder}/packages/libkgema/include",
         "${workspaceFolder}/packages/libgemapi/include",
         "${workspaceFolder}/packages/libgsl/include",
-        "${workspaceFolder}/packages/ld-gem/include"
+        "${workspaceFolder}/packages/ld-gem/include",
+        "${workspaceFolder}/packages/gemabox/include"
       ],
       "defines": [],
       "cStandard": "c17",
       "cppStandard": "c++20",
-      "intelliSenseMode": "linux-clang-arm64",
+      "intelliSenseMode": "macos-clang-arm64",
       "browse": {
         "path": [
           "${workspaceFolder}/libs/cxx",
+          "${workspaceFolder}/libs/core",
           "${workspaceFolder}/libs/efi",
+          "${workspaceFolder}/kernel/include",
           "${workspaceFolder}/kernel",
           "${workspaceFolder}/packages/libkgema",
           "${workspaceFolder}/packages/libgemapi",
           "${workspaceFolder}/packages/libgsl",
-          "${workspaceFolder}/packages/ld-gem"
+          "${workspaceFolder}/packages/ld-gem",
+          "${workspaceFolder}/packages/gemabox"
         ],
         "limitSymbolsToIncludedHeaders": true
       }

@@ -75,6 +75,7 @@ set(OG_KGEMA_SOURCES
   packages/libkgema/src/file.cpp
   packages/libkgema/src/memory.cpp
   packages/libkgema/src/process.cpp
+  packages/libkgema/src/system.cpp
   packages/libkgema/src/runtime.cpp)
 
 set(OG_GEMAPI_SOURCES
@@ -82,7 +83,8 @@ set(OG_GEMAPI_SOURCES
   packages/libgemapi/src/io.cpp
   packages/libgemapi/src/fs.cpp
   packages/libgemapi/src/memory.cpp
-  packages/libgemapi/src/process.cpp)
+  packages/libgemapi/src/process.cpp
+  packages/libgemapi/src/system.cpp)
 
 add_library(og_kgema_user OBJECT ${OG_KGEMA_SOURCES})
 target_include_directories(og_kgema_user PRIVATE ${OG_KGEMA_INCLUDE})
@@ -167,8 +169,13 @@ add_custom_command(
 add_custom_target(og_shared_libraries ALL
   DEPENDS ${OG_KGEMA_SO} ${OG_GEMAPI_SO})
 
-add_library(og_gemabox_user OBJECT packages/gemabox/main.cpp)
-target_include_directories(og_gemabox_user PRIVATE ${OG_GEMAPI_INCLUDE})
+add_library(og_gemabox_user OBJECT
+  packages/gemabox/main.cpp
+  packages/gemabox/shell.cpp
+  packages/gemabox/writer.cpp)
+target_include_directories(og_gemabox_user PRIVATE
+  ${CMAKE_SOURCE_DIR}/packages/gemabox/include
+  ${OG_GEMAPI_INCLUDE})
 target_compile_options(og_gemabox_user PRIVATE ${OG_USER_CXX_FLAGS})
 
 set(OG_GEMABOX_ELF ${CMAKE_BINARY_DIR}/gemabox.elf)
@@ -220,8 +227,11 @@ add_library(og_ldgem_user OBJECT
   packages/ld-gem/src/elf.cpp
   packages/ld-gem/src/image.cpp
   packages/ld-gem/src/linker.cpp
+  packages/ld-gem/src/linker_dynamic.cpp
+  packages/ld-gem/src/linker_reloc.cpp
   packages/ld-gem/src/main.cpp
-  packages/ld-gem/src/start.cpp)
+  packages/ld-gem/src/start.cpp
+  packages/ld-gem/src/text.cpp)
 target_include_directories(og_ldgem_user PRIVATE
   ${OG_LDGEM_INCLUDE}
   ${OG_KGEMA_INCLUDE})
@@ -413,17 +423,28 @@ og_add_module(og_io
     kernel/io/mmio.cpp
     kernel/io/console.cpp
     kernel/io/print.cpp
-    kernel/io/framebuffer.cpp
+    kernel/io/tty.cpp
+    kernel/io/font.cpp
+    kernel/io/framebuffer_console.cpp
+    kernel/io/framebuffer_draw.cpp
   DEPS og_arch og_inc_kernel)
 
 og_add_module(og_core
-  SOURCES kernel/core/log.cpp kernel/core/panic.cpp kernel/core/stack_guard.cpp
+  SOURCES kernel/core/log.cpp kernel/core/panic.cpp
+          kernel/core/power.cpp kernel/core/stack_guard.cpp
   DEPS og_io og_inc_kernel)
+
+og_add_module(og_acpi
+  SOURCES kernel/acpi/acpi.cpp
+  DEPS og_lib_core og_inc_kernel)
 
 og_add_module(og_mem
   SOURCES
     kernel/mem/pmm.cpp
     kernel/mem/vmm.cpp
+    kernel/mem/vmm_user.cpp
+    kernel/mem/vmm_query.cpp
+    kernel/mem/vmm_space.cpp
     kernel/mem/heap.cpp
     kernel/mem/self_test.cpp
   DEPS og_core og_inc_kernel)
@@ -447,36 +468,45 @@ og_add_module(og_time
 og_add_module(og_drivers
   SOURCES
     kernel/drivers/device.cpp
+    kernel/drivers/input/hid.cpp
     kernel/drivers/uart/pl011.cpp
     kernel/drivers/irq/gicv3.cpp
     kernel/drivers/rtc/pl031.cpp
     kernel/drivers/pci/ecam.cpp
     kernel/drivers/virtio/virtio_common.cpp
+    kernel/drivers/virtio/virtio_queue.cpp
     kernel/drivers/virtio/virtio_blk.cpp
     kernel/drivers/virtio/virtio_gpu.cpp
+    kernel/drivers/virtio/virtio_input.cpp
   DEPS og_events og_time og_dma og_core og_inc_kernel)
 
 og_add_module(og_fs
   SOURCES
     kernel/fs/vfs.cpp
+    kernel/fs/fd_table.cpp
     kernel/fs/devfs.cpp
     kernel/fs/ramfs.cpp
     kernel/fs/procfs.cpp
     kernel/fs/partition.cpp
     kernel/fs/fat32.cpp
     kernel/fs/gslfs.cpp
-  DEPS og_sched og_mem og_core og_inc_kernel)
+  DEPS og_sched og_mem og_core og_acpi og_inc_kernel)
 
 og_add_module(og_sched
-  SOURCES kernel/sched/scheduler.cpp
+  SOURCES kernel/sched/scheduler.cpp kernel/sched/run_queue.cpp
+          kernel/sched/thread.cpp kernel/sched/wait_queue.cpp
   DEPS og_events og_time og_mem og_core og_inc_kernel)
 
 og_add_module(og_process
   SOURCES kernel/process/process.cpp kernel/process/elf.cpp
+          kernel/process/loader.cpp
   DEPS og_fs og_sched og_mem og_core og_inc_kernel)
 
 og_add_module(og_syscall
-  SOURCES kernel/syscall/syscall.cpp
+  SOURCES kernel/syscall/syscall.cpp kernel/syscall/io.cpp
+          kernel/syscall/fs.cpp kernel/syscall/process.cpp
+          kernel/syscall/memory.cpp kernel/syscall/helpers.cpp
+          kernel/syscall/system.cpp
   DEPS og_process og_sched og_events og_mem og_core og_inc_kernel)
 
 og_add_module(og_sync
@@ -487,10 +517,13 @@ og_add_module(og_platform
   SOURCES
     kernel/platform/qemu_virt.cpp
     kernel/platform/fdt.cpp
+    kernel/platform/fdt_state.cpp
+    kernel/platform/fdt_property.cpp
     kernel/platform/psci.cpp
+    kernel/platform/power.cpp
     kernel/platform/smp.cpp
     kernel/platform/secondary.S
-  DEPS og_drivers og_events og_time og_sched og_mem og_core og_inc_kernel)
+  DEPS og_drivers og_events og_time og_sched og_mem og_core og_acpi og_inc_kernel)
 
 og_add_module(og_kernel
   SOURCES
@@ -523,6 +556,7 @@ set(OG_IMAGE_OBJECTS
   $<TARGET_OBJECTS:og_sync>
   $<TARGET_OBJECTS:og_syscall>
   $<TARGET_OBJECTS:og_platform>
+  $<TARGET_OBJECTS:og_acpi>
   $<TARGET_OBJECTS:og_time>
   $<TARGET_OBJECTS:og_dma>
   $<TARGET_OBJECTS:og_events>
@@ -543,7 +577,7 @@ add_custom_command(
     /out:${CMAKE_BINARY_DIR}/BOOTAA64.EFI
     ${OG_IMAGE_OBJECTS}
   COMMAND_EXPAND_LISTS
-  DEPENDS og_boot og_kernel og_drivers og_fs og_sched og_process og_sync og_syscall og_platform og_time og_dma og_events og_mem og_core og_io og_arch og_lib_core
+  DEPENDS og_boot og_kernel og_drivers og_fs og_sched og_process og_sync og_syscall og_platform og_acpi og_time og_dma og_events og_mem og_core og_io og_arch og_lib_core
   COMMENT "lld-link BOOTAA64.EFI"
 )
 

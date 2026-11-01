@@ -1,4 +1,4 @@
-#include "boot.h"
+#include "og/boot/init.h"
 
 #include "gsl/layout.h"
 #include "memory.h"
@@ -35,90 +35,111 @@ Status BlockReadAdapter(void* context, uint64_t sector,
   return static_cast<drivers::virtio::Blk*>(context)->read(sector, buffer);
 }
 
-Status SetupWritableFs() noexcept {
+struct WritableTree {
+  fs::Node* etc;
+  fs::Node* users;
+  fs::Node* var;
+  fs::Node* tmp;
+};
+
+Status CreateDirChecked(fs::Node* parent, const char* name) noexcept {
+  const Result<fs::Node*> dir = fs::ramfs::CreateDir(parent, name);
+  return dir.is_err() ? dir.status() : Status::kOk;
+}
+
+Result<WritableTree> CreateWritableTree() noexcept {
   const Result<fs::Node*> ram = fs::ramfs::Create();
   if (ram.is_err()) {
-    return ram.status();
+    return Result<WritableTree>::Err(ram.status());
   }
   const Result<fs::Node*> etc = fs::ramfs::CreateDir(ram.value(), "etc");
   if (etc.is_err()) {
-    return etc.status();
+    return Result<WritableTree>::Err(etc.status());
   }
   const Result<fs::Node*> users = fs::ramfs::CreateDir(ram.value(), "users");
   if (users.is_err()) {
-    return users.status();
+    return Result<WritableTree>::Err(users.status());
   }
   const Result<fs::Node*> var = fs::ramfs::CreateDir(ram.value(), "var");
   if (var.is_err()) {
-    return var.status();
+    return Result<WritableTree>::Err(var.status());
   }
   const Result<fs::Node*> tmp = fs::ramfs::CreateDir(ram.value(), "tmp");
   if (tmp.is_err()) {
-    return tmp.status();
+    return Result<WritableTree>::Err(tmp.status());
   }
 
-  const Result<fs::Node*> demo = fs::ramfs::CreateDir(users.value(), "demo");
-  if (demo.is_err()) {
-    return demo.status();
-  }
-  if (fs::ramfs::CreateDir(var.value(), "log").is_err() ||
-      fs::ramfs::CreateDir(var.value(), "run").is_err() ||
-      fs::ramfs::CreateDir(var.value(), "cache").is_err() ||
-      fs::ramfs::CreateDir(var.value(), "spool").is_err()) {
-    return Status::kNoMem;
+  if (IsErr(CreateDirChecked(users.value(), "demo")) ||
+      IsErr(CreateDirChecked(var.value(), "log")) ||
+      IsErr(CreateDirChecked(var.value(), "run")) ||
+      IsErr(CreateDirChecked(var.value(), "cache")) ||
+      IsErr(CreateDirChecked(var.value(), "spool"))) {
+    return Result<WritableTree>::Err(Status::kNoMem);
   }
   if (fs::ramfs::CreateFile(tmp.value(), "hello", nullptr, 0).is_err() ||
       fs::ramfs::CreateFile(tmp.value(), "writer", nullptr, 0).is_err()) {
-    return Status::kNoMem;
+    return Result<WritableTree>::Err(Status::kNoMem);
   }
 
-  Status status = fs::FsMount(gsl::layout::kEtc, etc.value());
-  if (IsErr(status)) {
-    return status;
-  }
-  status = fs::FsMount(gsl::layout::kUsers, users.value());
-  if (IsErr(status)) {
-    return status;
-  }
-  status = fs::FsMount(gsl::layout::kVar, var.value());
-  if (IsErr(status)) {
-    return status;
-  }
-  status = fs::FsMount(gsl::layout::kTmp, tmp.value());
-  if (IsErr(status)) {
-    return status;
-  }
+  WritableTree tree{};
+  tree.etc = etc.value();
+  tree.users = users.value();
+  tree.var = var.value();
+  tree.tmp = tmp.value();
+  return Result<WritableTree>::Ok(tree);
+}
 
+Status MountWritableTree(const WritableTree& tree) noexcept {
+  Status status = fs::FsMount(gsl::layout::kEtc, tree.etc);
+  if (IsErr(status)) {
+    return status;
+  }
+  status = fs::FsMount(gsl::layout::kUsers, tree.users);
+  if (IsErr(status)) {
+    return status;
+  }
+  status = fs::FsMount(gsl::layout::kVar, tree.var);
+  if (IsErr(status)) {
+    return status;
+  }
+  return fs::FsMount(gsl::layout::kTmp, tree.tmp);
+}
+
+Status SeedEtcConfig(fs::Node* etc) noexcept {
   const Result<uint32_t> source =
     fs::FsOpen(g_boot_files, gsl::layout::kConfigGsl);
-  if (source.is_ok()) {
-    char content[256];
-    uint64_t read = 0;
-    status = fs::FsRead(
-      g_boot_files, source.value(),
-      std::span<uint8_t>(reinterpret_cast<uint8_t*>(content), sizeof(content)),
-      read);
-    (void)fs::FsClose(g_boot_files, source.value());
-    if (IsErr(status)) {
-      return status;
-    }
-    const Result<fs::Node*> copy =
-      fs::ramfs::CreateFile(etc.value(), "gsl.conf", content, read);
-    if (copy.is_err()) {
-      return copy.status();
-    }
-    Log(LogLevel::kInfo, "fs: etc defaults copied\n");
-  } else {
+  if (source.is_err()) {
     Log(LogLevel::kWarn, "fs: gsl.conf default missing\n");
+    return Status::kOk;
   }
 
+  char content[256];
+  uint64_t read = 0;
+  Status status = fs::FsRead(
+    g_boot_files, source.value(),
+    std::span<uint8_t>(reinterpret_cast<uint8_t*>(content), sizeof(content)),
+    read);
+  (void)fs::FsClose(g_boot_files, source.value());
+  if (IsErr(status)) {
+    return status;
+  }
+  const Result<fs::Node*> copy =
+    fs::ramfs::CreateFile(etc, "gsl.conf", content, read);
+  if (copy.is_err()) {
+    return copy.status();
+  }
+  Log(LogLevel::kInfo, "fs: etc defaults copied\n");
+  return Status::kOk;
+}
+
+Status VerifyTmpWrite() noexcept {
   const Result<uint32_t> hello_file = fs::FsOpen(g_boot_files, kHelloPath, 1U);
   if (hello_file.is_err()) {
     return hello_file.status();
   }
   constexpr char kHello[] = "ramfs write ok\n";
   uint64_t written = 0;
-  status = fs::FsWrite(
+  Status status = fs::FsWrite(
     g_boot_files, hello_file.value(),
     std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(kHello),
                              sizeof(kHello) - 1U),
@@ -143,6 +164,26 @@ Status SetupWritableFs() noexcept {
     return Status::kIoError;
   }
   Log(LogLevel::kInfo, "fs: tmpfs write ok\n");
+  return Status::kOk;
+}
+
+Status SetupWritableFs() noexcept {
+  const Result<WritableTree> tree = CreateWritableTree();
+  if (tree.is_err()) {
+    return tree.status();
+  }
+  Status status = MountWritableTree(tree.value());
+  if (IsErr(status)) {
+    return status;
+  }
+  status = SeedEtcConfig(tree.value().etc);
+  if (IsErr(status)) {
+    return status;
+  }
+  status = VerifyTmpWrite();
+  if (IsErr(status)) {
+    return status;
+  }
   Log(LogLevel::kInfo, "fs: writable mounts ok\n");
   return Status::kOk;
 }
@@ -217,134 +258,180 @@ Status MountProcfs() noexcept {
     return read_status;
   }
   text[read] = '\0';
-  (void)PrintText("proc: uptime ");
-  (void)PrintText(text);
+  Log(LogLevel::kInfo, "proc: uptime ");
+  Log(LogLevel::kInfo, text);
   return Status::kOk;
 }
 
-}  // namespace
-
-void InitFilesystem() noexcept {
-  const Result<drivers::Device> found = drivers::FindDeviceByName("virtio-blk0");
+[[nodiscard]] Result<drivers::virtio::Blk*> FindBlockDevice() noexcept {
+  const Result<drivers::Device> found =
+    drivers::FindDeviceByName("virtio-blk0");
   if (found.is_err() || found.value().driver_data == nullptr) {
     Log(LogLevel::kWarn, "fs: no block device\n");
-    return;
+    return Result<drivers::virtio::Blk*>::Err(Status::kNoDevice);
   }
   auto* block = static_cast<drivers::virtio::Blk*>(found.value().driver_data);
   if (!block->is_ready()) {
     Log(LogLevel::kWarn, "fs: block device not ready\n");
-    return;
+    return Result<drivers::virtio::Blk*>::Err(Status::kNotInit);
   }
+  return Result<drivers::virtio::Blk*>::Ok(block);
+}
 
+[[nodiscard]] Status InitFileTables() noexcept {
   Status status = fs::FsInit();
   if (IsErr(status)) {
     Log(LogLevel::kError, "fs: init failed\n");
-    return;
+    return status;
   }
   status = fs::FileTableInit(g_boot_files);
   if (IsErr(status)) {
     Log(LogLevel::kError, "fs: boot file table failed\n");
-    return;
+    return status;
   }
+  return Status::kOk;
+}
 
-  const fs::BlockDevice disk{&BlockReadAdapter, block, block->capacity_sectors(), 0};
-
+[[nodiscard]] Status MountSystemVolume(const fs::BlockDevice& disk) noexcept {
   const Result<fs::Partition> system_partition =
     fs::FindPartitionByMagic(disk, fs::gslfs::kMagic,
                              static_cast<uint32_t>(sizeof(fs::gslfs::kMagic)));
   if (system_partition.is_err()) {
     Log(LogLevel::kError, "fs: no gslfs partition found\n");
-    return;
+    return system_partition.status();
   }
   const fs::BlockDevice system_device{
-    &BlockReadAdapter, block, system_partition.value().sector_count,
+    &BlockReadAdapter, disk.context, system_partition.value().sector_count,
     system_partition.value().start_sector};
   const Result<fs::Node*> system_root = fs::gslfs::Mount(system_device);
   if (system_root.is_err()) {
     Log(LogLevel::kError, "fs: gslfs mount failed\n");
-    return;
+    return system_root.status();
   }
-  status = fs::FsMount(gsl::layout::kRoot, system_root.value());
+  const Status status = fs::FsMount(gsl::layout::kRoot, system_root.value());
   if (IsErr(status)) {
     Log(LogLevel::kError, "fs: root mount failed\n");
-    return;
+    return status;
   }
   Log(LogLevel::kInfo, "fs: gslfs mounted\n");
+  return Status::kOk;
+}
 
-  const Result<fs::Stat> library_stat =
-    fs::FsStat(gsl::layout::kLibGemapi);
+void ProbeLibrary() noexcept {
+  const Result<fs::Stat> library_stat = fs::FsStat(gsl::layout::kLibGemapi);
   if (library_stat.is_ok()) {
     LogDec(LogLevel::kInfo, "fs: libgemapi bytes", library_stat.value().size);
   } else {
     LogDec(LogLevel::kError, "fs: libgemapi stat status",
            static_cast<uint64_t>(library_stat.status()));
   }
+
   const Result<uint32_t> library_file =
     fs::FsOpen(g_boot_files, gsl::layout::kLibGemapi);
-  if (library_file.is_ok()) {
-    uint8_t magic[4] = {};
-    uint64_t read = 0;
-    status = fs::FsRead(g_boot_files, library_file.value(),
-                        std::span<uint8_t>(magic, sizeof(magic)), read);
-    if (IsOk(status) && read == sizeof(magic) && magic[0] == 0x7FU &&
-        magic[1] == 'E' && magic[2] == 'L' && magic[3] == 'F') {
-      Log(LogLevel::kInfo, "fs: library probe ok\n");
-    } else {
-      Log(LogLevel::kError, "fs: library probe failed\n");
-    }
-    (void)fs::FsClose(g_boot_files, library_file.value());
-  } else {
+  if (library_file.is_err()) {
     LogDec(LogLevel::kError, "fs: library open status",
            static_cast<uint64_t>(library_file.status()));
+    return;
   }
 
-  Result<fs::Node*> dev_root = fs::devfs::Create();
+  uint8_t magic[4] = {};
+  uint64_t read = 0;
+  const Status status = fs::FsRead(
+    g_boot_files, library_file.value(),
+    std::span<uint8_t>(magic, sizeof(magic)), read);
+  if (IsOk(status) && read == sizeof(magic) && magic[0] == 0x7FU &&
+      magic[1] == 'E' && magic[2] == 'L' && magic[3] == 'F') {
+    Log(LogLevel::kInfo, "fs: library probe ok\n");
+  } else {
+    Log(LogLevel::kError, "fs: library probe failed\n");
+  }
+  (void)fs::FsClose(g_boot_files, library_file.value());
+}
+
+[[nodiscard]] Status MountDevfs() noexcept {
+  const Result<fs::Node*> dev_root = fs::devfs::Create();
   if (dev_root.is_err()) {
     Log(LogLevel::kError, "fs: devfs create failed\n");
-    return;
+    return dev_root.status();
   }
-  status = fs::FsMount(gsl::layout::kDev, dev_root.value());
+  const Status status = fs::FsMount(gsl::layout::kDev, dev_root.value());
   if (IsErr(status)) {
     Log(LogLevel::kError, "fs: devfs mount failed\n");
-    return;
+    return status;
   }
+  return Status::kOk;
+}
 
-  const Status proc_status = MountProcfs();
-  if (IsErr(proc_status)) {
+void MountOptionalFilesystems(const fs::BlockDevice& disk) noexcept {
+  if (IsErr(MountProcfs())) {
     Log(LogLevel::kWarn, "fs: procfs setup failed\n");
   }
-  const Status writable_status = SetupWritableFs();
-  if (IsErr(writable_status)) {
+  if (IsErr(SetupWritableFs())) {
     Log(LogLevel::kWarn, "fs: writable mounts failed\n");
   }
-  const Status fat_status = MountFat32(disk);
-  if (IsErr(fat_status)) {
+  if (IsErr(MountFat32(disk))) {
     Log(LogLevel::kWarn, "fs: fat32 setup failed\n");
   }
   Log(LogLevel::kInfo, "fs: mounted gslfs, devfs, procfs, writable, fat32\n");
+}
 
-  Result<uint32_t> console = fs::FsOpen(g_boot_files, "/dev/console");
-  if (console.is_ok()) {
-    constexpr char kMessage[] = "fs: devfs console ok\n";
-    uint64_t written = 0;
-    (void)fs::FsWrite(g_boot_files, console.value(),
-                      std::span<const uint8_t>(
-                        reinterpret_cast<const uint8_t*>(kMessage), sizeof(kMessage) - 1U),
-                      written);
-    (void)fs::FsClose(g_boot_files, console.value());
-  } else {
+void ProbeConsole() noexcept {
+  const Result<uint32_t> console = fs::FsOpen(g_boot_files, "/dev/console");
+  if (console.is_err()) {
     Log(LogLevel::kError, "fs: open dev console failed\n");
+    return;
   }
+  constexpr char kMessage[] = "fs: devfs console ok\n";
+  uint64_t written = 0;
+  (void)fs::FsWrite(
+    g_boot_files, console.value(),
+    std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(kMessage),
+                             sizeof(kMessage) - 1U),
+    written);
+  (void)fs::FsClose(g_boot_files, console.value());
+}
 
+void ListRoot() noexcept {
   for (uint32_t index = 0; index < 16U; ++index) {
     fs::DirEntry entry{};
-    bool found_entry = false;
-    status = fs::FsList("/", index, entry, found_entry);
-    if (IsErr(status) || !found_entry) {
+    bool found = false;
+    const Status status = fs::FsList("/", index, entry, found);
+    if (IsErr(status) || !found) {
       break;
     }
     (void)PrintLn(entry.name);
   }
+}
+
+}  // namespace
+
+void InitFilesystem() noexcept {
+  const Result<drivers::virtio::Blk*> block = FindBlockDevice();
+  if (block.is_err()) {
+    return;
+  }
+  if (IsErr(InitFileTables())) {
+    return;
+  }
+
+  const fs::BlockDevice disk{&BlockReadAdapter, block.value(),
+                             block.value()->capacity_sectors(), 0};
+
+  if (IsErr(MountSystemVolume(disk))) {
+    return;
+  }
+
+  ProbeLibrary();
+
+  if (IsErr(MountDevfs())) {
+    return;
+  }
+
+  MountOptionalFilesystems(disk);
+
+  ProbeConsole();
+
+  ListRoot();
 }
 
 }  // namespace og::boot

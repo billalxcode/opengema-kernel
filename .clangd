@@ -3,12 +3,21 @@ CompileFlags:
   Remove:
     - -march=*
     - -mcpu=*
+    # Keep warnings visible in the editor, but do not turn compiler-version
+    # differences into hard IntelliSense errors.
+    - -Werror
   Add:
-    # GSL include roots. compile_commands.json normally provides these; the
-    # relative fallbacks assume the standard build/ directory.
+    # Fallbacks when compile_commands.json is missing or incomplete. clangd
+    # resolves these relative to the compilation database directory (build/).
+    - -I../libs/core
+    - -I../libs/cxx
+    - -I../libs/efi
+    - -I../kernel/include
+    - -I../packages/libkgema/include
     - -I../packages/libgemapi/include
     - -I../packages/libgsl/include
     - -I../packages/ld-gem/include
+    - -I../packages/gemabox/include
 
 Diagnostics:
   Suppress:
