@@ -165,7 +165,7 @@ void UserThreadEntry(void* /*argument*/) noexcept {
 }
 
 Status LoadUserProgram() noexcept {
-  const Result<fs::Stat> stat = fs::FsStat("/ram/init");
+  const Result<fs::Stat> stat = fs::FsStat("/ram/gemabox");
   if (stat.is_err()) {
     return stat.status();
   }
@@ -178,7 +178,7 @@ Status LoadUserProgram() noexcept {
   if (buffer.is_err()) {
     return buffer.status();
   }
-  const Result<uint32_t> file = fs::FsOpen("/ram/init");
+  const Result<uint32_t> file = fs::FsOpen("/ram/gemabox");
   if (file.is_err()) {
     (void)mem::HeapFree(buffer.value());
     return file.status();
@@ -225,9 +225,9 @@ Status PopulateRamfs() noexcept {
     return status;
   }
 
-  const Result<fs::Stat> stat = fs::FsStat("/INIT.BIN");
+  const Result<fs::Stat> stat = fs::FsStat("/GEMABOX.BIN");
   if (stat.is_err()) {
-    Log(LogLevel::kWarn, "fs: INIT.BIN missing\n");
+    Log(LogLevel::kWarn, "fs: GEMABOX.BIN missing\n");
     return stat.status();
   }
   const uint64_t size = stat.value().size;
@@ -239,7 +239,7 @@ Status PopulateRamfs() noexcept {
   if (buffer.is_err()) {
     return buffer.status();
   }
-  const Result<uint32_t> file = fs::FsOpen("/INIT.BIN");
+  const Result<uint32_t> file = fs::FsOpen("/GEMABOX.BIN");
   if (file.is_err()) {
     (void)mem::HeapFree(buffer.value());
     return file.status();
@@ -255,12 +255,12 @@ Status PopulateRamfs() noexcept {
   }
 
   const Result<fs::Node*> init =
-    fs::ramfs::CreateFile(g_ram_root, "init", buffer.value(), size);
+    fs::ramfs::CreateFile(g_ram_root, "gemabox", buffer.value(), size);
   (void)mem::HeapFree(buffer.value());
   if (init.is_err()) {
     return init.status();
   }
-  LogDec(LogLevel::kInfo, "fs: ramfs init bytes", size);
+  LogDec(LogLevel::kInfo, "fs: ramfs gemabox bytes", size);
 
   const Result<fs::Node*> hello = fs::ramfs::CreateFile(g_ram_root, "hello", nullptr, 0);
   if (hello.is_err()) {

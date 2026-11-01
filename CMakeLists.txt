@@ -27,24 +27,25 @@ target_include_directories(og_inc_efi INTERFACE
   ${CMAKE_SOURCE_DIR}/libs/efi)
 target_link_libraries(og_inc_efi INTERFACE og_inc_cxx)
 
-# User program: assembled, linked at its virtual address, flattened, then
-# embedded as a generated header.
-find_program(OG_USER_LD NAMES aarch64-linux-gnu-ld REQUIRED)
-find_program(OG_USER_OBJCOPY NAMES aarch64-linux-gnu-objcopy REQUIRED)
-set(OG_USER_OBJECT ${CMAKE_BINARY_DIR}/user_hello.o)
-set(OG_USER_ELF ${CMAKE_BINARY_DIR}/user_program.elf)
-set(OG_USER_BIN ${CMAKE_BINARY_DIR}/user_program.bin)
+# gemabox: the base command program for user mode. Assembled, linked at
+# its virtual address, then flattened to a raw binary for the ESP.
+find_program(OG_GEMABOX_LD NAMES aarch64-linux-gnu-ld REQUIRED)
+find_program(OG_GEMABOX_OBJCOPY NAMES aarch64-linux-gnu-objcopy REQUIRED)
+set(OG_GEMABOX_OBJECT ${CMAKE_BINARY_DIR}/gemabox.o)
+set(OG_GEMABOX_ELF ${CMAKE_BINARY_DIR}/gemabox.elf)
+set(OG_GEMABOX_BIN ${CMAKE_BINARY_DIR}/gemabox.bin)
 
 add_custom_command(
-  OUTPUT ${OG_USER_BIN}
+  OUTPUT ${OG_GEMABOX_BIN}
   COMMAND ${CMAKE_C_COMPILER} --target=aarch64-linux-gnu -ffreestanding -nostdlib
-          -c ${CMAKE_SOURCE_DIR}/user/hello.S -o ${OG_USER_OBJECT}
-  COMMAND ${OG_USER_LD} -Ttext=0x100000000 -e _start ${OG_USER_OBJECT} -o ${OG_USER_ELF}
-  COMMAND ${OG_USER_OBJCOPY} -O binary ${OG_USER_ELF} ${OG_USER_BIN}
-  DEPENDS ${CMAKE_SOURCE_DIR}/user/hello.S
-  COMMENT "build user program")
+          -c ${CMAKE_SOURCE_DIR}/pubs/gemabox/main.S -o ${OG_GEMABOX_OBJECT}
+  COMMAND ${OG_GEMABOX_LD} -Ttext=0x100000000 -e _start ${OG_GEMABOX_OBJECT}
+          -o ${OG_GEMABOX_ELF}
+  COMMAND ${OG_GEMABOX_OBJCOPY} -O binary ${OG_GEMABOX_ELF} ${OG_GEMABOX_BIN}
+  DEPENDS ${CMAKE_SOURCE_DIR}/pubs/gemabox/main.S
+  COMMENT "build gemabox")
 
-add_custom_target(og_user_program DEPENDS ${OG_USER_BIN})
+add_custom_target(og_gemabox DEPENDS ${OG_GEMABOX_BIN})
 
 # One OBJECT library per module. DEPS lists lower layers only, so the
 # link graph mirrors the architecture in docs/ROADMAP.md.
@@ -170,7 +171,7 @@ og_add_module(og_boot
     kernel/boot/uefi/efi_exit.cpp
   DEPS og_kernel og_inc_efi og_inc_kernel)
 
-add_dependencies(og_kernel og_user_program)
+add_dependencies(og_kernel og_gemabox)
 
 # Direct PE/COFF link. lld-link emits proper headers and .reloc.
 set(OG_IMAGE_OBJECTS
