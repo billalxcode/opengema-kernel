@@ -221,7 +221,8 @@ add_library(og_ldgem_user OBJECT
   packages/ld-gem/src/image.cpp
   packages/ld-gem/src/linker.cpp
   packages/ld-gem/src/main.cpp
-  packages/ld-gem/src/start.cpp)
+  packages/ld-gem/src/start.cpp
+  packages/ld-gem/src/text.cpp)
 target_include_directories(og_ldgem_user PRIVATE
   ${OG_LDGEM_INCLUDE}
   ${OG_KGEMA_INCLUDE})

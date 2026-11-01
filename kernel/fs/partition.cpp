@@ -1,5 +1,6 @@
 #include "og/fs/partition.h"
 
+#include "endian.h"
 #include "memory.h"
 
 namespace og::fs {
@@ -23,19 +24,6 @@ struct PartitionFilter {
   uint32_t magic_size;
 };
 
-[[nodiscard]] uint32_t Read32(const uint8_t* data) noexcept {
-  return static_cast<uint32_t>(data[0]) | (static_cast<uint32_t>(data[1]) << 8U) |
-         (static_cast<uint32_t>(data[2]) << 16U) | (static_cast<uint32_t>(data[3]) << 24U);
-}
-
-[[nodiscard]] uint64_t Read64(const uint8_t* data) noexcept {
-  uint64_t value = 0;
-  for (uint32_t index = 0; index < 8U; ++index) {
-    value |= static_cast<uint64_t>(data[index]) << (index * 8U);
-  }
-  return value;
-}
-
 [[nodiscard]] Result<Partition> FindFiltered(const BlockDevice& device,
                                              const PartitionFilter& filter) noexcept {
   if (device.read == nullptr) {
@@ -54,9 +42,9 @@ struct PartitionFilter {
     return Result<Partition>::Err(Status::kNoDevice);
   }
 
-  const uint64_t entries_lba = Read64(sector + 72);
-  uint32_t count = Read32(sector + 80);
-  const uint32_t entry_size = Read32(sector + 84);
+  const uint64_t entries_lba = endian::ReadLe64(sector + 72);
+  uint32_t count = endian::ReadLe32(sector + 80);
+  const uint32_t entry_size = endian::ReadLe32(sector + 84);
   if (count == 0U) {
     return Result<Partition>::Err(Status::kInvalidArg);
   }
@@ -97,8 +85,8 @@ struct PartitionFilter {
     }
 
     Partition partition{};
-    const uint64_t first_lba = Read64(entry + kStartLbaOffset);
-    const uint64_t last_lba = Read64(entry + kLastLbaOffset);
+    const uint64_t first_lba = endian::ReadLe64(entry + kStartLbaOffset);
+    const uint64_t last_lba = endian::ReadLe64(entry + kLastLbaOffset);
     if (first_lba == 0U || last_lba < first_lba) {
       continue;
     }

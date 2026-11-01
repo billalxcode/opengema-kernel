@@ -1,5 +1,6 @@
 #include "og/fs/gslfs.h"
 
+#include "endian.h"
 #include "memory.h"
 #include "og/core/log.h"
 
@@ -31,21 +32,6 @@ BlockDevice g_device{};
 GslfsNode g_nodes[kMaxNodes];
 uint32_t g_count = 0;
 bool g_ready = false;
-
-[[nodiscard]] uint32_t Read32(const uint8_t* data) noexcept {
-  return static_cast<uint32_t>(data[0]) |
-         (static_cast<uint32_t>(data[1]) << 8U) |
-         (static_cast<uint32_t>(data[2]) << 16U) |
-         (static_cast<uint32_t>(data[3]) << 24U);
-}
-
-[[nodiscard]] uint64_t Read64(const uint8_t* data) noexcept {
-  uint64_t value = 0;
-  for (uint32_t index = 0; index < 8U; ++index) {
-    value |= static_cast<uint64_t>(data[index]) << (index * 8U);
-  }
-  return value;
-}
 
 [[nodiscard]] uint32_t Crc32Update(uint32_t crc, const uint8_t* data,
                                    uint64_t size) noexcept {
@@ -262,15 +248,15 @@ Result<Node*> Mount(const BlockDevice& device) noexcept {
     return Result<Node*>::Err(Status::kNoDevice);
   }
 
-  const uint32_t version = Read32(superblock + 8);
-  const uint32_t block_size = Read32(superblock + 12);
-  const uint64_t block_count = Read64(superblock + 16);
-  const uint32_t node_count = Read32(superblock + 24);
-  const uint32_t root = Read32(superblock + 28);
-  const uint64_t node_offset = Read64(superblock + 32);
-  const uint64_t name_offset = Read64(superblock + 40);
-  const uint64_t data_offset = Read64(superblock + 48);
-  const uint32_t checksum = Read32(superblock + 56);
+  const uint32_t version = endian::ReadLe32(superblock + 8);
+  const uint32_t block_size = endian::ReadLe32(superblock + 12);
+  const uint64_t block_count = endian::ReadLe64(superblock + 16);
+  const uint32_t node_count = endian::ReadLe32(superblock + 24);
+  const uint32_t root = endian::ReadLe32(superblock + 28);
+  const uint64_t node_offset = endian::ReadLe64(superblock + 32);
+  const uint64_t name_offset = endian::ReadLe64(superblock + 40);
+  const uint64_t data_offset = endian::ReadLe64(superblock + 48);
+  const uint32_t checksum = endian::ReadLe32(superblock + 56);
 
   if (version != kVersion || block_size != kBlockSize) {
     return Result<Node*>::Err(Status::kUnsupported);
@@ -314,17 +300,17 @@ Result<Node*> Mount(const BlockDevice& device) noexcept {
     if (IsErr(status)) {
       return Result<Node*>::Err(status);
     }
-    if (Crc32(raw, kNodeCrcSize) != Read32(raw + 48U)) {
+    if (Crc32(raw, kNodeCrcSize) != endian::ReadLe32(raw + 48U)) {
       return Result<Node*>::Err(Status::kIoError);
     }
 
-    const uint32_t type = Read32(raw);
-    const uint32_t parent = Read32(raw + 16U);
-    const uint32_t name_entry = Read32(raw + 20U);
-    const uint64_t size = Read64(raw + 24U);
-    const uint64_t data_block = Read64(raw + 32U);
-    const uint64_t blocks = Read64(raw + 40U);
-    const uint32_t data_checksum = Read32(raw + 52U);
+    const uint32_t type = endian::ReadLe32(raw);
+    const uint32_t parent = endian::ReadLe32(raw + 16U);
+    const uint32_t name_entry = endian::ReadLe32(raw + 20U);
+    const uint64_t size = endian::ReadLe64(raw + 24U);
+    const uint64_t data_block = endian::ReadLe64(raw + 32U);
+    const uint64_t blocks = endian::ReadLe64(raw + 40U);
+    const uint32_t data_checksum = endian::ReadLe32(raw + 52U);
 
     if (type != kNodeTypeFile && type != kNodeTypeDirectory) {
       return Result<Node*>::Err(Status::kInvalidArg);
@@ -336,7 +322,7 @@ Result<Node*> Mount(const BlockDevice& device) noexcept {
     GslfsNode& node = g_nodes[index];
     node.index = index;
     node.parent = parent;
-    node.mode = Read32(raw + 4U);
+    node.mode = endian::ReadLe32(raw + 4U);
     node.data_checksum = data_checksum;
     node.node.type = type == kNodeTypeFile ? NodeType::kFile
                                            : NodeType::kDirectory;

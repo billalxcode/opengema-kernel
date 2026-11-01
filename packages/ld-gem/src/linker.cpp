@@ -4,6 +4,7 @@
 #include "gsl/layout.h"
 #include "ldgem/elf.h"
 #include "ldgem/image.h"
+#include "ldgem/text.h"
 
 namespace ldgem {
 
@@ -11,17 +12,6 @@ namespace {
 
 constexpr u64 kMaxPath = 96;
 constexpr u32 kMaxDynamicEntries = 128;
-
-[[nodiscard]] u64 Length(const char* text) noexcept {
-  if (text == nullptr) {
-    return 0;
-  }
-  u64 length = 0;
-  while (text[length] != '\0') {
-    ++length;
-  }
-  return length;
-}
 
 void CopyName(char* destination, u64 capacity, const char* source) noexcept {
   u64 index = 0;
@@ -32,18 +22,6 @@ void CopyName(char* destination, u64 capacity, const char* source) noexcept {
     }
   }
   destination[index] = '\0';
-}
-
-void Write(const char* text) noexcept {
-  if (text != nullptr) {
-    kgema::write(text, static_cast<kgema::usize>(Length(text)));
-  }
-}
-
-void ReportSymbol(const char* prefix, const char* name) noexcept {
-  Write(prefix);
-  Write(name);
-  Write("\n");
 }
 
 }  // namespace
@@ -168,8 +146,8 @@ bool Linker::AddLibrary(const char* name) noexcept {
   if (name == nullptr || name[0] == '\0' || HasObject(name)) {
     return name != nullptr && name[0] != '\0';
   }
-  const u64 name_length = Length(name);
-  const u64 directory_length = Length(gsl::layout::kLibraries);
+  const u64 name_length = TextLength(name);
+  const u64 directory_length = TextLength(gsl::layout::kLibraries);
   if ((directory_length + 1U + name_length + 1U) > kMaxPath) {
     ReportSymbol("ld-gem: library name too long: ", name);
     return false;
@@ -282,7 +260,7 @@ bool Linker::RelocateRange(Object& object, u64 address, u64 size) noexcept {
     }
     if (type != elf::kRelocationAbs64 && type != elf::kRelocationGlobDat &&
         type != elf::kRelocationJumpSlot) {
-      Write("ld-gem: unsupported relocation\n");
+      WriteText("ld-gem: unsupported relocation\n");
       return false;
     }
 

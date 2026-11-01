@@ -68,15 +68,15 @@ Commit: `chore(dev): add the clean code refactor plan`.
 
 Tujuan: hapus duplikasi kecil yang aman.
 
-- [ ] Tambah `libs/core/endian.h`.
-- [ ] Ganti `Read16/32/64` duplikat di `efi_image.cpp`.
-- [ ] Ganti `Read32/64` duplikat di `gslfs.cpp`.
-- [ ] Ganti `Read32/64` duplikat di `partition.cpp`.
-- [ ] Ganti reader span di `elf.cpp` dengan helper bersama.
-- [ ] Tambah `ldgem/text.h` dan `text.cpp`.
-- [ ] Pakai helper teks di `ld-gem/main.cpp`.
-- [ ] Pakai helper teks di `ld-gem/linker.cpp`.
-- [ ] Compile-check grup.
+- [x] Tambah `libs/core/endian.h`.
+- [x] Ganti `Read16/32/64` duplikat di `efi_image.cpp`.
+- [x] Ganti `Read32/64` duplikat di `gslfs.cpp`.
+- [x] Ganti `Read32/64` duplikat di `partition.cpp`.
+- [x] Ganti reader span di `elf.cpp` dengan helper bersama.
+- [x] Tambah `ldgem/text.h` dan `text.cpp`.
+- [x] Pakai helper teks di `ld-gem/main.cpp`.
+- [x] Pakai helper teks di `ld-gem/linker.cpp`.
+- [x] Compile-check grup.
 
 Commit: `refactor(core): share endian and linker text helpers`.
 
