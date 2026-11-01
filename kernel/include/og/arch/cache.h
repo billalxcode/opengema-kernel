@@ -30,6 +30,20 @@ inline void CleanInvalidateDcacheRange(uint64_t begin, uint64_t end) noexcept {
   DsbSy();
 }
 
+// Invalidates dirty lines so the next read sees device written memory.
+inline void InvalidateDcacheRange(uint64_t begin, uint64_t end) noexcept {
+  if (end <= begin) {
+    return;
+  }
+  const uint64_t line = DataCacheLineBytes();
+  uint64_t address = begin & ~(line - 1U);
+  while (address < end) {
+    __asm__ volatile("dc ivac, %0" ::"r"(address) : "memory");
+    address += line;
+  }
+  DsbSy();
+}
+
 inline void InvalidateIcacheAll() noexcept {
   __asm__ volatile("ic iallu" ::: "memory");
   DsbSy();
