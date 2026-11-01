@@ -27,6 +27,27 @@ target_include_directories(og_inc_efi INTERFACE
   ${CMAKE_SOURCE_DIR}/libs/efi)
 target_link_libraries(og_inc_efi INTERFACE og_inc_cxx)
 
+# User program: assembled, linked at its virtual address, flattened, then
+# embedded as a generated header.
+find_program(OG_USER_LD NAMES aarch64-linux-gnu-ld REQUIRED)
+find_program(OG_USER_OBJCOPY NAMES aarch64-linux-gnu-objcopy REQUIRED)
+set(OG_USER_OBJECT ${CMAKE_BINARY_DIR}/user_hello.o)
+set(OG_USER_ELF ${CMAKE_BINARY_DIR}/user_program.elf)
+set(OG_USER_BIN ${CMAKE_BINARY_DIR}/user_program.bin)
+set(OG_USER_HEADER ${CMAKE_BINARY_DIR}/user_program.h)
+
+add_custom_command(
+  OUTPUT ${OG_USER_HEADER}
+  COMMAND ${CMAKE_C_COMPILER} --target=aarch64-linux-gnu -ffreestanding -nostdlib
+          -c ${CMAKE_SOURCE_DIR}/user/hello.S -o ${OG_USER_OBJECT}
+  COMMAND ${OG_USER_LD} -Ttext=0x100000000 -e _start ${OG_USER_OBJECT} -o ${OG_USER_ELF}
+  COMMAND ${OG_USER_OBJCOPY} -O binary ${OG_USER_ELF} ${OG_USER_BIN}
+  COMMAND python3 ${CMAKE_SOURCE_DIR}/scripts/bin2header.py ${OG_USER_BIN} ${OG_USER_HEADER}
+  DEPENDS ${CMAKE_SOURCE_DIR}/user/hello.S ${CMAKE_SOURCE_DIR}/scripts/bin2header.py
+  COMMENT "build and embed user program")
+
+add_custom_target(og_user_program DEPENDS ${OG_USER_HEADER})
+
 # One OBJECT library per module. DEPS lists lower layers only, so the
 # link graph mirrors the architecture in docs/ROADMAP.md.
 function(og_add_module name)
@@ -116,9 +137,13 @@ og_add_module(og_sched
   SOURCES kernel/sched/scheduler.cpp
   DEPS og_events og_time og_mem og_core og_inc_kernel)
 
+og_add_module(og_syscall
+  SOURCES kernel/syscall/syscall.cpp
+  DEPS og_sched og_events og_mem og_core og_inc_kernel)
+
 og_add_module(og_kernel
   SOURCES kernel/core/init.cpp
-  DEPS og_sched og_fs og_mem og_events og_time og_dma og_drivers og_inc_kernel)
+  DEPS og_syscall og_sched og_fs og_mem og_events og_time og_dma og_drivers og_inc_kernel)
 
 og_add_module(og_boot
   SOURCES
@@ -128,6 +153,9 @@ og_add_module(og_boot
     kernel/boot/uefi/efi_exit.cpp
   DEPS og_kernel og_inc_efi og_inc_kernel)
 
+target_include_directories(og_kernel PRIVATE ${CMAKE_BINARY_DIR})
+add_dependencies(og_kernel og_user_program)
+
 # Direct PE/COFF link. lld-link emits proper headers and .reloc.
 set(OG_IMAGE_OBJECTS
   $<TARGET_OBJECTS:og_boot>
@@ -135,6 +163,7 @@ set(OG_IMAGE_OBJECTS
   $<TARGET_OBJECTS:og_drivers>
   $<TARGET_OBJECTS:og_fs>
   $<TARGET_OBJECTS:og_sched>
+  $<TARGET_OBJECTS:og_syscall>
   $<TARGET_OBJECTS:og_time>
   $<TARGET_OBJECTS:og_dma>
   $<TARGET_OBJECTS:og_events>
@@ -155,7 +184,7 @@ add_custom_command(
     /out:${CMAKE_BINARY_DIR}/BOOTAA64.EFI
     ${OG_IMAGE_OBJECTS}
   COMMAND_EXPAND_LISTS
-  DEPENDS og_boot og_kernel og_drivers og_fs og_sched og_time og_dma og_events og_mem og_core og_io og_arch og_lib_core
+  DEPENDS og_boot og_kernel og_drivers og_fs og_sched og_syscall og_time og_dma og_events og_mem og_core og_io og_arch og_lib_core
   COMMENT "lld-link BOOTAA64.EFI"
 )
 

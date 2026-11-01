@@ -1,5 +1,6 @@
 #include "og/arch/cpu.h"
 #include "og/arch/registers.h"
+#include "og/arch/user.h"
 
 #include "memory.h"
 #include "og/block_device.h"
@@ -23,11 +24,15 @@
 #include "og/print.h"
 #include "og/sched.h"
 #include "og/status.h"
+#include "og/syscall.h"
 #include "og/timer.h"
 #include "og/trap.h"
 #include "og/vfs.h"
 #include "og/virtio_blk.h"
 #include "og/vmm.h"
+#include "og/workqueue.h"
+
+#include "user_program.h"
 #include "og/workqueue.h"
 
 namespace og {
@@ -40,6 +45,9 @@ constexpr uint32_t kTickHz = 100;
 constexpr uint64_t kTargetTicks = 10;
 constexpr uint64_t kTimeoutSeconds = 10;
 constexpr uint64_t kSectorSize = 512;
+constexpr uint64_t kUserCodeVa = 0x100000000ULL;
+constexpr uint64_t kUserStackVa = 0x100100000ULL;
+constexpr uint64_t kUserStackSize = 16384;
 uint64_t g_work_runs = 0;
 uint64_t g_workers_done = 0;
 drivers::virtio::Blk g_block_device;
@@ -62,6 +70,27 @@ void WorkerB(void* /*argument*/) noexcept {
     (void)sched::ThreadSleep(3);
   }
   ++g_workers_done;
+}
+
+void UserThreadEntry(void* /*argument*/) noexcept {
+  arch::aarch64::EnterUserMode(kUserCodeVa, kUserStackVa + kUserStackSize);
+}
+
+Status LoadUserProgram() noexcept {
+  const uint64_t code_size = (user::kProgramSize + 4095U) & ~4095U;
+  Status status = mem::VmmMapUser(kUserCodeVa, code_size, true);
+  if (IsErr(status)) {
+    return status;
+  }
+  status = mem::VmmCopyOut(kUserCodeVa, user::kProgram, user::kProgramSize);
+  if (IsErr(status)) {
+    return status;
+  }
+  status = mem::VmmMapUser(kUserStackVa, kUserStackSize, false);
+  if (IsErr(status)) {
+    return status;
+  }
+  return Status::kOk;
 }
 
 void InitBlockDevice() noexcept {
@@ -367,6 +396,27 @@ void kmain(BootInfo* info) noexcept {
     Panic("sched: workers did not finish");
   }
   Log(LogLevel::kInfo, "sched: round robin ok\n");
+
+  status = LoadUserProgram();
+  if (IsErr(status)) {
+    Panic("user: load failed");
+  }
+  syscall::SyscallInit();
+  const Result<sched::Thread*> user_thread =
+    sched::ThreadCreate("user", &UserThreadEntry, nullptr);
+  if (user_thread.is_err()) {
+    Panic("user: thread create failed");
+  }
+  LogDec(LogLevel::kInfo, "user: program bytes", user::kProgramSize);
+
+  arch::aarch64::DisableIrq();
+  sched::SchedulerStart();
+  arch::aarch64::EnableIrq();
+
+  if (!syscall::UserExited()) {
+    Panic("user: exit not reached");
+  }
+  Log(LogLevel::kInfo, "user: exit ok\n");
 
   (void)PrintLn("kernel: halt");
   arch::aarch64::HaltForever();
