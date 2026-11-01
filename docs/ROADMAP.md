@@ -3,9 +3,9 @@
 Dokumen ini jadi acuan tunggal untuk urutan kerja, batas modul, dan aturan
 anti redundansi. Setiap task punya ID supaya bisa dirujuk di commit.
 
-Status sekarang: Fase 0 sampai 10 selesai. Kernel sudah boot di QEMU virt,
-punya MMU sendiri, allocator, interrupt, timer, virtio-blk, FAT32, dan
-scheduler round robin dengan preemption.
+Status sekarang: Fase 0 sampai 11 selesai. Kernel sudah boot di QEMU virt,
+punya MMU sendiri, allocator, interrupt, timer, virtio-blk, FAT32, scheduler
+round robin, dan user mode EL0 dengan syscall.
 
 ---
 
@@ -253,8 +253,9 @@ Catatan hasil Fase 2:
       `HeapFree`, `GetHeapStats`.
 - [x] MEM-06 Slab untuk 16 sampai 2048 byte, alokasi page langsung untuk
       yang lebih besar. Header 16 byte menyimpan kelas dan jumlah page.
-- [ ] MEM-07 `address_space`: ditunda ke Fase 11, karena baru dipakai user
-      mode. Membuat objek tanpa pemakai hanya menambah kode mati.
+- [ ] MEM-07 `address_space`: ditunda. Pemetaan user dan validasi alamat
+      sudah ada di vmm, tetapi objek ruang alamat per proses belum perlu
+      sebelum ada banyak proses.
 - [ ] MEM-08 Guard page stack kernel: ditunda ke Fase 10, karena stack
       kernel baru dimiliki scheduler.
 - [x] MEM-09 Uji QEMU: 256 page alokasi dan free, 10000 churn page,
@@ -459,15 +460,32 @@ Catatan hasil Fase 10:
 
 ### Fase 11 - Syscall dan user mode
 
-- [ ] SYS-01 Transisi EL1 ke EL0: `SPSR`, `ELR`, stack user.
-- [ ] SYS-02 ABI `svc #0`, nomor di `x8`, argumen `x0..x5`, hasil `x0`.
-- [ ] SYS-03 Syscall awal: `write`, `read`, `exit`, `yield`.
-- [ ] SYS-04 `syscall/usercopy.cpp`: `CopyFromUser`, `CopyToUser` dengan
-      validasi range terhadap address space.
-- [ ] SYS-05 Loader program user dari ramfs.
-- [ ] SYS-06 `mmap` dan `munmap` untuk user.
+- [x] SYS-01 `og/arch/user.h`: `EnterUserMode` menyiapkan `ELR`, `SP_EL0`,
+      `SPSR`, lalu `eret` ke EL0.
+- [x] SYS-02 ABI `svc #0`: nomor di `x8`, argumen di `x0..x5`, hasil di `x0`.
+- [x] SYS-03 Syscall awal: `write`, `read`, `exit`, `yield`. `read` belum
+      punya sumber input sehingga mengembalikan error.
+- [x] SYS-04 `VmmCopyIn` dan `VmmCopyOut` dengan validasi terhadap region
+      user yang terdaftar.
+- [x] SYS-05 Loader program user dari binary datar yang dibangun CMake,
+      dilink di `0x100000000`, lalu ditanam sebagai header.
+- [ ] SYS-06 `mmap` dan `munmap`: ditunda, belum ada kebutuhan alokasi
+      dinamis di user.
 
 **Selesai bila:** satu program EL0 bisa print lalu exit bersih.
+
+Catatan hasil Fase 11:
+
+1. Halaman user memakai AP `0b01` sehingga EL0 boleh baca tulis, sementara
+   halaman kernel tetap EL1 saja. User tidak bisa menyentuh RAM kernel.
+2. Stub vector lama menimpa `x0` dengan nomor vector sebelum register
+   disimpan. Akibatnya argumen pertama syscall terbaca sebagai nomor
+   vector. Sekarang `x0` disimpan lebih dulu ke stack.
+3. Saat menulis ulang stub, `ELR` dan `SPSR` sempat lupa disimpan sehingga
+   `eret` memakai nilai sampah dan CPU masuk AArch32. Sudah diperbaiki dan
+   dikunci di urutan instruksi stub.
+4. Program user 51 byte dibangun dari `user/hello.S`, dipanggil dengan
+   `svc`, mencetak `hello from el0`, lalu `exit`.
 
 ### Fase 12 - Platform dan SMP
 
@@ -572,9 +590,10 @@ yang belum selesai, supaya tidak ada yang hilang di antara fase.
 
 ### 9.2 Ditunda karena butuh user mode (Fase 11)
 
-- [ ] MEM-07 `address_space`: objek ruang alamat terpisah untuk user.
-- [ ] SYS-01 sampai SYS-06: transisi EL0, ABI syscall, usercopy, loader,
-      mmap.
+- [ ] SYS-06 `mmap` dan `munmap` untuk user.
+- [ ] MEM-07 objek ruang alamat per proses, setelah ada lebih dari satu
+      proses user.
+- [ ] Loader dari filesystem, bukan binary tertanam. Menunggu ramfs.
 
 ### 9.3 Ditunda karena belum ada pemakai nyata
 
@@ -600,7 +619,7 @@ yang belum selesai, supaya tidak ada yang hilang di antara fase.
 
 - [ ] Fase 9 sisa: FS-04 ramfs dan FS-08 procfs (lihat 9.3).
 - [ ] Fase 10 sisa: SCH-05 load balancing SMP (lihat 9.1).
-- [ ] Fase 11 seluruhnya: SYS-01 sampai SYS-06.
+- [ ] Fase 11 sisa: SYS-06 mmap dan loader dari filesystem (lihat 9.2).
 - [ ] Fase 12 seluruhnya: PLT-01 sampai PLT-03, SMP-01 sampai SMP-03.
 - [ ] Fase 13 seluruhnya: TST-01 sampai TST-05.
 - [ ] Fase 14 seluruhnya: HARD-01 sampai HARD-05.

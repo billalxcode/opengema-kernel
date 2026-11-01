@@ -26,7 +26,7 @@ Mau lihat jendela QEMU:
 ## Status
 
 Sudah boot sampai kernel dengan MMU, memori, GIC, timer, virtio, FAT32,
-dan scheduler:
+scheduler, dan user mode:
 
 ```
 opengema-kernel: uefi entry
@@ -61,9 +61,12 @@ sched: worker a
 sched: worker b
 sched: workers done: 2
 sched: round robin ok
+user: program bytes: 51
+hello from el0
+user: exit ok
 kernel: halt
 ```
 
-Berikutnya: syscall dan user mode.
+Berikutnya: platform dan SMP.
 
 Roadmap lengkap ada di `docs/ROADMAP.md`.
