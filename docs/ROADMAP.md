@@ -3,9 +3,9 @@
 Dokumen ini jadi acuan tunggal untuk urutan kerja, batas modul, dan aturan
 anti redundansi. Setiap task punya ID supaya bisa dirujuk di commit.
 
-Status sekarang: Fase 0 selesai. Kode sudah dipisah per modul, loader
-menangkap memory map, keluar dari boot services, lalu masuk `kmain`
-lewat `BootInfo`.
+Status sekarang: Fase 0 sampai 9 selesai. Kernel sudah boot di QEMU virt,
+punya MMU sendiri, allocator, interrupt, timer, virtio-blk, dan bisa membaca
+FAT32 dari partisi EFI.
 
 ---
 
@@ -218,8 +218,8 @@ Catatan hasil Fase 1:
       `InvalidateIcacheAll`, dengan ukuran line dari `CTR_EL0`.
 - [x] ARCH-03 `kernel/arch/aarch64/mmu.cpp`: tabel L0 dan L1, blok 1 GiB,
       atribut normal dan device, `MAIR`, `TCR`, `TTBR0`, `SCTLR.M`.
-- [~] ARCH-04 `og/arch/tlb.h`: `InvalidateTlbAllLocal` selesai. Varian
-      per alamat menyusul di Fase 3 bersama vmm.
+- [x] ARCH-04 `og/arch/tlb.h`: `InvalidateTlbAllLocal`, `InvalidateTlbVaLocal`,
+      `InvalidateTlbSync`. Varian per alamat dipakai vmm sejak Fase 3.
 - [x] ARCH-05 `vectors.S` dan `og/arch/trap.h`: 16 vector, tabel 2 KiB
       aligned, `TrapFrame` 264 byte, dispatch ke C++.
 - [ ] ARCH-06 `context.S`: ditunda ke Fase 10, karena butuh scheduler untuk
@@ -352,8 +352,11 @@ Catatan hasil Fase 6:
       dengan CPU address selama identity map berlaku.
 - [x] DMA-03 `MapStreaming` dan `UnmapStreaming` dengan cache maintenance
       sesuai arah data.
-- [ ] DMA-04 `dma/pool.cpp`: ditunda sampai virtio butuh pool per device.
-- [ ] DMA-05 Uji dengan virtio-blk: menyusul di Fase 8.
+- [ ] DMA-04 `dma/pool.cpp`: pool per device belum ada. Alokasi langsung
+      masih cukup untuk satu device blok. Pool menyusul saat ada beberapa
+      device yang alokasi bersamaan.
+- [x] DMA-05 Terverifikasi lewat virtio-blk: buffer request dan queue
+      memakai `AllocCoherent`, dan baca GPT berhasil.
 
 **Selesai bila:** driver virtio memakai DMA API, bukan alamat fisik mentah.
 
@@ -398,19 +401,35 @@ Catatan hasil Fase 8:
 
 ### Fase 9 - Filesystem
 
-- [ ] FS-01 `fs/vfs.h`: `Inode`, `FileOps`, `SuperblockOps`, `Mount`, `Path`.
-- [ ] FS-02 `fs/vfs.cpp`: resolusi path, mount table, lookup, traversal,
-      tanpa rekursi tak terbatas.
-- [ ] FS-03 `fs/devfs.cpp`: `/dev/console`, `/dev/uart0`, `/dev/null`,
-      `/dev/zero`.
-- [ ] FS-04 `fs/ramfs.cpp`: file dan direktori di memori untuk initramfs.
-- [ ] FS-05 `fs/fat32.cpp`: baca saja, BPB, FAT, cluster chain, LFN.
-- [ ] FS-06 `fs/file.cpp`: tabel descriptor, `open`, `read`, `write`, `seek`,
-      `close`, `stat`.
-- [ ] FS-07 Pasang ESP sebagai root read-only saat boot.
-- [ ] FS-08 `fs/procfs` opsional untuk info kernel.
+- [x] FS-01 `og/vfs.h`: `Node`, `NodeOps`, `DirEntry`, `Stat`, `Mount`,
+      dan tabel descriptor.
+- [x] FS-02 `kernel/fs/vfs.cpp`: resolusi path, mount table dengan
+      pencocokan prefix terpanjang. `..` ditolak, bukan ditebak.
+- [x] FS-03 `kernel/fs/devfs.cpp`: `/dev/console`, `/dev/null`, `/dev/zero`.
+- [ ] FS-04 `kernel/fs/ramfs.cpp`: ditunda ke Fase 11, menunggu initramfs.
+- [x] FS-05 `kernel/fs/fat32.cpp`: baca saja, BPB, FAT chain, LFN,
+      pemetaan nama 8.3.
+- [x] FS-06 `kernel/fs/vfs.cpp`: `FsOpen`, `FsRead`, `FsWrite`, `FsSeek`,
+      `FsClose`, `FsStat`. Write hanya untuk node device, file masih baca.
+- [x] FS-07 ESP dipasang sebagai root read-only saat boot.
+- [ ] FS-08 `procfs`: opsional, ditunda.
 
 **Selesai bila:** bisa `open("/dev/console")` dan `read("/init")` dari FAT.
+
+Catatan hasil Fase 9:
+
+1. FAT32 tidak boleh menganggap filesystem mulai di sektor 0. Image kita
+   berisi GPT, jadi ditambah `kernel/fs/partition.cpp` untuk mencari
+   partisi EFI dan `BlockDevice::sector_offset` sebagai offset baca.
+2. Node FAT dialokasikan dari arena 96 node dan tidak pernah dibebaskan.
+   Filesystem read-only, jadi node dipakai sebagai cache. Arena habis
+   berarti `kNoMem`, bukan kebocoran diam diam.
+3. Verifikasi nyata di QEMU: `/dev/console` bisa ditulis, header berkas
+   `/EFI/BOOT/BOOTAA64.EFI` terbaca `MZ`, ukurannya 68608 byte, dan isi
+   root menampilkan `EFI` serta `STARTUP.NSH`.
+4. Tes tick dibuat tahan beban host. Gate hanya gagal kalau nol interrupt,
+   karena QEMU dengan HVF bisa memberi tick jauh lebih lambat saat host
+   sibuk. Angka tick tetap dicetak untuk diagnosis.
 
 ### Fase 10 - Scheduler
 
@@ -511,3 +530,68 @@ butuh `libs/core`, tidak butuh hardware.
 7. Dilarang import header modul atas dari modul bawah.
 8. Dilarang menyalin fungsi yang sudah ada hanya karena beda tipe parameter.
    Pakai template atau overload di pemiliknya.
+
+---
+
+## 9. Backlog belum selesai
+
+Ringkasan semua task terbuka. ID merujuk ke bagian 5, jadi detail kontrak
+dan alasan tetap ada di fase masing masing. Bagian ini hanya daftar kerja
+yang belum selesai, supaya tidak ada yang hilang di antara fase.
+
+### 9.1 Ditunda karena butuh scheduler (Fase 10)
+
+- [ ] ARCH-06 `context.S`: switch context callee saved register.
+- [ ] MEM-08 guard page di bawah stack kernel dan deteksi overflow.
+- [ ] EV-06 waitqueue dengan predikat, `Wait`, `WakeOne`, `WakeAll`.
+- [ ] TIME-03 antrian timeout `ScheduleAfter` dan `Cancel`.
+- [ ] SYN-02 mutex dengan wait queue.
+- [ ] SYN-03 semaphore.
+- [ ] SYN-06 nama lock untuk debug deadlock.
+- [ ] TIME-01 konversi clocksource ke nanodetik, setelah ada pemakai.
+- [ ] TIME-05 uji 1000 Hz di bawah beban scheduler.
+
+### 9.2 Ditunda karena butuh user mode (Fase 11)
+
+- [ ] MEM-07 `address_space`: objek ruang alamat terpisah untuk user.
+- [ ] SYS-01 sampai SYS-06: transisi EL0, ABI syscall, usercopy, loader,
+      mmap.
+
+### 9.3 Ditunda karena belum ada pemakai nyata
+
+- [ ] SYN-04 refcount: menunggu objek yang benar benar dibagi, misalnya
+      file atau device.
+- [ ] SYN-05 once: menunggu init yang perlu sekali jalan di luar `kmain`.
+- [ ] DMA-04 pool per device: menunggu lebih dari satu device aktif.
+- [ ] DRV-04 RTC PL031: menunggu timestamp di log.
+- [ ] DRV-08 virtio-gpu: menunggu kebutuhan framebuffer.
+- [ ] DRV-09 watchdog: tidak ada di QEMU virt.
+- [ ] FS-04 ramfs: menunggu initramfs di Fase 11.
+- [ ] FS-08 procfs: opsional, menunggu kebutuhan info kernel.
+
+### 9.4 Sebagian selesai, perlu dilengkapi
+
+- [ ] DRV-02 PL011 RX lewat IRQ, pengaturan baud, dan ring buffer TX dan RX.
+      TX polling sudah jalan dan dipakai seluruh kernel.
+- [ ] TIME-05 uji tick pada 1000 Hz. 100 Hz sudah terbukti, tetapi tesnya
+      sekarang hanya memastikan interrupt datang, bukan laju tetap.
+- [ ] FS-06 `write` untuk berkas biasa. Saat ini write hanya untuk device.
+
+### 9.5 Fase yang belum dimulai
+
+- [ ] Fase 9 sisa: FS-04 ramfs dan FS-08 procfs (lihat 9.3).
+- [ ] Fase 10 seluruhnya: SCH-01 sampai SCH-06.
+- [ ] Fase 11 seluruhnya: SYS-01 sampai SYS-06.
+- [ ] Fase 12 seluruhnya: PLT-01 sampai PLT-03, SMP-01 sampai SMP-03.
+- [ ] Fase 13 seluruhnya: TST-01 sampai TST-05.
+- [ ] Fase 14 seluruhnya: HARD-01 sampai HARD-05.
+
+### 9.6 Urutan yang disarankan setelah Fase 9
+
+1. Fase 10 scheduler, karena membuka waitqueue, timeout, mutex, dan
+   guard page sekaligus.
+2. Fase 11 syscall dan user mode, yang membuka address space dan ramfs.
+3. Fase 13 testing lebih awal dari Fase 12, supaya SMP punya jaring
+   pengaman.
+4. Fase 12 platform dan SMP.
+5. Fase 14 hardening terakhir.

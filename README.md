@@ -44,6 +44,12 @@ pci: virtio device id: 4097
 virtio-blk: queue size: 256
 virtio-blk: capacity sectors: 131072
 virtio-blk: gpt header ok
+fs: mounted devfs and fat32
+fs: devfs console ok
+fs: efi image bytes: 68608
+fs: fat32 file read ok
+EFI
+STARTUP.NSH
 event test: irq and workqueue ok
 gic: ready
 timer: frequency: 62500000
@@ -52,6 +58,6 @@ timer: periodic tick ok
 kernel: halt
 ```
 
-Berikutnya: filesystem di atas virtio-blk.
+Berikutnya: scheduler, wait queue, dan sleep.
 
 Roadmap lengkap ada di `docs/ROADMAP.md`.
