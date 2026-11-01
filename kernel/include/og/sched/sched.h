@@ -2,7 +2,8 @@
 
 // Canonical owner of kernel threads and scheduling.
 // Threads are kernel threads at EL1 with their own stack. Each stack has a
-// guard page below it.
+// guard page below it. Every CPU has its own ready queue and idle thread;
+// a thread keeps the CPU it was created on.
 
 #include <cstdint>
 
@@ -25,6 +26,10 @@ constexpr uint32_t kMaxThreads = 16;
 constexpr uint32_t kStackPages = 4;
 constexpr uint64_t kNoWake = 0xFFFFFFFFFFFFFFFFULL;
 
+// Scheduler tick rate. ThreadSleep counts these ticks.
+constexpr uint64_t kTickHz = 1000;
+constexpr uint64_t kTickNanoseconds = 1000000000ULL / kTickHz;
+
 struct WaitQueue;
 
 struct Thread {
@@ -33,8 +38,9 @@ struct Thread {
   uint64_t stack_top;
   ThreadState state;
   uint32_t id;
+  uint32_t home_cpu;
   uint32_t in_ready_queue;
-  uint64_t wake_tick;
+  uint64_t wake_ns;
   char name[16];
   ThreadEntry entry;
   void* argument;
@@ -48,7 +54,13 @@ struct WaitQueue {
   Thread* head;
 };
 
+// Global scheduler state. Runs on the boot CPU.
 [[nodiscard]] Status SchedulerInit() noexcept;
+
+// Per-CPU scheduler state. Runs on each secondary before it enables IRQ.
+// The calling context becomes that CPU's idle thread.
+[[nodiscard]] Status SchedulerInitCpu() noexcept;
+
 [[nodiscard]] Result<Thread*> ThreadCreate(const char* name, ThreadEntry entry,
                                            void* argument) noexcept;
 

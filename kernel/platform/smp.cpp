@@ -11,6 +11,8 @@
 #include "og/io/console.h"
 #include "og/mem/pmm.h"
 #include "og/mem/vmm.h"
+#include "og/sched/sched.h"
+#include "og/time/timer.h"
 #include "og/platform/platform.h"
 #include "og/platform/psci.h"
 
@@ -154,8 +156,31 @@ extern "C" void SecondaryMain(uint64_t stack_top) noexcept {
                                  (static_cast<uint64_t>(self->index) *
                                   og::drivers::irq::kRedistributorStride);
   og::drivers::irq::Gicv3 gic;
-  if (og::IsOk(gic.init(board.gic_distributor.base, redistributor))) {
-    (void)gic.enable_irq(og::smp::kIpiIrq);
+  if (og::IsErr(gic.init(board.gic_distributor.base, redistributor))) {
+    og::Log(og::LogLevel::kError, "smp: secondary gic failed\n");
+    for (;;) {
+      og::arch::aarch64::WaitForInterrupt();
+    }
+  }
+  (void)gic.enable_irq(og::smp::kIpiIrq);
+  if (og::IsErr(gic.enable_irq(og::time::kTimerIrq))) {
+    og::Log(og::LogLevel::kError, "smp: secondary timer irq failed\n");
+    for (;;) {
+      og::arch::aarch64::WaitForInterrupt();
+    }
+  }
+
+  if (og::IsErr(og::sched::SchedulerInitCpu())) {
+    og::Log(og::LogLevel::kError, "smp: secondary scheduler failed\n");
+    for (;;) {
+      og::arch::aarch64::WaitForInterrupt();
+    }
+  }
+  if (og::IsErr(og::time::TimerStartPeriodic(og::sched::kTickHz))) {
+    og::Log(og::LogLevel::kError, "smp: secondary timer start failed\n");
+    for (;;) {
+      og::arch::aarch64::WaitForInterrupt();
+    }
   }
 
   __atomic_store_n(&self->online, 1U, __ATOMIC_RELEASE);

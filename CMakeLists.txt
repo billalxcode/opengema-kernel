@@ -161,7 +161,7 @@ og_add_module(og_platform
     kernel/platform/psci.cpp
     kernel/platform/smp.cpp
     kernel/platform/secondary.S
-  DEPS og_drivers og_events og_mem og_core og_inc_kernel)
+  DEPS og_drivers og_events og_time og_sched og_mem og_core og_inc_kernel)
 
 og_add_module(og_kernel
   SOURCES kernel/core/init.cpp

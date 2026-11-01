@@ -72,7 +72,7 @@ void ProcessTimeouts() noexcept {
   if (g_period != 0) {
     arch::aarch64::WriteCntpTvalEl0(g_period);
   }
-  ++g_ticks;
+  (void)__atomic_add_fetch(&g_ticks, 1U, __ATOMIC_RELAXED);
   ProcessTimeouts();
   if (g_tick_callback != nullptr) {
     g_tick_callback(g_tick_context);
@@ -146,6 +146,7 @@ Status TimerInit() noexcept {
   }
 
   arch::aarch64::WriteCntpCtlEl0(kCntpCtlMask);
+  __atomic_store_n(&g_ticks, 0U, __ATOMIC_RELAXED);
   g_ready = true;
   return Status::kOk;
 }
@@ -163,7 +164,6 @@ Status TimerStartPeriodic(uint32_t hz) noexcept {
   }
 
   g_period = period;
-  g_ticks = 0;
   arch::aarch64::WriteCntpTvalEl0(period);
   arch::aarch64::WriteCntpCtlEl0(kCntpCtlEnable);
   arch::aarch64::InstructionSync();
@@ -180,7 +180,7 @@ Status TimerStop() noexcept {
 }
 
 uint64_t TimerTicks() noexcept {
-  return g_ticks;
+  return __atomic_load_n(&g_ticks, __ATOMIC_ACQUIRE);
 }
 
 void TimerSetTickCallback(TickCallback callback, void* context) noexcept {

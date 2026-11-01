@@ -2,9 +2,9 @@
 
 #include "memory.h"
 #include "og/arch/context.h"
+#include "og/arch/cpu.h"
 #include "og/arch/registers.h"
 #include "og/arch/spinlock.h"
-#include "og/core/log.h"
 #include "og/events/irq.h"
 #include "og/mem/pmm.h"
 #include "og/mem/vmm.h"
@@ -20,6 +20,8 @@ constexpr uint32_t kStackFrameWords = 12;  // x19..x30
 // instead of splitting the 1 GiB identity blocks.
 constexpr uint64_t kStackRegionBase = 0x200000000ULL;
 constexpr uint64_t kStackStride = (kStackPages + 1U) * kPageSize;
+constexpr uint32_t kMaxCpus = 4;
+constexpr uint32_t kAnyCpu = 0xFFFFFFFFU;
 
 struct InitialContext {
   uint64_t x19;
@@ -38,16 +40,26 @@ struct InitialContext {
 
 static_assert(sizeof(InitialContext) == (kStackFrameWords * 8U));
 
-Thread g_threads[kMaxThreads];
+struct CpuScheduler {
+  Thread* current;
+  Thread* idle;
+  Thread* ready_head;
+  Thread* ready_tail;
+  uint32_t ready_count;
+  uint32_t need_reschedule;
+  uint32_t initialized;
+};
 
-Thread* g_current = nullptr;
-Thread* g_idle = nullptr;
-Thread* g_ready_head = nullptr;
-Thread* g_ready_tail = nullptr;
-uint32_t g_ready_count = 0;
+Thread g_threads[kMaxThreads];
+CpuScheduler g_cpu[kMaxCpus];
+arch::aarch64::IrqSpinlock g_lock;
 uint32_t g_next_id = 1;
 bool g_initialized = false;
-bool g_need_reschedule = false;
+
+[[nodiscard]] uint32_t CpuIndex() noexcept {
+  const uint64_t id = arch::aarch64::CpuId();
+  return id < kMaxCpus ? static_cast<uint32_t>(id) : 0U;
+}
 
 void IdleEntry(void* /*argument*/) noexcept {
   for (;;) {
@@ -55,91 +67,149 @@ void IdleEntry(void* /*argument*/) noexcept {
   }
 }
 
-void EnqueueNoLock(Thread* thread) noexcept {
-  if (thread == nullptr) {
-    return;
-  }
-  if (thread->in_ready_queue != 0U) {
+void EnqueueLocked(CpuScheduler& cpu, Thread* thread) noexcept {
+  if (thread == nullptr || thread->in_ready_queue != 0U) {
     return;
   }
   thread->next_ready = nullptr;
   thread->in_ready_queue = 1;
-  if (g_ready_tail == nullptr) {
-    g_ready_head = thread;
-    g_ready_tail = thread;
+  if (cpu.ready_tail == nullptr) {
+    cpu.ready_head = thread;
+    cpu.ready_tail = thread;
   } else {
-    g_ready_tail->next_ready = thread;
-    g_ready_tail = thread;
+    cpu.ready_tail->next_ready = thread;
+    cpu.ready_tail = thread;
   }
-  ++g_ready_count;
+  ++cpu.ready_count;
 }
 
-Thread* DequeueNoLock() noexcept {
-  Thread* thread = g_ready_head;
+Thread* DequeueLocked(CpuScheduler& cpu) noexcept {
+  Thread* thread = cpu.ready_head;
   if (thread == nullptr) {
     return nullptr;
   }
-  g_ready_head = thread->next_ready;
-  if (g_ready_head == nullptr) {
-    g_ready_tail = nullptr;
+  cpu.ready_head = thread->next_ready;
+  if (cpu.ready_head == nullptr) {
+    cpu.ready_tail = nullptr;
   }
   thread->next_ready = nullptr;
   thread->in_ready_queue = 0;
-  if (g_ready_count > 0U) {
-    --g_ready_count;
+  if (cpu.ready_count > 0U) {
+    --cpu.ready_count;
   }
   return thread;
 }
 
-Thread* PickNext(Thread* previous) noexcept {
-  Thread* chosen = nullptr;
-  uint32_t remaining = g_ready_count;
-  while (remaining > 0U) {
-    Thread* candidate = DequeueNoLock();
-    if (candidate == nullptr) {
-      break;
+// Removes a thread that is still in this CPU run queue. A thread that just
+// yielded or was woken while blocking can sit here while it is still the
+// running context, so the scheduler must never select it for another CPU.
+bool RemoveLocked(CpuScheduler& cpu, Thread* thread) noexcept {
+  if (thread == nullptr || thread->in_ready_queue == 0U) {
+    return false;
+  }
+  Thread** link = &cpu.ready_head;
+  while (*link != nullptr) {
+    if (*link == thread) {
+      *link = thread->next_ready;
+      if (cpu.ready_tail == thread) {
+        cpu.ready_tail = nullptr;
+        Thread* tail = cpu.ready_head;
+        while (tail != nullptr && tail->next_ready != nullptr) {
+          tail = tail->next_ready;
+        }
+        cpu.ready_tail = tail;
+      }
+      thread->next_ready = nullptr;
+      thread->in_ready_queue = 0;
+      if (cpu.ready_count > 0U) {
+        --cpu.ready_count;
+      }
+      return true;
     }
-    --remaining;
-    if (candidate == previous) {
-      EnqueueNoLock(candidate);
+    link = &(*link)->next_ready;
+  }
+  return false;
+}
+
+[[nodiscard]] uint32_t PickHomeLocked() noexcept {
+  uint32_t best = 0;
+  uint64_t best_load = 0xFFFFFFFFFFFFFFFFULL;
+  for (uint32_t index = 0; index < kMaxCpus; ++index) {
+    if (g_cpu[index].initialized == 0U) {
       continue;
     }
-    if (candidate->state != ThreadState::kReady) {
-      continue;
+    uint64_t load = g_cpu[index].ready_count;
+    if (g_cpu[index].current != nullptr && g_cpu[index].current != g_cpu[index].idle) {
+      ++load;
     }
-    chosen = candidate;
-    break;
+    if (load < best_load) {
+      best_load = load;
+      best = index;
+    }
   }
-  if (chosen == nullptr) {
-    chosen = g_idle;
-  }
-  return chosen;
+  return best;
 }
 
 void Schedule() noexcept {
-  Thread* previous = g_current;
-  if (previous == nullptr) {
-    return;
-  }
-
   const uint64_t daif = arch::aarch64::IrqSave();
-  Thread* next = PickNext(previous);
-  if (next == nullptr || next == previous) {
+  const uint32_t index = CpuIndex();
+  CpuScheduler& cpu = g_cpu[index];
+  g_lock.lock();
+
+  Thread* previous = cpu.current;
+  if (previous == nullptr) {
+    g_lock.unlock();
     arch::aarch64::IrqRestore(daif);
     return;
   }
 
-  g_current = next;
+  // The running context may already be in the queue because it yielded or
+  // was woken while blocking. Never select it here.
+  (void)RemoveLocked(cpu, previous);
+
+  Thread* next = DequeueLocked(cpu);
+  while (next != nullptr && next->state != ThreadState::kReady) {
+    next = DequeueLocked(cpu);
+  }
+
+  if (next == nullptr) {
+    if (previous != cpu.idle && previous->state == ThreadState::kReady) {
+      previous->state = ThreadState::kRunning;
+      g_lock.unlock();
+      arch::aarch64::IrqRestore(daif);
+      return;
+    }
+    if (previous == cpu.idle) {
+      g_lock.unlock();
+      arch::aarch64::IrqRestore(daif);
+      return;
+    }
+    next = cpu.idle;
+  }
+
+  cpu.current = next;
   next->state = ThreadState::kRunning;
+
+  if (previous != cpu.idle && previous->state == ThreadState::kRunning) {
+    previous->state = ThreadState::kReady;
+    EnqueueLocked(cpu, previous);
+  } else if (previous != cpu.idle && previous->state == ThreadState::kReady) {
+    EnqueueLocked(cpu, previous);
+  }
+
+  g_lock.unlock();
   SwitchContext(&previous->saved_sp, next->saved_sp);
   arch::aarch64::IrqRestore(daif);
 }
 
 Result<Thread*> CreateThread(const char* name, ThreadEntry entry, void* argument,
-                             bool enqueue) noexcept {
+                             bool enqueue, uint32_t requested_cpu,
+                             bool allocate_stack) noexcept {
   if (name == nullptr || entry == nullptr) {
     return Result<Thread*>::Err(Status::kInvalidArg);
   }
+
+  g_lock.lock();
 
   Thread* slot = nullptr;
   uint32_t slot_index = 0;
@@ -151,64 +221,88 @@ Result<Thread*> CreateThread(const char* name, ThreadEntry entry, void* argument
     }
   }
   if (slot == nullptr) {
+    g_lock.unlock();
     return Result<Thread*>::Err(Status::kNoMem);
   }
 
-  const Result<uint64_t> memory = mem::PmmAllocPages(kStackPages);
-  if (memory.is_err()) {
-    return Result<Thread*>::Err(memory.status());
-  }
-  const uint64_t physical = memory.value();
-  const uint64_t virtual_base = kStackRegionBase + (static_cast<uint64_t>(slot_index) * kStackStride);
-  const uint64_t top = virtual_base + kStackStride;
-
-  // The first page of the stride stays unmapped: that is the guard page.
-  for (uint32_t page = 0; page < kStackPages; ++page) {
-    const uint64_t offset = static_cast<uint64_t>(page) * kPageSize;
-    const Status mapped = mem::VmmMap(virtual_base + kPageSize + offset, physical + offset,
-                                      kPageSize, arch::aarch64::MemoryKind::kNormal, false);
-    if (IsErr(mapped)) {
-      (void)mem::PmmFreePages(physical, kStackPages);
-      return Result<Thread*>::Err(mapped);
-    }
+  const uint32_t home =
+    requested_cpu == kAnyCpu ? PickHomeLocked() : requested_cpu;
+  if (home >= kMaxCpus) {
+    g_lock.unlock();
+    return Result<Thread*>::Err(Status::kInvalidArg);
   }
 
   mem::Zero(slot, sizeof(*slot));
   slot->id = g_next_id;
   ++g_next_id;
+  slot->home_cpu = home;
+
+  uint64_t physical = 0;
+  uint64_t virtual_base = 0;
+  uint64_t top = 0;
+  if (allocate_stack) {
+    const Result<uint64_t> memory = mem::PmmAllocPages(kStackPages);
+    if (memory.is_err()) {
+      slot->id = 0;
+      g_lock.unlock();
+      return Result<Thread*>::Err(memory.status());
+    }
+    physical = memory.value();
+    virtual_base = kStackRegionBase +
+                   (static_cast<uint64_t>(slot_index) * kStackStride);
+    top = virtual_base + kStackStride;
+
+    // The first page of the stride stays unmapped: that is the guard page.
+    for (uint32_t page = 0; page < kStackPages; ++page) {
+      const uint64_t offset = static_cast<uint64_t>(page) * kPageSize;
+      const Status mapped = mem::VmmMap(
+        virtual_base + kPageSize + offset, physical + offset, kPageSize,
+        arch::aarch64::MemoryKind::kNormal, false);
+      if (IsErr(mapped)) {
+        (void)mem::PmmFreePages(physical, kStackPages);
+        slot->id = 0;
+        g_lock.unlock();
+        return Result<Thread*>::Err(mapped);
+      }
+    }
+  }
+
   slot->stack_base = virtual_base;
   slot->stack_top = top;
   slot->state = ThreadState::kReady;
-  slot->wake_tick = kNoWake;
+  slot->wake_ns = kNoWake;
   slot->entry = entry;
   slot->argument = argument;
   slot->next_ready = nullptr;
   slot->next_wait = nullptr;
+  slot->wait_owner = nullptr;
   slot->in_ready_queue = 0;
 
   const std::size_t length = mem::Length(name);
-  const std::size_t copy = length >= sizeof(slot->name) ? (sizeof(slot->name) - 1U) : length;
+  const std::size_t copy =
+    length >= sizeof(slot->name) ? (sizeof(slot->name) - 1U) : length;
   mem::Copy(slot->name, name, copy);
   slot->name[copy] = '\0';
 
-  auto* context = reinterpret_cast<InitialContext*>(top - sizeof(InitialContext));
-  mem::Zero(context, sizeof(*context));
-  context->x19 = reinterpret_cast<uint64_t>(entry);
-  context->x20 = reinterpret_cast<uint64_t>(argument);
-  context->x30 = reinterpret_cast<uint64_t>(&ThreadStartTrampoline);
-  slot->saved_sp = reinterpret_cast<uint64_t>(context);
-
-  if (enqueue) {
-    const uint64_t daif = arch::aarch64::IrqSave();
-    EnqueueNoLock(slot);
-    arch::aarch64::IrqRestore(daif);
+  if (allocate_stack) {
+    auto* context = reinterpret_cast<InitialContext*>(top - sizeof(InitialContext));
+    mem::Zero(context, sizeof(*context));
+    context->x19 = reinterpret_cast<uint64_t>(entry);
+    context->x20 = reinterpret_cast<uint64_t>(argument);
+    context->x30 = reinterpret_cast<uint64_t>(&ThreadStartTrampoline);
+    slot->saved_sp = reinterpret_cast<uint64_t>(context);
   }
 
+  if (enqueue) {
+    EnqueueLocked(g_cpu[home], slot);
+  }
+
+  g_lock.unlock();
   return Result<Thread*>::Ok(slot);
 }
 
-void WakeSleepers() noexcept {
-  const uint64_t now = time::TimerTicks();
+void WakeSleepersLocked() noexcept {
+  const uint64_t now = time::TimeNowNs();
   for (uint32_t index = 0; index < kMaxThreads; ++index) {
     Thread* thread = &g_threads[index];
     if (thread->id == 0U) {
@@ -217,15 +311,12 @@ void WakeSleepers() noexcept {
     if (thread->state != ThreadState::kBlocked) {
       continue;
     }
-    if (thread->wake_tick == kNoWake) {
+    if (thread->wake_ns == kNoWake || now < thread->wake_ns) {
       continue;
     }
-    if (now < thread->wake_tick) {
-      continue;
-    }
-    thread->wake_tick = kNoWake;
+    thread->wake_ns = kNoWake;
     thread->state = ThreadState::kReady;
-    EnqueueNoLock(thread);
+    EnqueueLocked(g_cpu[thread->home_cpu], thread);
   }
 }
 
@@ -237,23 +328,24 @@ Status SchedulerInit() noexcept {
   }
 
   mem::Zero(g_threads, sizeof(g_threads));
+  mem::Zero(g_cpu, sizeof(g_cpu));
+
   Thread* boot = &g_threads[0];
   boot->id = 1;
   boot->state = ThreadState::kRunning;
-  boot->wake_tick = kNoWake;
+  boot->home_cpu = 0;
+  boot->wake_ns = kNoWake;
   mem::Copy(boot->name, "boot", 5);
   g_next_id = 2;
-  g_current = boot;
-  g_ready_head = nullptr;
-  g_ready_tail = nullptr;
-  g_ready_count = 0;
-  g_need_reschedule = false;
+  g_cpu[0].current = boot;
+  g_cpu[0].initialized = 1;
 
-  Result<Thread*> idle = CreateThread("idle", &IdleEntry, nullptr, false);
+  const Result<Thread*> idle =
+    CreateThread("idle", &IdleEntry, nullptr, false, 0, true);
   if (idle.is_err()) {
     return idle.status();
   }
-  g_idle = idle.value();
+  g_cpu[0].idle = idle.value();
 
   g_initialized = true;
   time::TimerSetTickCallback(&SchedulerTick, nullptr);
@@ -261,50 +353,79 @@ Status SchedulerInit() noexcept {
   return Status::kOk;
 }
 
-Result<Thread*> ThreadCreate(const char* name, ThreadEntry entry, void* argument) noexcept {
+Status SchedulerInitCpu() noexcept {
+  if (!g_initialized) {
+    return Status::kNotInit;
+  }
+
+  const uint32_t index = CpuIndex();
+  g_lock.lock();
+  if (g_cpu[index].initialized != 0U) {
+    g_lock.unlock();
+    return Status::kOk;
+  }
+  g_lock.unlock();
+
+  const Result<Thread*> idle =
+    CreateThread("idle", &IdleEntry, nullptr, false, index, false);
+  if (idle.is_err()) {
+    return idle.status();
+  }
+
+  g_lock.lock();
+  g_cpu[index].idle = idle.value();
+  g_cpu[index].current = idle.value();
+  g_cpu[index].need_reschedule = 0;
+  g_cpu[index].initialized = 1;
+  idle.value()->state = ThreadState::kRunning;
+  g_lock.unlock();
+
+  events::SetIrqExitHook(&SchedulerIrqExit, nullptr);
+  return Status::kOk;
+}
+
+Result<Thread*> ThreadCreate(const char* name, ThreadEntry entry,
+                             void* argument) noexcept {
   if (!g_initialized) {
     return Result<Thread*>::Err(Status::kNotInit);
   }
-  return CreateThread(name, entry, argument, true);
+  return CreateThread(name, entry, argument, true, kAnyCpu, true);
 }
 
 void SchedulerStart() noexcept {
   if (!g_initialized) {
     return;
   }
-  Thread* self = g_current;
+  Thread* self = CurrentThread();
   if (self == nullptr) {
     return;
   }
 
   const uint64_t daif = arch::aarch64::IrqSave();
+  g_lock.lock();
   self->state = ThreadState::kReady;
-  EnqueueNoLock(self);
+  EnqueueLocked(g_cpu[self->home_cpu], self);
+  g_lock.unlock();
   Schedule();
   arch::aarch64::IrqRestore(daif);
 }
 
 void SchedulerTick(void* /*context*/) noexcept {
+  const uint32_t index = CpuIndex();
   const uint64_t daif = arch::aarch64::IrqSave();
-  WakeSleepers();
-  g_need_reschedule = true;
+  g_lock.lock();
+  WakeSleepersLocked();
+  g_cpu[index].need_reschedule = 1;
+  g_lock.unlock();
   arch::aarch64::IrqRestore(daif);
 }
 
 void SchedulerIrqExit(void* /*context*/) noexcept {
-  if (!g_need_reschedule) {
+  const uint32_t index = CpuIndex();
+  if (g_cpu[index].need_reschedule == 0U) {
     return;
   }
-  g_need_reschedule = false;
-
-  Thread* previous = g_current;
-  if (previous == nullptr) {
-    return;
-  }
-  if (previous != g_idle && previous->state == ThreadState::kRunning) {
-    previous->state = ThreadState::kReady;
-    EnqueueNoLock(previous);
-  }
+  g_cpu[index].need_reschedule = 0;
   Schedule();
 }
 
@@ -312,8 +433,8 @@ Status ThreadSleep(uint64_t ticks) noexcept {
   if (!g_initialized) {
     return Status::kNotInit;
   }
-  Thread* self = g_current;
-  if (self == nullptr || self == g_idle) {
+  Thread* self = CurrentThread();
+  if (self == nullptr || self == g_cpu[CpuIndex()].idle) {
     return Status::kInvalidArg;
   }
   if (ticks == 0U) {
@@ -322,8 +443,10 @@ Status ThreadSleep(uint64_t ticks) noexcept {
   }
 
   const uint64_t daif = arch::aarch64::IrqSave();
+  g_lock.lock();
   self->state = ThreadState::kBlocked;
-  self->wake_tick = time::TimerTicks() + ticks;
+  self->wake_ns = time::TimeNowNs() + (ticks * kTickNanoseconds);
+  g_lock.unlock();
   Schedule();
   arch::aarch64::IrqRestore(daif);
   return Status::kOk;
@@ -333,22 +456,28 @@ void ThreadYield() noexcept {
   if (!g_initialized) {
     return;
   }
-  Thread* self = g_current;
-  if (self == nullptr || self == g_idle) {
+  Thread* self = CurrentThread();
+  if (self == nullptr || self == g_cpu[CpuIndex()].idle) {
     return;
   }
   const uint64_t daif = arch::aarch64::IrqSave();
+  g_lock.lock();
   self->state = ThreadState::kReady;
-  EnqueueNoLock(self);
+  EnqueueLocked(g_cpu[self->home_cpu], self);
+  g_lock.unlock();
   Schedule();
   arch::aarch64::IrqRestore(daif);
 }
 
 void ThreadExit() noexcept {
   arch::aarch64::DisableInterrupts();
-  Thread* self = g_current;
+  Thread* self = CurrentThread();
   if (self != nullptr) {
+    g_lock.lock();
+    (void)RemoveLocked(g_cpu[self->home_cpu], self);
     self->state = ThreadState::kFinished;
+    self->wake_ns = kNoWake;
+    g_lock.unlock();
   }
   for (;;) {
     Schedule();
@@ -357,16 +486,18 @@ void ThreadExit() noexcept {
 }
 
 Thread* CurrentThread() noexcept {
-  return g_current;
+  return g_cpu[CpuIndex()].current;
 }
 
 uint32_t ThreadCount() noexcept {
+  g_lock.lock();
   uint32_t count = 0;
   for (uint32_t index = 0; index < kMaxThreads; ++index) {
     if (g_threads[index].id != 0U) {
       ++count;
     }
   }
+  g_lock.unlock();
   return count;
 }
 
@@ -375,77 +506,81 @@ void WaitQueueInit(WaitQueue& queue) noexcept {
 }
 
 void WaitQueueWait(WaitQueue& queue) noexcept {
-  Thread* self = g_current;
-  if (self == nullptr || self == g_idle) {
+  Thread* self = CurrentThread();
+  if (self == nullptr || self == g_cpu[CpuIndex()].idle) {
     return;
   }
   const uint64_t daif = arch::aarch64::IrqSave();
+  g_lock.lock();
   self->state = ThreadState::kBlocked;
-  self->wake_tick = kNoWake;
+  self->wake_ns = kNoWake;
   self->wait_owner = &queue;
   self->next_wait = queue.head;
   queue.head = self;
+  g_lock.unlock();
   Schedule();
   arch::aarch64::IrqRestore(daif);
 }
 
 void WaitQueueWakeOne(WaitQueue& queue) noexcept {
-  const uint64_t daif = arch::aarch64::IrqSave();
+  g_lock.lock();
   Thread* thread = queue.head;
   if (thread != nullptr) {
     queue.head = thread->next_wait;
     thread->next_wait = nullptr;
     thread->wait_owner = nullptr;
-    thread->wake_tick = kNoWake;
+    thread->wake_ns = kNoWake;
     thread->state = ThreadState::kReady;
-    EnqueueNoLock(thread);
+    EnqueueLocked(g_cpu[thread->home_cpu], thread);
   }
-  arch::aarch64::IrqRestore(daif);
+  g_lock.unlock();
 }
 
 void WaitQueueWakeAll(WaitQueue& queue) noexcept {
-  const uint64_t daif = arch::aarch64::IrqSave();
+  g_lock.lock();
   Thread* thread = queue.head;
   queue.head = nullptr;
   while (thread != nullptr) {
     Thread* next = thread->next_wait;
     thread->next_wait = nullptr;
     thread->wait_owner = nullptr;
-    thread->wake_tick = kNoWake;
+    thread->wake_ns = kNoWake;
     thread->state = ThreadState::kReady;
-    EnqueueNoLock(thread);
+    EnqueueLocked(g_cpu[thread->home_cpu], thread);
     thread = next;
   }
-  arch::aarch64::IrqRestore(daif);
+  g_lock.unlock();
 }
 
 void WaitQueueEnqueueCurrent(WaitQueue& queue) noexcept {
-  Thread* self = g_current;
-  if (self == nullptr || self == g_idle) {
+  Thread* self = CurrentThread();
+  if (self == nullptr || self == g_cpu[CpuIndex()].idle) {
     return;
   }
-  if (self->state == ThreadState::kBlocked && self->wait_owner == &queue) {
-    return;
+  g_lock.lock();
+  if (!(self->state == ThreadState::kBlocked && self->wait_owner == &queue)) {
+    self->state = ThreadState::kBlocked;
+    self->wake_ns = kNoWake;
+    self->wait_owner = &queue;
+    self->next_wait = queue.head;
+    queue.head = self;
   }
-  self->state = ThreadState::kBlocked;
-  self->wake_tick = kNoWake;
-  self->wait_owner = &queue;
-  self->next_wait = queue.head;
-  queue.head = self;
+  g_lock.unlock();
 }
 
 void WakeThread(Thread* thread) noexcept {
   if (thread == nullptr) {
     return;
   }
-  if (thread->state != ThreadState::kBlocked) {
-    return;
+  g_lock.lock();
+  if (thread->state == ThreadState::kBlocked) {
+    thread->next_wait = nullptr;
+    thread->wait_owner = nullptr;
+    thread->wake_ns = kNoWake;
+    thread->state = ThreadState::kReady;
+    EnqueueLocked(g_cpu[thread->home_cpu], thread);
   }
-  thread->next_wait = nullptr;
-  thread->wait_owner = nullptr;
-  thread->wake_tick = kNoWake;
-  thread->state = ThreadState::kReady;
-  EnqueueNoLock(thread);
+  g_lock.unlock();
 }
 
 void ScheduleCurrent() noexcept {

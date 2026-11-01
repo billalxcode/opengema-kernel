@@ -51,7 +51,6 @@ namespace og {
 
 namespace {
 
-constexpr uint32_t kTickHz = 1000;
 // The host can starve the vCPU, so prove interrupts arrive without
 // asserting a wall clock rate. Only zero ticks is treated as a failure.
 constexpr uint64_t kTargetTicks = 10;
@@ -62,6 +61,7 @@ constexpr uint64_t kUserStackVa = 0x100100000ULL;
 constexpr uint64_t kUserStackSize = 16384;
 uint64_t g_work_runs = 0;
 uint64_t g_workers_done = 0;
+uint64_t g_worker_cpu_mask = 0;
 uint64_t g_ipi_count = 0;
 uint64_t g_mutex_counter = 0;
 uint64_t g_mutex_done = 0;
@@ -150,6 +150,8 @@ void CountWork(void* /*context*/) noexcept {
 
 void WorkerA(void* /*argument*/) noexcept {
   for (uint32_t index = 0; index < 3U; ++index) {
+    (void)__atomic_or_fetch(&g_worker_cpu_mask,
+                            1ULL << smp::CurrentIndex(), __ATOMIC_RELAXED);
     (void)PrintLn("sched: worker a");
     (void)sched::ThreadSleep(3);
   }
@@ -158,6 +160,8 @@ void WorkerA(void* /*argument*/) noexcept {
 
 void WorkerB(void* /*argument*/) noexcept {
   for (uint32_t index = 0; index < 3U; ++index) {
+    (void)__atomic_or_fetch(&g_worker_cpu_mask,
+                            1ULL << smp::CurrentIndex(), __ATOMIC_RELAXED);
     (void)PrintLn("sched: worker b");
     (void)sched::ThreadSleep(3);
   }
@@ -675,6 +679,53 @@ void kmain(BootInfo* info) noexcept {
     }
   }
 
+  status = time::TimerInit();
+  if (IsErr(status)) {
+    Panic("timer: init failed");
+  }
+  status = gic.enable_irq(time::kTimerIrq);
+  if (IsErr(status)) {
+    Panic("timer: irq enable failed");
+  }
+  LogDec(LogLevel::kInfo, "timer: frequency", time::TimerFrequency());
+
+  status = time::TimerStartPeriodic(sched::kTickHz);
+  if (IsErr(status)) {
+    Panic("timer: start failed");
+  }
+
+  (void)events::ScheduleWork(&CountWork, nullptr);
+  arch::aarch64::EnableIrq();
+
+  // Bounded wait so a missing interrupt reports instead of hanging.
+  const uint64_t start = arch::aarch64::ReadCntpctEl0();
+  const uint64_t timeout = arch::aarch64::ReadCntfrqEl0() * kTimeoutSeconds;
+  while (time::TimerTicks() < kTargetTicks) {
+    if ((arch::aarch64::ReadCntpctEl0() - start) > timeout) {
+      break;
+    }
+  }
+  arch::aarch64::DisableIrq();
+
+  const uint64_t ticks = time::TimerTicks();
+  LogDec(LogLevel::kInfo, "timer: ticks", ticks);
+  LogDec(LogLevel::kInfo, "timer: work runs", g_work_runs);
+  if (ticks == 0) {
+    Log(LogLevel::kError, "timer: no interrupts received\n");
+    Panic("timer: irq not working");
+  }
+  if (ticks < kTargetTicks) {
+    Log(LogLevel::kWarn, "timer: few ticks under host load\n");
+  } else {
+    Log(LogLevel::kInfo, "timer: periodic tick ok\n");
+  }
+
+  status = sched::SchedulerInit();
+  if (IsErr(status)) {
+    LogHex(LogLevel::kError, "sched: init status", static_cast<uint64_t>(status));
+    Panic("sched: init failed");
+  }
+
   status = psci::PsciInit(platform::Current().psci_conduit);
   if (IsErr(status)) {
     Log(LogLevel::kWarn, "psci: not available\n");
@@ -711,52 +762,6 @@ void kmain(BootInfo* info) noexcept {
     }
   }
 
-  status = time::TimerInit();
-  if (IsErr(status)) {
-    Panic("timer: init failed");
-  }
-  status = gic.enable_irq(time::kTimerIrq);
-  if (IsErr(status)) {
-    Panic("timer: irq enable failed");
-  }
-  LogDec(LogLevel::kInfo, "timer: frequency", time::TimerFrequency());
-
-  status = time::TimerStartPeriodic(kTickHz);
-  if (IsErr(status)) {
-    Panic("timer: start failed");
-  }
-
-  (void)events::ScheduleWork(&CountWork, nullptr);
-  arch::aarch64::EnableIrq();
-
-  // Bounded wait so a missing interrupt reports instead of hanging.
-  const uint64_t start = arch::aarch64::ReadCntpctEl0();
-  const uint64_t timeout = arch::aarch64::ReadCntfrqEl0() * kTimeoutSeconds;
-  while (time::TimerTicks() < kTargetTicks) {
-    if ((arch::aarch64::ReadCntpctEl0() - start) > timeout) {
-      break;
-    }
-  }
-  arch::aarch64::DisableIrq();
-
-  const uint64_t ticks = time::TimerTicks();
-  LogDec(LogLevel::kInfo, "timer: ticks", ticks);
-  LogDec(LogLevel::kInfo, "timer: work runs", g_work_runs);
-  if (ticks == 0) {
-    Log(LogLevel::kError, "timer: no interrupts received\n");
-    Panic("timer: irq not working");
-  }
-  if (ticks < kTargetTicks) {
-    Log(LogLevel::kWarn, "timer: few ticks under host load\n");
-  } else {
-    Log(LogLevel::kInfo, "timer: periodic tick ok\n");
-  }
-
-  status = sched::SchedulerInit();
-  if (IsErr(status)) {
-    LogHex(LogLevel::kError, "sched: init status", static_cast<uint64_t>(status));
-    Panic("sched: init failed");
-  }
   const Result<sched::Thread*> worker_a = sched::ThreadCreate("worker-a", &WorkerA, nullptr);
   if (worker_a.is_err()) {
     Panic("sched: create worker a failed");
@@ -779,6 +784,16 @@ void kmain(BootInfo* info) noexcept {
   LogDec(LogLevel::kInfo, "sched: workers done", g_workers_done);
   if (g_workers_done < 2U) {
     Panic("sched: workers did not finish");
+  }
+  const uint64_t worker_cpus =
+    __atomic_load_n(&g_worker_cpu_mask, __ATOMIC_ACQUIRE);
+  LogDec(LogLevel::kInfo, "smp: worker cpus", worker_cpus);
+  const uint32_t online = smp::OnlineCount();
+  if (online < 64U) {
+    const uint64_t expected = (1ULL << online) - 1ULL;
+    if ((worker_cpus & expected) != expected) {
+      Panic("sched: workers stayed on one cpu");
+    }
   }
   Log(LogLevel::kInfo, "sched: round robin ok\n");
 
