@@ -173,6 +173,9 @@ Commit: `refactor(core): share endian and linker text helpers`.
 - [x] Tambah test host untuk `endian.h`.
 - [x] Tambah test host GPT/partition (`FindEspPartition`, `FindPartitionByMagic`).
 - [x] Tambah test host VFS (`FsMount`, `FsResolve`, `FsStat`, path `..`).
+- [x] Tambah test host VFS FD (`FsOpen`, `FsRead`, `FsWrite`, `FsSeek`,
+  `FsClose`, descriptor reuse).
+- [x] Tambah test host procfs (`uptime`, `threads`, offset, iterate).
 - [x] Tambah test host ELF parser valid dan invalid.
 - [x] Tambah test negative `ls /missing` di test QEMU (menunggu QEMU).
 - [ ] Update `docs/CLEANCODE-REVIEW.md`.
@@ -187,12 +190,12 @@ Commit: `test(dev): add gslfs endian and list error tests`.
 |---|---|---|
 | 0 Baseline | selesai | `4400e7a` |
 | 1 Shared primitives | selesai | `54ae45b` |
-| 2 Filesystem | selesai | `14a325a` |
+| 2 Filesystem | selesai | `498f618` |
 | 3 Process | sebagian | `7250ab5` |
 | 4 VMM/scheduler | sebagian | `2f87675` |
 | 5 Driver/platform | sebagian | `e6a9bfa` |
 | 6 Userland | sebagian | `54ae45b` |
-| 7 Test/dokumentasi | sebagian | `8c6a092` |
+| 7 Test/dokumentasi | sebagian | `419a27d` |
 
 Verifikasi yang berjalan di sesi ini:
 
