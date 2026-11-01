@@ -119,6 +119,20 @@ void AddressSpaceWorker(void* argument) noexcept {
   __atomic_store_n(&state->done, 1U, __ATOMIC_RELEASE);
 }
 
+[[nodiscard]] bool ReclaimThread(sched::Thread* thread) noexcept {
+  if (thread == nullptr) {
+    return false;
+  }
+  for (uint32_t waits = 0; waits < 1000U; ++waits) {
+    if (sched::ThreadFinished(thread) &&
+        sched::ThreadCurrentOnCpu(thread->home_cpu) != thread) {
+      return IsOk(sched::ThreadReclaim(thread));
+    }
+    (void)sched::ThreadSleep(1);
+  }
+  return false;
+}
+
 }  // namespace
 
 void RunTimerSelfTest() noexcept {
@@ -262,6 +276,10 @@ void RunSchedulerSelfTest() noexcept {
   } else {
     Log(LogLevel::kWarn, "uart: rx timeout\n");
   }
+
+  if (!ReclaimThread(worker_a.value()) || !ReclaimThread(worker_b.value())) {
+    Panic("sched: worker reclaim failed");
+  }
 }
 
 void RunAddressSpaceSelfTest() noexcept {
@@ -327,6 +345,9 @@ void RunAddressSpaceSelfTest() noexcept {
          waits < 1000U) {
     (void)sched::ThreadSleep(1);
     ++waits;
+  }
+  if (!ReclaimThread(thread_a.value()) || !ReclaimThread(thread_b.value())) {
+    Panic("mem: address space reclaim failed");
   }
   (void)mem::AddressSpaceDestroy(g_as_a);
   (void)mem::AddressSpaceDestroy(g_as_b);
