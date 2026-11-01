@@ -23,6 +23,10 @@ namespace og::mem {
 
 [[nodiscard]] Status VmmUnmap(uint64_t virtual_address, uint64_t size) noexcept;
 
+// Identity maps a device range, skipping pages that are already mapped.
+// Used for PCIe ECAM and MMIO BARs that firmware placed above RAM.
+[[nodiscard]] Status VmmMapDevice(uint64_t base, uint64_t size) noexcept;
+
 [[nodiscard]] Result<uint64_t> VmmTranslate(uint64_t virtual_address) noexcept;
 
 [[nodiscard]] bool VmmReady() noexcept;

@@ -255,8 +255,51 @@ Status VmmUnmap(uint64_t virtual_address, uint64_t size) noexcept {
   return UnmapRange(virtual_address, size);
 }
 
-Result<uint64_t> VmmTranslate(uint64_t virtual_address) noexcept {
+Status VmmMapDevice(uint64_t base, uint64_t size) noexcept {
   if (g_root == nullptr) {
+    return Status::kNotInit;
+  }
+  if (size == 0) {
+    return Status::kInvalidArg;
+  }
+  if ((base + size) < base) {
+    return Status::kInvalidArg;
+  }
+
+  const uint64_t start = base & ~(kPageSize - 1U);
+  const uint64_t end = (base + size + kPageSize - 1U) & ~(kPageSize - 1U);
+
+  // Fast path: both ends already mapped, assume the range is covered.
+  const Result<uint64_t> start_mapped = VmmTranslate(start);
+  const Result<uint64_t> end_mapped = VmmTranslate(end - kPageSize);
+  if (start_mapped.is_ok() && end_mapped.is_ok()) {
+    return Status::kOk;
+  }
+
+  // Map whole range so the 1 GiB and 2 MiB paths pick the biggest block.
+  const Status status = VmmMap(start, start, end - start, MemoryKind::kDevice, false);
+  if (IsOk(status)) {
+    return Status::kOk;
+  }
+  if (status != Status::kExists) {
+    return status;
+  }
+
+  // Partial overlap with existing mappings: fill page by page.
+  for (uint64_t address = start; address < end; address += kPageSize) {
+    const Result<uint64_t> translated = VmmTranslate(address);
+    if (translated.is_ok()) {
+      continue;
+    }
+    const Status page_status = VmmMap(address, address, kPageSize, MemoryKind::kDevice, false);
+    if (IsErr(page_status)) {
+      return page_status;
+    }
+  }
+  return Status::kOk;
+}
+
+Result<uint64_t> VmmTranslate(uint64_t virtual_address) noexcept {  if (g_root == nullptr) {
     return Result<uint64_t>::Err(Status::kNotInit);
   }
 
