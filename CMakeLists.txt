@@ -200,6 +200,16 @@ add_custom_command(
 
 add_custom_target(BOOTAA64EFI ALL DEPENDS ${CMAKE_BINARY_DIR}/BOOTAA64.EFI)
 
+# Host unit tests for pure libs/core code. Runs on the build machine, so it
+# works inside the container and on macOS.
+add_custom_target(og_host_test
+  COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/test-host.sh
+  COMMENT "run host unit tests"
+  VERBATIM)
+
+enable_testing()
+add_test(NAME host_tests COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/test-host.sh)
+
 # Architecture guard: fails the build on layering or duplication violations.
 add_custom_target(og_arch_check ALL
   COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/check-arch.sh
