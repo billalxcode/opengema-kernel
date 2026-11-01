@@ -39,4 +39,32 @@ struct DmaBuffer {
 [[nodiscard]] Status SyncForDevice(void* cpu_address, uint64_t size) noexcept;
 [[nodiscard]] Status SyncForCpu(void* cpu_address, uint64_t size) noexcept;
 
+// Fixed size coherent block pool. Useful for drivers that need a stable
+// number of requests or descriptors.
+class Pool {
+ public:
+  Pool() noexcept = default;
+  ~Pool() noexcept = default;
+
+  Pool(const Pool&) = delete;
+  Pool& operator=(const Pool&) = delete;
+
+  [[nodiscard]] Status init(uint64_t block_size, uint32_t block_count) noexcept;
+  [[nodiscard]] Result<DmaBuffer> alloc() noexcept;
+  [[nodiscard]] Status free(DmaBuffer buffer) noexcept;
+  [[nodiscard]] Status release() noexcept;
+
+  [[nodiscard]] uint32_t available() const noexcept { return free_count_; }
+  [[nodiscard]] bool is_ready() const noexcept { return ready_; }
+
+ private:
+  DmaBuffer backing_{};
+  uint32_t block_size_ = 0;
+  uint32_t block_count_ = 0;
+  uint32_t free_count_ = 0;
+  void* free_list_ = nullptr;
+  uint64_t used_bitmap_ = 0;
+  bool ready_ = false;
+};
+
 }  // namespace og::dma

@@ -108,7 +108,7 @@ og_add_module(og_events
   DEPS og_core og_inc_kernel)
 
 og_add_module(og_dma
-  SOURCES kernel/dma/dma.cpp kernel/dma/self_test.cpp
+  SOURCES kernel/dma/dma.cpp kernel/dma/pool.cpp kernel/dma/self_test.cpp
   DEPS og_mem og_inc_kernel)
 
 og_add_module(og_time

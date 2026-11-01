@@ -20,6 +20,7 @@ enum class Status : uint32_t {
   kTimeout = 9,
   kIoError = 10,
   kUnsupported = 11,
+  kBusy = 12,
 };
 
 [[nodiscard]] constexpr bool IsOk(Status status) noexcept {

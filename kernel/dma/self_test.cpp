@@ -86,10 +86,82 @@ constexpr uint64_t kPatternSize = 128;
   return mem::HeapFree(block.value());
 }
 
+[[nodiscard]] Status TestPool() noexcept {
+  Pool pool;
+  Status status = pool.init(256, 4);
+  if (IsErr(status)) {
+    return status;
+  }
+  if (pool.available() != 4U) {
+    return Status::kInvalidArg;
+  }
+
+  DmaBuffer buffers[4];
+  for (uint32_t index = 0; index < 4U; ++index) {
+    const Result<DmaBuffer> block = pool.alloc();
+    if (block.is_err()) {
+      return block.status();
+    }
+    if (block.value().size != 256U) {
+      return Status::kInvalidArg;
+    }
+    buffers[index] = block.value();
+    for (uint32_t other = 0; other < index; ++other) {
+      if (buffers[other].cpu_address == buffers[index].cpu_address) {
+        return Status::kInvalidArg;
+      }
+    }
+  }
+  if (pool.available() != 0U) {
+    return Status::kInvalidArg;
+  }
+  if (pool.alloc().is_ok()) {
+    return Status::kInvalidArg;
+  }
+
+  status = pool.free(buffers[0]);
+  if (IsErr(status)) {
+    return status;
+  }
+  if (IsOk(pool.free(buffers[0]))) {
+    return Status::kInvalidArg;  // double free must fail
+  }
+  status = pool.free(buffers[1]);
+  if (IsErr(status)) {
+    return status;
+  }
+
+  const Result<DmaBuffer> first = pool.alloc();
+  const Result<DmaBuffer> second = pool.alloc();
+  if (first.is_err() || second.is_err()) {
+    return Status::kNoMem;
+  }
+
+  status = pool.free(buffers[2]);
+  if (IsErr(status)) {
+    return status;
+  }
+  status = pool.free(buffers[3]);
+  if (IsErr(status)) {
+    return status;
+  }
+  status = pool.free(first.value());
+  if (IsErr(status)) {
+    return status;
+  }
+  status = pool.free(second.value());
+  if (IsErr(status)) {
+    return status;
+  }
+  if (pool.available() != 4U) {
+    return Status::kInvalidArg;
+  }
+  return pool.release();
+}
+
 }  // namespace
 
-Status RunDmaSelfTest() noexcept {
-  Status status = TestCoherent();
+Status RunDmaSelfTest() noexcept {  Status status = TestCoherent();
   if (IsErr(status)) {
     Log(LogLevel::kError, "dma test: coherent failed\n");
     return status;
@@ -102,6 +174,13 @@ Status RunDmaSelfTest() noexcept {
     return status;
   }
   Log(LogLevel::kInfo, "dma test: streaming ok\n");
+
+  status = TestPool();
+  if (IsErr(status)) {
+    Log(LogLevel::kError, "dma test: pool failed\n");
+    return status;
+  }
+  Log(LogLevel::kInfo, "dma test: pool ok\n");
   return Status::kOk;
 }
 
