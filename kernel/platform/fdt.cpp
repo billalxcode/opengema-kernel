@@ -65,6 +65,19 @@ bool g_ready = false;
   return nullptr;
 }
 
+// Returns the offset of the first property or child token after a node name.
+[[nodiscard]] Result<uint32_t> NodeBodyOffset(uint32_t node) noexcept {
+  if ((node + 4U) > g_struct_end || ReadU32(node) != kTokenBeginNode) {
+    return Result<uint32_t>::Err(Status::kInvalidArg);
+  }
+  const char* name = StructString(node + 4U);
+  if (name == nullptr) {
+    return Result<uint32_t>::Err(Status::kInvalidArg);
+  }
+  return Result<uint32_t>::Ok(
+    Align4(node + 4U + static_cast<uint32_t>(mem::Length(name)) + 1U));
+}
+
 // Skips a node body starting right after its BEGIN_NODE token and name.
 // Returns the offset after the matching END_NODE token.
 [[nodiscard]] Result<uint32_t> SkipNode(uint32_t offset) noexcept {
@@ -252,16 +265,14 @@ Result<std::span<const uint8_t>> FindProperty(uint32_t node, const char* name) n
   if (name == nullptr) {
     return Result<std::span<const uint8_t>>::Err(Status::kInvalidArg);
   }
-  if (ReadU32(node) != kTokenBeginNode) {
+  if (name == nullptr) {
     return Result<std::span<const uint8_t>>::Err(Status::kInvalidArg);
   }
-
-  uint32_t offset = node + 4U;
-  const char* node_name = StructString(offset);
-  if (node_name == nullptr) {
-    return Result<std::span<const uint8_t>>::Err(Status::kInvalidArg);
+  const Result<uint32_t> body = NodeBodyOffset(node);
+  if (body.is_err()) {
+    return Result<std::span<const uint8_t>>::Err(body.status());
   }
-  offset = Align4(offset + static_cast<uint32_t>(mem::Length(node_name)) + 1U);
+  uint32_t offset = body.value();
 
   while (offset + 4U <= g_struct_end) {
     const uint32_t token = ReadU32(offset);
@@ -295,16 +306,14 @@ Result<std::span<const uint8_t>> FindProperty(uint32_t node, const char* name) n
 }
 
 uint32_t ChildCount(uint32_t node) noexcept {
-  if (!g_ready || ReadU32(node) != kTokenBeginNode) {
+  if (!g_ready) {
     return 0;
   }
-
-  uint32_t offset = node + 4U;
-  const char* name = StructString(offset);
-  if (name == nullptr) {
+  const Result<uint32_t> body = NodeBodyOffset(node);
+  if (body.is_err()) {
     return 0;
   }
-  offset = Align4(offset + static_cast<uint32_t>(mem::Length(name)) + 1U);
+  uint32_t offset = body.value();
 
   uint32_t count = 0;
   while (offset + 4U <= g_struct_end) {
@@ -345,16 +354,11 @@ Result<uint32_t> Child(uint32_t node, uint32_t index) noexcept {
   if (!g_ready) {
     return Result<uint32_t>::Err(Status::kNotInit);
   }
-  if (ReadU32(node) != kTokenBeginNode) {
-    return Result<uint32_t>::Err(Status::kInvalidArg);
+  const Result<uint32_t> body = NodeBodyOffset(node);
+  if (body.is_err()) {
+    return Result<uint32_t>::Err(body.status());
   }
-
-  uint32_t offset = node + 4U;
-  const char* name = StructString(offset);
-  if (name == nullptr) {
-    return Result<uint32_t>::Err(Status::kInvalidArg);
-  }
-  offset = Align4(offset + static_cast<uint32_t>(mem::Length(name)) + 1U);
+  uint32_t offset = body.value();
 
   uint32_t seen = 0;
   while (offset + 4U <= g_struct_end) {
