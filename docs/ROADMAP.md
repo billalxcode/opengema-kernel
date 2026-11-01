@@ -474,8 +474,8 @@ Catatan hasil Fase 10:
       user yang terdaftar.
 - [x] SYS-05 Loader program user dari filesystem: `INIT.BIN` dibaca dari
       FAT, disalin ke ramfs, lalu dimuat ke halaman user.
-- [ ] SYS-06 `mmap` dan `munmap`: ditunda, belum ada kebutuhan alokasi
-      dinamis di user.
+- [x] SYS-06 `mmap` dan `munmap` untuk user. Region dialokasikan naik dari
+      `0x101000000`; `munmap` membebaskan frame dan menghapus mapping.
 
 **Selesai bila:** satu program EL0 bisa print lalu exit bersih.
 
@@ -640,7 +640,6 @@ yang belum selesai, supaya tidak ada yang hilang di antara fase.
 
 ### 9.2 Ditunda karena butuh user mode (Fase 11)
 
-- [ ] SYS-06 `mmap` dan `munmap` untuk user.
 - [ ] MEM-07 objek ruang alamat per proses, setelah ada lebih dari satu
       proses user.
 
@@ -661,7 +660,7 @@ yang belum selesai, supaya tidak ada yang hilang di antara fase.
 
 - [x] Fase 9 selesai.
 - [ ] Fase 10 sisa: SCH-05 load balancing SMP (lihat 9.1).
-- [ ] Fase 11 sisa: SYS-06 mmap (lihat 9.2).
+- [x] Fase 11 selesai.
 - [ ] Fase 12 sisa: PLT-03 parser DTB dan SMP scheduling (lihat 9.3).
 - [x] Fase 13 selesai.
 - [x] Fase 14 selesai.

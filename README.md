@@ -88,6 +88,7 @@ sched: workers done: 2
 sched: round robin ok
 user: program bytes: 51
 hello from el0
+mmap ok
 user: exit ok
 kernel: halt
 ```
