@@ -189,6 +189,7 @@ void Schedule() noexcept {
 
   cpu.current = next;
   next->state = ThreadState::kRunning;
+  previous->user_sp = arch::aarch64::ReadSpEl0();
 
   if (previous != cpu.idle && previous->state == ThreadState::kRunning) {
     previous->state = ThreadState::kReady;
@@ -199,6 +200,7 @@ void Schedule() noexcept {
 
   g_lock.unlock();
   mem::AddressSpaceActivate(next->address_space);
+  arch::aarch64::WriteSpEl0(next->user_sp);
   SwitchContext(&previous->saved_sp, next->saved_sp);
   arch::aarch64::IrqRestore(daif);
 }

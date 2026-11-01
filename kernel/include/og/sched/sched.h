@@ -40,6 +40,7 @@ struct Thread {
   uint64_t saved_sp;
   uint64_t stack_base;
   uint64_t stack_top;
+  uint64_t user_sp;
   ThreadState state;
   uint32_t id;
   uint32_t home_cpu;
