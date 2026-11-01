@@ -3,9 +3,9 @@
 Dokumen ini jadi acuan tunggal untuk urutan kerja, batas modul, dan aturan
 anti redundansi. Setiap task punya ID supaya bisa dirujuk di commit.
 
-Status sekarang: Fase 0 sampai 13 selesai. Kernel sudah boot di QEMU virt,
+Status sekarang: Fase 0 sampai 14 selesai. Kernel sudah boot di QEMU virt,
 punya MMU sendiri, allocator, interrupt, timer, virtio-blk, FAT32, scheduler
-round robin, user mode EL0, dua core aktif, dan test otomatis.
+round robin, user mode EL0, dua core aktif, test otomatis, dan W^X.
 
 ---
 
@@ -542,11 +542,30 @@ Catatan hasil Fase 13:
 
 ### Fase 14 - Hardening
 
-- [ ] HARD-01 W^X: code read execute, data no execute, stack no execute.
-- [ ] HARD-02 Stack canary untuk fungsi kernel.
-- [ ] HARD-03 Validasi semua input dari device dan user.
-- [ ] HARD-04 Batas iterasi di semua loop yang menunggu hardware.
-- [ ] HARD-05 Panic dump lengkap dan konsisten.
+- [x] HARD-01 W^X: rentang code diambil dari PE section table lewat
+      `EFI_LOADED_IMAGE_PROTOCOL`, lalu blok page table dipecah ke 4 KiB.
+      Code jadi read only dan executable, RAM lain no-execute, stack thread
+      no-execute, halaman user tidak bisa dieksekusi dari EL1.
+- [x] HARD-02 Stack canary dengan `-fstack-protector-strong`. Guard diisi
+      dari generic counter saat boot. Simbol MSVC dan GNU disediakan.
+- [x] HARD-03 Validasi input: usercopy memeriksa region, FAT memeriksa
+      ukuran sektor dan batas cluster, virtio membatasi queue size, nomor
+      syscall tak dikenal ditolak.
+- [x] HARD-04 Batas iterasi: TX UART, wake GIC, poll virtio, rantai FAT, dan
+      tunggu scheduler semuanya punya batas atau timeout.
+- [x] HARD-05 Panic dump menambah `mpidr_el1`, `sp`, dan `current el`.
+
+**Selesai bila:** semua di atas aktif tanpa merusak boot.
+
+Catatan hasil Fase 14:
+
+1. `VmmProtectRange` memecah blok 1 GiB menjadi 2 MiB, lalu 2 MiB menjadi
+   4 KiB, sambil mempertahankan atribut parent.
+2. Bug nyata: mapping Normal yang non-executable hanya menyetel `UXN`,
+   sehingga EL1 masih boleh mengeksekusi heap. Verifikasi atribut halaman
+   menangkapnya, dan sekarang `PXN` juga diset.
+3. Verifikasi boot: `hardening: wx attributes ok` berarti text terbaca
+   executable dan read only, sementara heap no-execute dan writable.
 
 ---
 
@@ -654,7 +673,7 @@ yang belum selesai, supaya tidak ada yang hilang di antara fase.
 - [ ] Fase 11 sisa: SYS-06 mmap dan loader dari filesystem (lihat 9.2).
 - [ ] Fase 12 sisa: PLT-03 parser DTB dan SMP scheduling (lihat 9.3).
 - [ ] Fase 13 selesai.
-- [ ] Fase 14 seluruhnya: HARD-01 sampai HARD-05.
+- [x] Fase 14 selesai.
 
 ### 9.6 Urutan yang disarankan setelah Fase 9
 

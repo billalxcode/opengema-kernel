@@ -61,6 +61,7 @@ mem test: vmm 2m ok
 mem test: heap ok
 dma test: coherent ok
 dma test: streaming ok
+hardening: wx attributes ok
 pci: virtio device id: 4097
 virtio-blk: queue size: 256
 virtio-blk: capacity sectors: 131072
@@ -91,6 +92,6 @@ user: exit ok
 kernel: halt
 ```
 
-Berikutnya: hardening.
+Berikutnya: perluasan, misalnya parser DTB, ramfs, atau driver tambahan.
 
 Roadmap lengkap ada di `docs/ROADMAP.md`.
