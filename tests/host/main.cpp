@@ -3,6 +3,7 @@
 #include <cstdio>
 
 #include "bit.h"
+#include "endian.h"
 #include "format.h"
 #include "memory.h"
 
@@ -89,12 +90,20 @@ void TestBits() {
   CHECK(og::bits::AlignUp<uint64_t>(1, 4096) == 4096);
 }
 
+void TestEndian() {
+  const uint8_t data[] = {0x78, 0x56, 0x34, 0x12, 0xEF, 0xCD, 0xAB, 0x90};
+  CHECK(og::endian::ReadLe16(data) == 0x5678U);
+  CHECK(og::endian::ReadLe32(data) == 0x12345678U);
+  CHECK(og::endian::ReadLe64(data) == 0x90ABCDEF12345678ULL);
+}
+
 }  // namespace
 
 int main() {
   TestMemory();
   TestFormat();
   TestBits();
+  TestEndian();
 
   if (g_failures != 0) {
     std::printf("host tests: %d failure(s)\n", g_failures);

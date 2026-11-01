@@ -61,6 +61,27 @@ void FormatEnv(char* out, const char* key, uint64_t value) noexcept {
   out[cursor] = '\0';
 }
 
+struct InterpreterEnvironment {
+  const char* values[kMaxEnv];
+  uint32_t count;
+  char entry[kMaxEnvLength];
+  char dynamic[kMaxEnvLength];
+};
+
+void BuildInterpreterEnvironment(const elf::Image& image, bool dynamic,
+                                 InterpreterEnvironment& out) noexcept {
+  out.count = 0;
+  if (!dynamic) {
+    return;
+  }
+  FormatEnv(out.entry, "GEM_ENTRY", image.entry);
+  FormatEnv(out.dynamic, "GEM_DYNAMIC", image.dynamic_address);
+  out.values[out.count] = out.entry;
+  ++out.count;
+  out.values[out.count] = out.dynamic;
+  ++out.count;
+}
+
 [[nodiscard]] Status ReadImage(fs::FileTable& files, uint32_t file,
                                uint64_t file_size, elf::Image& image) noexcept {
   uint8_t header[elf::kHeaderBufferSize]{};
@@ -460,22 +481,12 @@ Result<uint32_t> SpawnWithArgs(const char* path, uint32_t parent_pid,
   }
 
   status = mem::VmmMapUser(space, kUserStackVa, kUserStackSize, false);
-  const char* environment[kMaxEnv]{};
-  uint32_t environment_count = 0;
-  char entry_env[kMaxEnvLength]{};
-  char dynamic_env[kMaxEnvLength]{};
-  if (dynamic) {
-    FormatEnv(entry_env, "GEM_ENTRY", image.entry);
-    FormatEnv(dynamic_env, "GEM_DYNAMIC", image.dynamic_address);
-    environment[environment_count] = entry_env;
-    ++environment_count;
-    environment[environment_count] = dynamic_env;
-    ++environment_count;
-  }
+  InterpreterEnvironment environment{};
+  BuildInterpreterEnvironment(image, dynamic, environment);
   UserStack user_stack{};
   if (IsOk(status)) {
-    status = BuildUserStack(space, path, argv, argc, environment,
-                            environment_count, user_stack);
+    status = BuildUserStack(space, path, argv, argc, environment.values,
+                            environment.count, user_stack);
   }
   if (IsErr(status)) {
     (void)mem::AddressSpaceDestroy(space);

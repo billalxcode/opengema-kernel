@@ -101,6 +101,7 @@ Commit: `refactor(fs): split gslfs mount and writable setup`.
 
 Tujuan: batas tanggung jawab yang jelas.
 
+- [x] Ekstrak `BuildInterpreterEnvironment` dari `SpawnWithArgs`.
 - [ ] Pindahkan load ELF dari `process.cpp` ke helper `elf.cpp`.
 - [ ] Pisahkan `SpawnWithArgs` menjadi `LoadProgram`, `CreateAddressSpace`,
   `CreateProcess`.
@@ -108,7 +109,10 @@ Tujuan: batas tanggung jawab yang jelas.
 - [ ] Tambah test error `list` dan `spawn`.
 - [ ] Compile-check grup.
 
-Commit: `refactor(process): split program loading and syscall handlers`.
+Catatan: pemisahan load ELF dan syscall ditunda sampai QEMU tersedia.
+Ekstraksi environment sudah mengurangi state lokal di `SpawnWithArgs`.
+
+Commit: `refactor(process): extract interpreter environment`.
 
 ## Grup 4 - VMM dan scheduler
 
@@ -144,13 +148,14 @@ Commit: `refactor(userland): split linker and applet helpers`.
 
 ## Grup 7 - Test dan dokumentasi
 
-- [ ] Tambah test image GSLFS valid dan rusak.
+- [x] Tambah test image GSLFS valid dan rusak.
+- [x] Tambah test host untuk `endian.h`.
 - [ ] Tambah test negative syscall.
 - [ ] Update `docs/CLEANCODE-REVIEW.md`.
 - [ ] Jalankan `test.sh` di environment build.
 - [ ] Merge checklist.
 
-Commit: `test(dev): add gslfs and syscall negative tests`.
+Commit: `test(dev): add gslfs and endian host tests`.
 
 ## Aturan commit
 
