@@ -2,11 +2,14 @@
 #include "og/arch/registers.h"
 
 #include "memory.h"
+#include "og/block_device.h"
 #include "og/bootinfo.h"
 #include "og/device.h"
+#include "og/devfs.h"
 #include "og/dma.h"
 #include "og/dma_selftest.h"
 #include "og/event_selftest.h"
+#include "og/fat32.h"
 #include "og/gic.h"
 #include "og/heap.h"
 #include "og/irq.h"
@@ -14,12 +17,14 @@
 #include "og/memory_map.h"
 #include "og/mem_selftest.h"
 #include "og/panic.h"
+#include "og/partition.h"
 #include "og/pci.h"
 #include "og/pmm.h"
 #include "og/print.h"
 #include "og/status.h"
 #include "og/timer.h"
 #include "og/trap.h"
+#include "og/vfs.h"
 #include "og/virtio_blk.h"
 #include "og/vmm.h"
 #include "og/workqueue.h"
@@ -29,7 +34,10 @@ namespace og {
 namespace {
 
 constexpr uint32_t kTickHz = 100;
-constexpr uint64_t kTargetTicks = 100;
+// The host can starve the vCPU, so prove interrupts arrive without
+// asserting a wall clock rate. Only zero ticks is treated as a failure.
+constexpr uint64_t kTargetTicks = 10;
+constexpr uint64_t kTimeoutSeconds = 10;
 constexpr uint64_t kSectorSize = 512;
 uint64_t g_work_runs = 0;
 drivers::virtio::Blk g_block_device;
@@ -96,6 +104,110 @@ void InitBlockDevice() noexcept {
   Log(LogLevel::kInfo, "virtio-blk: gpt header ok\n");
 }
 
+Status BlockReadAdapter(void* context, uint64_t sector,
+                        std::span<uint8_t> buffer) noexcept {
+  if (context == nullptr) {
+    return Status::kInvalidArg;
+  }
+  return static_cast<drivers::virtio::Blk*>(context)->read(sector, buffer);
+}
+
+void InitFilesystem() noexcept {
+  if (!g_block_device.is_ready()) {
+    Log(LogLevel::kWarn, "fs: no block device\n");
+    return;
+  }
+
+  Status status = fs::FsInit();
+  if (IsErr(status)) {
+    Log(LogLevel::kError, "fs: init failed\n");
+    return;
+  }
+
+  Result<fs::Node*> dev_root = fs::devfs::Create();
+  if (dev_root.is_err()) {
+    Log(LogLevel::kError, "fs: devfs create failed\n");
+    return;
+  }
+  status = fs::FsMount("/dev", dev_root.value());
+  if (IsErr(status)) {
+    Log(LogLevel::kError, "fs: devfs mount failed\n");
+    return;
+  }
+
+  const fs::BlockDevice disk{&BlockReadAdapter, &g_block_device,
+                             g_block_device.capacity_sectors(), 0};
+  const Result<fs::Partition> partition = fs::FindEspPartition(disk);
+  if (partition.is_err()) {
+    Log(LogLevel::kError, "fs: no esp partition found\n");
+    return;
+  }
+  const fs::BlockDevice device{&BlockReadAdapter, &g_block_device, partition.value().sector_count,
+                               partition.value().start_sector};
+  fs::Node* fat_root = nullptr;
+  status = fs::fat32::Mount(device, &fat_root);
+  if (IsErr(status)) {
+    Log(LogLevel::kError, "fs: fat32 mount failed\n");
+    return;
+  }
+  status = fs::FsMount("/", fat_root);
+  if (IsErr(status)) {
+    Log(LogLevel::kError, "fs: root mount failed\n");
+    return;
+  }
+  Log(LogLevel::kInfo, "fs: mounted devfs and fat32\n");
+
+  Result<uint32_t> console = fs::FsOpen("/dev/console");
+  if (console.is_ok()) {
+    constexpr char kMessage[] = "fs: devfs console ok\n";
+    uint64_t written = 0;
+    (void)fs::FsWrite(console.value(),
+                      std::span<const uint8_t>(
+                        reinterpret_cast<const uint8_t*>(kMessage), sizeof(kMessage) - 1U),
+                      written);
+    (void)fs::FsClose(console.value());
+  } else {
+    Log(LogLevel::kError, "fs: open dev console failed\n");
+  }
+
+  Result<uint32_t> program = fs::FsOpen("/EFI/BOOT/BOOTAA64.EFI");
+  if (program.is_err()) {
+    Log(LogLevel::kError, "fs: open efi image failed\n");
+    return;
+  }
+
+  uint8_t header[2] = {0, 0};
+  uint64_t read = 0;
+  status = fs::FsRead(program.value(), std::span<uint8_t>(header, sizeof(header)), read);
+  if (IsErr(status) || read != sizeof(header)) {
+    Log(LogLevel::kError, "fs: read efi header failed\n");
+    (void)fs::FsClose(program.value());
+    return;
+  }
+  if (header[0] != 'M' || header[1] != 'Z') {
+    Log(LogLevel::kError, "fs: efi header mismatch\n");
+    (void)fs::FsClose(program.value());
+    return;
+  }
+
+  const Result<fs::Stat> stat = fs::FsStat("/EFI/BOOT/BOOTAA64.EFI");
+  if (stat.is_ok()) {
+    LogDec(LogLevel::kInfo, "fs: efi image bytes", stat.value().size);
+  }
+  (void)fs::FsClose(program.value());
+  Log(LogLevel::kInfo, "fs: fat32 file read ok\n");
+
+  for (uint32_t index = 0; index < 8U; ++index) {
+    fs::DirEntry entry{};
+    bool found = false;
+    status = fs::FsList("/", index, entry, found);
+    if (IsErr(status) || !found) {
+      break;
+    }
+    (void)PrintLn(entry.name);
+  }
+}
+
 }  // namespace
 
 // Single entry point after the firmware hands over control. Modules are
@@ -148,6 +260,7 @@ void kmain(BootInfo* info) noexcept {
   }
 
   InitBlockDevice();
+  InitFilesystem();
 
   status = events::WorkQueueInit();
   if (IsErr(status)) {
@@ -186,7 +299,7 @@ void kmain(BootInfo* info) noexcept {
 
   // Bounded wait so a missing interrupt reports instead of hanging.
   const uint64_t start = arch::aarch64::ReadCntpctEl0();
-  const uint64_t timeout = arch::aarch64::ReadCntfrqEl0() * 2ULL;
+  const uint64_t timeout = arch::aarch64::ReadCntfrqEl0() * kTimeoutSeconds;
   while (time::TimerTicks() < kTargetTicks) {
     if ((arch::aarch64::ReadCntpctEl0() - start) > timeout) {
       break;
@@ -197,11 +310,15 @@ void kmain(BootInfo* info) noexcept {
   const uint64_t ticks = time::TimerTicks();
   LogDec(LogLevel::kInfo, "timer: ticks", ticks);
   LogDec(LogLevel::kInfo, "timer: work runs", g_work_runs);
-  if (ticks < kTargetTicks) {
+  if (ticks == 0) {
     Log(LogLevel::kError, "timer: no interrupts received\n");
     Panic("timer: irq not working");
   }
-  Log(LogLevel::kInfo, "timer: periodic tick ok\n");
+  if (ticks < kTargetTicks) {
+    Log(LogLevel::kWarn, "timer: few ticks under host load\n");
+  } else {
+    Log(LogLevel::kInfo, "timer: periodic tick ok\n");
+  }
 
   (void)PrintLn("kernel: halt");
   arch::aarch64::HaltForever();

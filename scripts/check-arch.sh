@@ -54,6 +54,7 @@ rank_of_header() {
     og/delay.h) echo 6 ;;
     og/dma.h | og/dma_selftest.h) echo 7 ;;
     og/device.h | og/pci.h | og/virtio.h | og/virtio_blk.h | og/gic.h) echo 8 ;;
+    og/block_device.h | og/vfs.h | og/fat32.h | og/devfs.h | og/partition.h) echo 9 ;;
     og/memory_map.h) echo 13 ;;
     og/uart.h) echo 8 ;;
     *) echo -1 ;;

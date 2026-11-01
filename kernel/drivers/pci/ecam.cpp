@@ -15,6 +15,8 @@ constexpr uint16_t kRegisterBar0 = 0x10;
 
 constexpr uint16_t kCommandMemorySpace = 1U << 1U;
 constexpr uint16_t kCommandBusMaster = 1U << 2U;
+// The driver polls virtio queues, so the legacy INTx line must stay quiet.
+constexpr uint16_t kCommandInterruptDisable = 1U << 10U;
 constexpr uint8_t kBarCount = 6;
 
 io::MmioRegion g_ecam;
@@ -231,7 +233,8 @@ Status EnableDevice(Address address) noexcept {
   if (current.is_err()) {
     return current.status();
   }
-  const uint16_t enable = static_cast<uint16_t>(kCommandMemorySpace | kCommandBusMaster);
+  const uint16_t enable = static_cast<uint16_t>(kCommandMemorySpace | kCommandBusMaster |
+                                                kCommandInterruptDisable);
   const uint16_t wanted = static_cast<uint16_t>(current.value() | enable);
   if (wanted == current.value()) {
     return Status::kOk;
