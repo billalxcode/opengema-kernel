@@ -1,6 +1,10 @@
 #include "og/arch/cpu.h"
 #include "og/arch/registers.h"
+
+#include "memory.h"
 #include "og/bootinfo.h"
+#include "og/device.h"
+#include "og/dma.h"
 #include "og/dma_selftest.h"
 #include "og/event_selftest.h"
 #include "og/gic.h"
@@ -10,11 +14,13 @@
 #include "og/memory_map.h"
 #include "og/mem_selftest.h"
 #include "og/panic.h"
+#include "og/pci.h"
 #include "og/pmm.h"
 #include "og/print.h"
 #include "og/status.h"
 #include "og/timer.h"
 #include "og/trap.h"
+#include "og/virtio_blk.h"
 #include "og/vmm.h"
 #include "og/workqueue.h"
 
@@ -24,10 +30,70 @@ namespace {
 
 constexpr uint32_t kTickHz = 100;
 constexpr uint64_t kTargetTicks = 100;
+constexpr uint64_t kSectorSize = 512;
 uint64_t g_work_runs = 0;
+drivers::virtio::Blk g_block_device;
 
 void CountWork(void* /*context*/) noexcept {
   ++g_work_runs;
+}
+
+void InitBlockDevice() noexcept {
+  Status status = drivers::DeviceInit();
+  if (IsErr(status)) {
+    Log(LogLevel::kError, "device: registry init failed\n");
+    return;
+  }
+
+  status = drivers::pci::PciInit(memmap::kPciEcamBase, memmap::kPciEcamSize);
+  if (IsErr(status)) {
+    Log(LogLevel::kError, "pci: ecam init failed\n");
+    return;
+  }
+
+  Result<drivers::pci::Info> info = drivers::pci::FindFirst(&drivers::virtio::IsVirtioBlock);
+  if (info.is_err()) {
+    Log(LogLevel::kWarn, "virtio-blk: no device on pci\n");
+    return;
+  }
+  LogDec(LogLevel::kInfo, "pci: virtio device id", info.value().device_id);
+
+  status = drivers::pci::EnableDevice(info.value().address);
+  if (IsErr(status)) {
+    Log(LogLevel::kError, "pci: enable device failed\n");
+    return;
+  }
+
+  status = g_block_device.init(info.value());
+  if (IsErr(status)) {
+    Log(LogLevel::kError, "virtio-blk: init failed\n");
+    return;
+  }
+  LogDec(LogLevel::kInfo, "virtio-blk: queue size", g_block_device.queue_size());
+  LogDec(LogLevel::kInfo, "virtio-blk: capacity sectors", g_block_device.capacity_sectors());
+
+  drivers::Device device{};
+  device.name = "virtio-blk0";
+  device.device_class = drivers::DeviceClass::kBlock;
+  device.capacity = g_block_device.capacity_sectors();
+  device.driver_data = &g_block_device;
+  status = drivers::RegisterDevice(device);
+  if (IsErr(status)) {
+    Log(LogLevel::kError, "device: register failed\n");
+    return;
+  }
+
+  uint8_t sector[kSectorSize];
+  status = g_block_device.read(1, std::span<uint8_t>(sector, kSectorSize));
+  if (IsErr(status)) {
+    Log(LogLevel::kError, "virtio-blk: read failed\n");
+    return;
+  }
+  if (!mem::Equal(sector, "EFI PART", 8)) {
+    Log(LogLevel::kError, "virtio-blk: gpt signature mismatch\n");
+    return;
+  }
+  Log(LogLevel::kInfo, "virtio-blk: gpt header ok\n");
 }
 
 }  // namespace
@@ -80,6 +146,8 @@ void kmain(BootInfo* info) noexcept {
   if (IsErr(status)) {
     Panic("dma: self test failed");
   }
+
+  InitBlockDevice();
 
   status = events::WorkQueueInit();
   if (IsErr(status)) {

@@ -95,9 +95,13 @@ og_add_module(og_time
 
 og_add_module(og_drivers
   SOURCES
+    kernel/drivers/device.cpp
     kernel/drivers/uart/pl011.cpp
     kernel/drivers/irq/gicv3.cpp
-  DEPS og_events og_time og_core og_inc_kernel)
+    kernel/drivers/pci/ecam.cpp
+    kernel/drivers/virtio/virtio_common.cpp
+    kernel/drivers/virtio/virtio_blk.cpp
+  DEPS og_events og_time og_dma og_core og_inc_kernel)
 
 og_add_module(og_kernel
   SOURCES kernel/core/init.cpp
