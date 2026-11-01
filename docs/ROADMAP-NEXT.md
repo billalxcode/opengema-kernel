@@ -96,6 +96,8 @@ Catatan implementasi:
    dari fd 3, sehingga stdout tidak bertabrakan dengan berkas.
 5. Path relatif digabung dengan cwd per proses. `chdir` memvalidasi bahwa
    target adalah directory sebelum menyimpan path.
+6. PMM juga memakai spinlock. Alokasi page dari beberapa core sekaligus
+   tanpa lock membuat hitungan frame dan bitmap tidak konsisten.
 
 Langkah berikutnya untuk fase ini: ELF64, env, daftar anak, `exec`, lalu
 shell gemabox.
@@ -110,14 +112,14 @@ Tujuan: userland punya API yang layak dan gemabox menjadi shell nyata.
 - [ ] SDK-03 API waktu dan error yang konsisten, tanpa libc.
 - [ ] SDK-04 Jalankan `.init_array` di `_start`, dukung konstruktor global
       sederhana tanpa exception dan tanpa RTTI.
-- [ ] SDK-05 `_start` meneruskan argc/argv ke `main`.
-- [ ] SDK-06 gemabox shell: `help`, `echo`, `ls`, `cat`, `ps`, `sleep`,
-      `clear`, `exit`, dengan tabel perintah.
-- [ ] SDK-07 Input UART ke TTY: line buffer, backspace, echo, read blocking.
+- [x] SDK-05 `_start` meneruskan argc/argv ke `main`.
+- [~] SDK-06 gemabox shell: `help`, `echo`, `cat`, dan `exit` sudah.
+      `ls`, `ps`, `sleep`, dan `clear` belum.
+- [x] SDK-07 Input UART ke TTY: line buffer, backspace, echo, read blocking.
 - [ ] SDK-08 Packaging: install header dan `libkgema.a`, CMake package
       config, satu contoh program baru, dan dokumentasi link.
-- [ ] SDK-09 Uji: shell menerima perintah, `cat` membaca berkas, `ps`
-      menampilkan proses, `echo` menulis lewat FD.
+- [~] SDK-09 Uji: shell menerima `help` dan `exit`. Uji `cat`, `ls`, dan
+      `ps` belum.
 
 **Selesai bila:** shell interaktif berjalan di atas UART dan perintah dasar
 bisa dijalankan tanpa menyalin kode syscall.

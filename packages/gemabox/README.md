@@ -27,7 +27,9 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
 6. `spawn` child dengan argv `{"gemabox", "child"}`, lalu `wait`.
 7. Mode `writer`: `chdir("/ram")`, tulis `write ok` ke file `writer`,
    seek, read, lalu cetak `write ok`.
-8. `exit`.
+8. Mode `shell`: prompt `gemabox>`, baca input UART, jalankan `help`,
+   `echo`, `cat`, dan `exit`.
+9. `exit`.
 
 Child mendeteksi argv kedua dan hanya mencetak `child ok`.
 
@@ -40,6 +42,9 @@ mmap ok
 child ok
 spawn ok
 write ok
+gemabox> help
+commands: help, echo, cat, exit
+gemabox> exit
 user: exit pid: 1
 user: exit status: 0
 ```

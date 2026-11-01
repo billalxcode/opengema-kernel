@@ -51,3 +51,5 @@ ditautkan bersama program memakai `packages/libkgema/link.ld`.
   Gunakan `constexpr`, `const`, atau static initialization.
 - Setiap proses punya satu address space dan satu thread user saat ini.
 - Descriptor 0, 1, dan 2 dicadangkan untuk stdio. Berkas mulai dari fd 3.
+- `read` pada fd 0 membaca satu baris dari UART dengan echo, backspace, dan
+  blocking sampai newline.

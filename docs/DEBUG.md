@@ -97,7 +97,8 @@ Panic sudah mencetak `esr_el1`, `esr_ec`, `esr_iss`, `far_el1`, `elr_el1`,
 - `SP_EL0` harus disimpan per thread saat context switch. Kalau tidak, dua
   proses EL0 yang saling mem-preempt akan memakai stack proses lain.
 - Heap kernel harus memakai lock. Dua spawn bersamaan tanpa lock merusak
-  free list dan meninggalkan frame.
+  free list dan meninggalkan frame. PMM juga memakai lock karena alokasi
+  page terjadi dari beberapa core sekaligus.
 - Fault yang terjadi saat print lock dipegang membuat panic menunggu lock
   yang sama. Saat memburu kasus seperti ini, simpan ESR, FAR, dan ELR ke
   variabel global di stub vektor sebelum panic, lalu baca lewat monitor.
