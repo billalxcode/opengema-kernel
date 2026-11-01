@@ -1,6 +1,7 @@
 #include "og/mem/heap.h"
 
 #include "memory.h"
+#include "og/arch/spinlock.h"
 #include "og/mem/pmm.h"
 
 namespace og::mem {
@@ -29,6 +30,7 @@ uint64_t g_pages = 0;
 uint64_t g_allocations = 0;
 uint64_t g_frees = 0;
 bool g_ready = false;
+arch::aarch64::IrqSpinlock g_lock;
 
 [[nodiscard]] uint64_t ClassIndexFor(uint64_t size) noexcept {
   for (uint64_t index = 0; index < kSlabClassCount; ++index) {
@@ -89,10 +91,13 @@ bool g_ready = false;
 }  // namespace
 
 Status HeapInit() noexcept {
+  g_lock.lock();
   if (g_ready) {
+    g_lock.unlock();
     return Status::kOk;
   }
   if (!PmmReady()) {
+    g_lock.unlock();
     return Status::kNotInit;
   }
   for (uint64_t index = 0; index < kSlabClassCount; ++index) {
@@ -102,10 +107,11 @@ Status HeapInit() noexcept {
   g_allocations = 0;
   g_frees = 0;
   g_ready = true;
+  g_lock.unlock();
   return Status::kOk;
 }
 
-Result<void*> HeapAlloc(uint64_t size) noexcept {
+Result<void*> AllocLocked(uint64_t size) noexcept {
   if (!g_ready) {
     return Result<void*>::Err(Status::kNotInit);
   }
@@ -144,7 +150,7 @@ Result<void*> HeapZalloc(uint64_t size) noexcept {
   return block;
 }
 
-Status HeapFree(void* pointer) noexcept {
+Status FreeLocked(void* pointer) noexcept {
   if (!g_ready) {
     return Status::kNotInit;
   }
@@ -180,15 +186,15 @@ Status HeapFree(void* pointer) noexcept {
   return Status::kOk;
 }
 
-Result<void*> HeapRealloc(void* pointer, uint64_t size) noexcept {
+Result<void*> ReallocLocked(void* pointer, uint64_t size) noexcept {
   if (!g_ready) {
     return Result<void*>::Err(Status::kNotInit);
   }
   if (pointer == nullptr) {
-    return HeapAlloc(size);
+    return AllocLocked(size);
   }
   if (size == 0) {
-    const Status status = HeapFree(pointer);
+    const Status status = FreeLocked(pointer);
     if (IsErr(status)) {
       return Result<void*>::Err(status);
     }
@@ -215,24 +221,47 @@ Result<void*> HeapRealloc(void* pointer, uint64_t size) noexcept {
     return Result<void*>::Ok(pointer);
   }
 
-  Result<void*> fresh = HeapAlloc(size);
+  Result<void*> fresh = AllocLocked(size);
   if (fresh.is_err()) {
     return fresh;
   }
   const uint64_t copy_size = size < old_size ? size : old_size;
   mem::Copy(fresh.value(), pointer, copy_size);
-  const Status status = HeapFree(pointer);
+  const Status status = FreeLocked(pointer);
   if (IsErr(status)) {
     return Result<void*>::Err(status);
   }
   return fresh;
 }
 
+Result<void*> HeapAlloc(uint64_t size) noexcept {
+  g_lock.lock();
+  const Result<void*> block = AllocLocked(size);
+  g_lock.unlock();
+  return block;
+}
+
+Status HeapFree(void* pointer) noexcept {
+  g_lock.lock();
+  const Status status = FreeLocked(pointer);
+  g_lock.unlock();
+  return status;
+}
+
+Result<void*> HeapRealloc(void* pointer, uint64_t size) noexcept {
+  g_lock.lock();
+  const Result<void*> block = ReallocLocked(pointer, size);
+  g_lock.unlock();
+  return block;
+}
+
 HeapStats GetHeapStats() noexcept {
   HeapStats stats{};
+  g_lock.lock();
   stats.pages = g_pages;
   stats.allocations = g_allocations;
   stats.frees = g_frees;
+  g_lock.unlock();
   return stats;
 }
 
