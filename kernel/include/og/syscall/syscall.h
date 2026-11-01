@@ -20,6 +20,7 @@ constexpr uint64_t kSysStat = 10;
 constexpr uint64_t kSysGetPid = 11;
 constexpr uint64_t kSysWait = 12;
 constexpr uint64_t kSysSpawn = 13;
+constexpr uint64_t kSysChdir = 14;
 
 void SyscallInit() noexcept;
 

@@ -293,6 +293,8 @@ Result<uint32_t> SpawnWithArgs(const char* path, uint32_t parent_pid,
     name_length >= sizeof(slot->name) ? (sizeof(slot->name) - 1U) : name_length;
   mem::Copy(slot->name, path, name_copy);
   slot->name[name_copy] = '\0';
+  slot->cwd[0] = '/';
+  slot->cwd[1] = '\0';
 
   const Result<sched::Thread*> thread = sched::ThreadCreateIn(
     "user", &ProcessThreadEntry, slot, &slot->space, slot);
@@ -344,6 +346,18 @@ Process* Current() noexcept {
     return nullptr;
   }
   return static_cast<Process*>(thread->process);
+}
+
+Status SetCwd(Process& process, const char* path) noexcept {
+  if (path == nullptr || path[0] != '/') {
+    return Status::kInvalidArg;
+  }
+  const std::size_t length = mem::Length(path);
+  if (length >= fs::kMaxPath) {
+    return Status::kInvalidArg;
+  }
+  mem::Copy(process.cwd, path, length + 1U);
+  return Status::kOk;
 }
 
 uint32_t Count() noexcept {

@@ -1,5 +1,6 @@
 #include "og/syscall/syscall.h"
 
+#include "memory.h"
 #include "og/arch/registers.h"
 #include "og/arch/trap.h"
 #include "og/core/log.h"
@@ -56,6 +57,40 @@ struct UserStat {
   return Status::kInvalidArg;
 }
 
+[[nodiscard]] Status CopyUserPath(process::Process& process, uint64_t user_path,
+                                  char* destination) noexcept {
+  char relative[fs::kMaxPath];
+  Status status = CopyUserString(process.space, user_path, relative, sizeof(relative));
+  if (IsErr(status)) {
+    return status;
+  }
+  if (relative[0] == '/') {
+    const std::size_t length = mem::Length(relative);
+    if (length >= fs::kMaxPath) {
+      return Status::kInvalidArg;
+    }
+    mem::Copy(destination, relative, length + 1U);
+    return Status::kOk;
+  }
+
+  const std::size_t cwd_length = mem::Length(process.cwd);
+  const std::size_t relative_length = mem::Length(relative);
+  const bool needs_separator = cwd_length > 1U;
+  const std::size_t total =
+    cwd_length + (needs_separator ? 1U : 0U) + relative_length;
+  if (total >= fs::kMaxPath) {
+    return Status::kInvalidArg;
+  }
+  mem::Copy(destination, process.cwd, cwd_length);
+  std::size_t offset = cwd_length;
+  if (needs_separator) {
+    destination[offset] = '/';
+    ++offset;
+  }
+  mem::Copy(destination + offset, relative, relative_length + 1U);
+  return Status::kOk;
+}
+
 [[nodiscard]] Status DoMmap(uint64_t size, uint64_t& result) noexcept {
   if (size == 0U) {
     return Status::kInvalidArg;
@@ -110,7 +145,7 @@ struct UserStat {
     return Status::kNotInit;
   }
   char path[fs::kMaxPath];
-  Status status = CopyUserString(process->space, user_path, path, sizeof(path));
+  Status status = CopyUserPath(*process, user_path, path);
   if (IsErr(status)) {
     return status;
   }
@@ -187,7 +222,7 @@ struct UserStat {
     return Status::kNotInit;
   }
   char path[fs::kMaxPath];
-  Status status = CopyUserString(process->space, user_path, path, sizeof(path));
+  Status status = CopyUserPath(*process, user_path, path);
   if (IsErr(status)) {
     return status;
   }
@@ -206,9 +241,6 @@ struct UserStat {
 
 [[nodiscard]] Status DoWrite(uint64_t descriptor, uint64_t user_buffer,
                              uint64_t length, uint64_t& result) noexcept {
-  if (descriptor != kStdout) {
-    return Status::kUnsupported;
-  }
   process::Process* process = CurrentProcess();
   if (process == nullptr) {
     return Status::kNotInit;
@@ -217,22 +249,47 @@ struct UserStat {
     result = 0;
     return Status::kOk;
   }
-  const uint64_t chunk = length > kMaxWriteChunk ? kMaxWriteChunk : length;
+  if (descriptor > 0xFFFFFFFFULL) {
+    return Status::kInvalidArg;
+  }
 
   char text[kMaxWriteChunk + 1U];
-  const Status copy = mem::VmmCopyIn(process->space, user_buffer, text, chunk);
-  if (IsErr(copy)) {
-    LogHex(LogLevel::kError, "syscall: copy failed", static_cast<uint64_t>(copy));
-    return copy;
-  }
-  text[chunk] = '\0';
+  uint64_t total = 0;
+  while (total < length) {
+    const uint64_t remaining = length - total;
+    const uint64_t chunk = remaining > kMaxWriteChunk ? kMaxWriteChunk : remaining;
+    const Status copy =
+      mem::VmmCopyIn(process->space, user_buffer + total, text, chunk);
+    if (IsErr(copy)) {
+      LogHex(LogLevel::kError, "syscall: copy failed", static_cast<uint64_t>(copy));
+      return copy;
+    }
 
-  const Status status = PrintText(text);
-  if (IsErr(status)) {
-    LogHex(LogLevel::kError, "syscall: write failed", static_cast<uint64_t>(status));
-    return status;
+    if (descriptor == kStdout) {
+      text[chunk] = '\0';
+      const Status status = PrintText(text);
+      if (IsErr(status)) {
+        LogHex(LogLevel::kError, "syscall: write failed", static_cast<uint64_t>(status));
+        return status;
+      }
+      total += chunk;
+      continue;
+    }
+
+    uint64_t written = 0;
+    const Status status = fs::FsWrite(
+      process->files, static_cast<uint32_t>(descriptor),
+      std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(text), chunk), written);
+    if (IsErr(status)) {
+      return status;
+    }
+    if (written == 0U) {
+      return Status::kIoError;
+    }
+    total += written;
   }
-  result = chunk;
+
+  result = total;
   return Status::kOk;
 }
 
@@ -242,6 +299,31 @@ struct UserStat {
     return Status::kNotInit;
   }
   result = process->pid;
+  return Status::kOk;
+}
+
+[[nodiscard]] Status DoChdir(uint64_t user_path, uint64_t& result) noexcept {
+  process::Process* process = CurrentProcess();
+  if (process == nullptr) {
+    return Status::kNotInit;
+  }
+  char path[fs::kMaxPath];
+  Status status = CopyUserPath(*process, user_path, path);
+  if (IsErr(status)) {
+    return status;
+  }
+  const Result<fs::Stat> stat = fs::FsStat(path);
+  if (stat.is_err()) {
+    return stat.status();
+  }
+  if (stat.value().type != fs::NodeType::kDirectory) {
+    return Status::kInvalidArg;
+  }
+  status = process::SetCwd(*process, path);
+  if (IsErr(status)) {
+    return status;
+  }
+  result = 0;
   return Status::kOk;
 }
 
@@ -279,7 +361,7 @@ struct UserStat {
     return Status::kNotInit;
   }
   char path[fs::kMaxPath];
-  Status status = CopyUserString(process->space, user_path, path, sizeof(path));
+  Status status = CopyUserPath(*process, user_path, path);
   if (IsErr(status)) {
     return status;
   }
@@ -375,6 +457,9 @@ struct UserStat {
       break;
     case kSysSpawn:
       status = DoSpawn(frame->x[0], frame->x[1], frame->x[2], result);
+      break;
+    case kSysChdir:
+      status = DoChdir(frame->x[0], result);
       break;
     default:
       status = Status::kInvalidArg;

@@ -46,6 +46,7 @@ struct Process {
   uint64_t envp;
   uint32_t argc;
   char name[32];
+  char cwd[fs::kMaxPath];
 };
 
 [[nodiscard]] Status Init() noexcept;
@@ -68,6 +69,7 @@ struct Process {
 [[noreturn]] void Exit(int32_t status) noexcept;
 
 [[nodiscard]] Process* Current() noexcept;
+[[nodiscard]] Status SetCwd(Process& process, const char* path) noexcept;
 [[nodiscard]] uint32_t Count() noexcept;
 
 }  // namespace og::process

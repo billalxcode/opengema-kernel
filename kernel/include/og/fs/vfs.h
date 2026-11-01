@@ -58,6 +58,8 @@ struct FileEntry {
 constexpr uint32_t kMaxMounts = 8;
 constexpr uint32_t kMaxFiles = 16;
 constexpr uint32_t kMaxPath = 256;
+// 0 stdin, 1 stdout, 2 stderr are reserved. Files start at 3.
+constexpr uint32_t kFirstFileDescriptor = 3;
 
 // One file table per process. The kernel keeps its own table for boot
 // probes, so no file descriptor is global any more.

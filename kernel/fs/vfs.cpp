@@ -71,6 +71,9 @@ Status FsInit() noexcept {
 
 Status FileTableInit(FileTable& table) noexcept {
   mem::Zero(&table, sizeof(table));
+  for (uint32_t index = 0; index < kFirstFileDescriptor; ++index) {
+    table.entries[index].in_use = true;
+  }
   return Status::kOk;
 }
 
@@ -191,7 +194,7 @@ Result<uint32_t> FsOpen(FileTable& table, const char* path,
     return Result<uint32_t>::Err(node.status());
   }
 
-  for (uint32_t index = 0; index < kMaxFiles; ++index) {
+  for (uint32_t index = kFirstFileDescriptor; index < kMaxFiles; ++index) {
     if (table.entries[index].in_use) {
       continue;
     }
@@ -211,6 +214,9 @@ Status FsClose(FileTable& table, uint32_t descriptor) noexcept {
   if (descriptor >= kMaxFiles) {
     return Status::kInvalidArg;
   }
+  if (descriptor < kFirstFileDescriptor) {
+    return Status::kUnsupported;
+  }
   if (!table.entries[descriptor].in_use) {
     return Status::kNotFound;
   }
@@ -229,6 +235,9 @@ Status FsRead(FileTable& table, uint32_t descriptor, std::span<uint8_t> buffer,
   }
   if (descriptor >= kMaxFiles) {
     return Status::kInvalidArg;
+  }
+  if (descriptor < kFirstFileDescriptor) {
+    return Status::kUnsupported;
   }
   if (!table.entries[descriptor].in_use) {
     return Status::kNotFound;
@@ -259,6 +268,9 @@ Status FsWrite(FileTable& table, uint32_t descriptor,
   if (descriptor >= kMaxFiles) {
     return Status::kInvalidArg;
   }
+  if (descriptor < kFirstFileDescriptor) {
+    return Status::kUnsupported;
+  }
   if (!table.entries[descriptor].in_use) {
     return Status::kNotFound;
   }
@@ -285,6 +297,9 @@ Status FsSeek(FileTable& table, uint32_t descriptor, uint64_t offset) noexcept {
   }
   if (descriptor >= kMaxFiles) {
     return Status::kInvalidArg;
+  }
+  if (descriptor < kFirstFileDescriptor) {
+    return Status::kUnsupported;
   }
   if (!table.entries[descriptor].in_use) {
     return Status::kNotFound;
