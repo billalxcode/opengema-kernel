@@ -162,27 +162,32 @@ Tujuan: modul besar dipecah tanpa mengubah perilaku.
 
 - [x] Perbaiki formatting `VmmMapDevice`.
 - [x] Dokumentasikan lock ordering di `docs/LOCKING.md`.
-- [ ] Pisahkan address space init/destroy dari mapping.
-- [ ] Pisahkan copy/query dari map/unmap.
+- [x] Pisahkan copy user (`VmmCopyIn`, `VmmCopyOut`, `VmmUserContains`) ke
+  `kernel/mem/vmm_user.cpp`.
+- [x] Pisahkan query attribute dan translate ke `kernel/mem/vmm_query.cpp`.
+- [x] Pisahkan address space init/destroy ke `kernel/mem/vmm_space.cpp`.
 - [ ] Pisahkan thread creation, run queue, dan wait queue.
 - [ ] Compile-check grup.
 
-Status: dokumentasi dan formatting selesai. Pemisahan file ditunda karena
-menyentuh MMU, TLB, dan context switch. Tanpa QEMU, risiko regresi terlalu
-tinggi.
+Status: copy user, query, dan address space sudah dipisah dan
+diverifikasi dengan QEMU. Pemisahan scheduler masih ditunda karena
+menyentuh context switch dan run queue.
 
 Commit: `docs(mem): document kernel lock ordering`.
 
 ## Grup 5 - Driver dan platform
 
-- [ ] Pisahkan `virtio_common.cpp` menjadi queue dan transport.
+- [x] Pisahkan `Queue` dari `virtio_common.cpp` ke
+  `kernel/drivers/virtio/virtio_queue.cpp`.
 - [ ] Pisahkan `fdt.cpp` menjadi tokenizer dan property access.
-- [ ] Pisahkan `framebuffer.cpp` menjadi font, drawing, dan console.
+- [x] Pisahkan console framebuffer ke `kernel/io/framebuffer_console.cpp`.
+- [x] Pisahkan font ke `kernel/io/font.cpp` dan drawing ke
+  `kernel/io/framebuffer_draw.cpp`.
 - [x] Tambah host test FDT (`FindNode`, `FindProperty`, `Child`, `NodeName`).
 - [ ] Compile-check grup.
 
-Status: test FDT selesai. Pemisahan file ditunda karena perubahan driver
-tidak bisa diverifikasi tanpa boot QEMU.
+Status: virtio queue dan framebuffer sudah dipisah dan diverifikasi
+dengan QEMU. FDT masih satu file.
 
 Commit: `test(dev): add fdt host test`.
 
@@ -196,13 +201,14 @@ Commit: `test(dev): add fdt host test`.
   penerusan argumen syscall).
 - [x] Tambah host test libgemapi io/process/memory (`read_line`, `spawn`,
   `wait`, `map`, `unmap`, `to_string`).
-- [ ] Pisahkan `ld-gem/linker.cpp` menjadi dynamic parse dan relocation.
+- [x] Pisahkan relocation `ld-gem` ke `packages/ld-gem/src/linker_reloc.cpp`.
+- [ ] Pisahkan dynamic parse dari `ld-gem/linker.cpp` jika perlu.
 - [ ] Pisahkan applet gemabox dari shell loop jika perlu.
 - [x] Tambah host test endian.
 - [ ] Compile-check grup.
 
-Status: refactor kecil selesai. Pemisahan linker ditunda karena perubahan
-tersebut menyentuh ABI dynamic linking dan lebih baik diuji dengan QEMU.
+Status: relocation sudah dipisah dan diverifikasi dengan QEMU. Dynamic
+parse masih di `linker.cpp`; pemisahan lebih lanjut menunggu kebutuhan.
 
 Commit: `refactor(core): share endian and linker text helpers`.
 

@@ -146,6 +146,8 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   `efi_image.cpp`, `gslfs.cpp`, `partition.cpp`, dan `elf.cpp` memakainya.
 - `ldgem/text.h` dan `text.cpp` menjadi satu sumber helper teks untuk
   `ld-gem`.
+- Relocation `ld-gem` dipisah ke `packages/ld-gem/src/linker_reloc.cpp`;
+  `linker.cpp` tetap menangani dynamic parse dan symbol lookup.
 - `gemapi::fs` memakai `ConvertKind` untuk `stat` dan `list`.
 - `gslfs::Mount` dipecah menjadi `ReadSuperblock`, `LoadNodes`,
   `ValidateTree`, dan `VerifyNodeData`.
@@ -196,6 +198,16 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 - `docs/LOCKING.md` mencatat urutan lock yang diketahui: heap -> PMM,
   scheduler -> PMM, dan virtio-blk sebagai leaf.
 - `VmmMapDevice` diperbaiki formatting-nya.
+- `Queue` virtio dipisah ke `kernel/drivers/virtio/virtio_queue.cpp`;
+  layout descriptor ada di `og/drivers/virtio_internal.h`.
+- `FramebufferConsole` dipisah menjadi `framebuffer_console.cpp` (console),
+  `framebuffer_draw.cpp` (drawing), dan `font.cpp` (font 8x8).
+- `VmmCopyIn`, `VmmCopyOut`, dan `VmmUserContains` dipindah ke
+  `kernel/mem/vmm_user.cpp`; mapping dan page table tetap di `vmm.cpp`.
+- `VmmQueryAttributes`, `VmmTranslate`, dan `VmmTranslateIn` dipindah ke
+  `kernel/mem/vmm_query.cpp`; helper internal ada di `og/mem/vmm_internal.h`.
+- `AddressSpaceInit` dan `AddressSpaceDestroy` dipindah ke
+  `kernel/mem/vmm_space.cpp`; aktivasi per-CPU tetap di `vmm.cpp`.
 - Test host baru: endian reader, image GSLFS valid/rusak/siklus/deterministik,
   driver GSLFS, ramfs, procfs, devfs, FAT32, gemapi fs, gemapi api, kgema,
   GPT/partition, VFS, VFS FD, ELF parser, dan FDT parser.
@@ -204,7 +216,7 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 
 Verifikasi branch `dev`:
 
-- `python3 scripts/compile-check.py`: 98 file OK, 1 entri lama dilewati.
+- `python3 scripts/compile-check.py`: 105 file OK, 1 entri lama dilewati.
 - `./scripts/build.sh` lewat podman: kernel build dan link OK,
   `arch-check` dan `gsl-check` OK.
 - `./scripts/test-host.sh`: host tests, ramfs, procfs, devfs, FAT32, gemapi

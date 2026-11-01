@@ -220,6 +220,7 @@ add_library(og_ldgem_user OBJECT
   packages/ld-gem/src/elf.cpp
   packages/ld-gem/src/image.cpp
   packages/ld-gem/src/linker.cpp
+  packages/ld-gem/src/linker_reloc.cpp
   packages/ld-gem/src/main.cpp
   packages/ld-gem/src/start.cpp
   packages/ld-gem/src/text.cpp)
@@ -414,7 +415,9 @@ og_add_module(og_io
     kernel/io/mmio.cpp
     kernel/io/console.cpp
     kernel/io/print.cpp
-    kernel/io/framebuffer.cpp
+    kernel/io/font.cpp
+    kernel/io/framebuffer_console.cpp
+    kernel/io/framebuffer_draw.cpp
   DEPS og_arch og_inc_kernel)
 
 og_add_module(og_core
@@ -425,6 +428,9 @@ og_add_module(og_mem
   SOURCES
     kernel/mem/pmm.cpp
     kernel/mem/vmm.cpp
+    kernel/mem/vmm_user.cpp
+    kernel/mem/vmm_query.cpp
+    kernel/mem/vmm_space.cpp
     kernel/mem/heap.cpp
     kernel/mem/self_test.cpp
   DEPS og_core og_inc_kernel)
@@ -453,6 +459,7 @@ og_add_module(og_drivers
     kernel/drivers/rtc/pl031.cpp
     kernel/drivers/pci/ecam.cpp
     kernel/drivers/virtio/virtio_common.cpp
+    kernel/drivers/virtio/virtio_queue.cpp
     kernel/drivers/virtio/virtio_blk.cpp
     kernel/drivers/virtio/virtio_gpu.cpp
   DEPS og_events og_time og_dma og_core og_inc_kernel)
