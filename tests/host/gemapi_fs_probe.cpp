@@ -130,6 +130,22 @@ i64 list(const char* path, u64 index, DirEntry& entry) noexcept {
   return 0;
 }
 
+bool mkdir(const char* path) noexcept {
+  return Same(path, "newdir");
+}
+
+bool unlink(const char* path) noexcept {
+  return Same(path, "file");
+}
+
+bool rmdir(const char* path) noexcept {
+  return Same(path, "dir");
+}
+
+bool rename(const char* old_path, const char* new_path) noexcept {
+  return Same(old_path, "file") && Same(new_path, "renamed");
+}
+
 }  // namespace kgema
 
 namespace {
@@ -244,6 +260,29 @@ int main() {
   }
   if (gemapi::fs::chdir(nullptr) != Status::invalid_argument) {
     return Fail("chdir null");
+  }
+
+  if (gemapi::fs::mkdir("newdir") != Status::ok) {
+    return Fail("mkdir");
+  }
+  if (gemapi::fs::mkdir("bad") != Status::not_found ||
+      gemapi::fs::mkdir(nullptr) != Status::invalid_argument) {
+    return Fail("mkdir error");
+  }
+  if (gemapi::fs::unlink("file") != Status::ok ||
+      gemapi::fs::unlink("bad") != Status::not_found ||
+      gemapi::fs::unlink(nullptr) != Status::invalid_argument) {
+    return Fail("unlink");
+  }
+  if (gemapi::fs::rmdir("dir") != Status::ok ||
+      gemapi::fs::rmdir("bad") != Status::not_found ||
+      gemapi::fs::rmdir(nullptr) != Status::invalid_argument) {
+    return Fail("rmdir");
+  }
+  if (gemapi::fs::rename("file", "renamed") != Status::ok ||
+      gemapi::fs::rename("bad", "renamed") != Status::not_found ||
+      gemapi::fs::rename(nullptr, "renamed") != Status::invalid_argument) {
+    return Fail("rename");
   }
 
   gemapi::fs::DirEntry entry{};

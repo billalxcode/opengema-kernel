@@ -56,6 +56,8 @@ def main(argv):
     time_seen = False
     ps_sent = False
     ps_seen = False
+    fs_sent = False
+    fs_seen = False
     clear_sent = False
     clear_ready = False
     clear_released = False
@@ -86,7 +88,7 @@ def main(argv):
                 buffer.clear()
 
             if (help_sent and not help_seen and
-                    b"commands: help, echo, cat, ls, clear, acpi, uptime, sleep, ps, halt, shutdown, reboot" in buffer):
+                    b"commands: help, echo, cat, ls, clear, acpi, uptime, sleep, ps, mkdir, rm, mv, halt, shutdown, reboot" in buffer):
                 help_seen = True
 
             if (help_seen and not acpi_sent and
@@ -119,7 +121,17 @@ def main(argv):
             if ps_sent and not ps_seen and b"pid ppid" in buffer:
                 ps_seen = True
 
-            if (ps_seen and not clear_sent and
+            if (ps_seen and not fs_sent and
+                    time.time() - last_data > 0.5 and
+                    b"gemabox> " in buffer):
+                send_line(client, b"mkdir /tmp/d\nmv /tmp/d /tmp/e\nls /tmp\nrm /tmp/e\n")
+                fs_sent = True
+                buffer.clear()
+
+            if fs_sent and not fs_seen and b"e/" in buffer:
+                fs_seen = True
+
+            if (fs_seen and not clear_sent and
                     time.time() - last_data > 0.5 and
                     b"gemabox> " in buffer):
                 send_line(client, b"clear\n")

@@ -37,12 +37,13 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
    seek, read, lalu cetak `write ok`.
 8. Mode `shell`: prompt `gemabox>`, baca input UART dan keyboard,
    jalankan `help`, `echo`, `cat`, `ls`, `clear`, `acpi`, `uptime`,
-   `sleep`, `ps`, `halt`, `shutdown`, dan `reboot`.
+   `sleep`, `ps`, `mkdir`, `rm`, `mv`, `halt`, `shutdown`, dan `reboot`.
 9. Command di luar applet dicari di `/commands/<name>`, lalu
    `/applications/<name>/<name>`.
 10. `acpi` membaca ringkasan tabel dari `/proc/acpi`. `uptime` mencetak
     waktu sejak boot, `sleep` menunggu dalam milidetik, dan `ps`
-    menampilkan daftar proses dari `/proc/processes`. `halt`
+    menampilkan daftar proses dari `/proc/processes`. `mkdir`, `rm`, dan
+    `mv` mengubah isi filesystem writable. `halt`
     menghentikan shell dan init sehingga kernel menyelesaikan self test
     lalu berhenti. `shutdown` dan `reboot` memakai ACPI/PSCI untuk
     mematikan atau me-reboot mesin.
@@ -59,7 +60,7 @@ child ok
 spawn ok
 write ok
 gemabox> help
-commands: help, echo, cat, ls, clear, acpi, uptime, sleep, ps, halt, shutdown, reboot
+commands: help, echo, cat, ls, clear, acpi, uptime, sleep, ps, mkdir, rm, mv, halt, shutdown, reboot
 gemabox> acpi
 ACPI revision 2
 gemabox> uptime
@@ -69,6 +70,9 @@ gemabox> ps
 pid ppid state name
 1 0 ready /system/boot/init
 ...
+gemabox> mkdir /tmp/demo
+gemabox> mv /tmp/demo /tmp/demo2
+gemabox> rm /tmp/demo2
 gemabox> ...
 gemabox> hello
 hello from applications

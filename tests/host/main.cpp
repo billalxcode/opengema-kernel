@@ -325,7 +325,7 @@ const og::fs::NodeOps kRootOps{&RootLookup, nullptr, nullptr, &RootIterate};
 const og::fs::NodeOps kDevOps{&DevLookup, nullptr, nullptr, nullptr};
 
 // Exactly 16 payload bytes: the virtual file has no terminating NUL.
-char g_file_data[16] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h',
+char g_file_data[32] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h',
                         'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p'};
 
 og::Status FileReadOp(og::fs::Node* node, uint64_t offset,
@@ -434,13 +434,14 @@ void TestVfs() {
   CHECK(og::fs::FsList("/missing", 0, entry, found) ==
         og::Status::kNotFound);
 
-  og::mem::Copy(g_file_data, "abcdefghijklmnop", sizeof(g_file_data));
-  g_file_node.size = sizeof(g_file_data);
+  constexpr uint64_t kInitialFileSize = 16;
+  og::mem::Copy(g_file_data, "abcdefghijklmnop", kInitialFileSize);
+  g_file_node.size = kInitialFileSize;
   g_file_node.ops = &kFileOps;
 
   og::fs::FileTable table{};
   CHECK(og::IsOk(og::fs::FileTableInit(table)));
-  const auto descriptor = og::fs::FsOpen(table, "/file");
+  const auto descriptor = og::fs::FsOpen(table, "/file", og::fs::kOpenWrite);
   CHECK(descriptor.is_ok());
   CHECK(descriptor.value() == 3U);
 
@@ -490,6 +491,43 @@ void TestVfs() {
   CHECK(reused.is_ok());
   CHECK(reused.value() == 4U);
   CHECK(og::IsOk(og::fs::FsClose(table, reused.value())));
+
+  // A read-only descriptor cannot write.
+  const auto readonly = og::fs::FsOpen(table, "/file");
+  CHECK(readonly.is_ok());
+  const char denied = 'Q';
+  uint64_t denied_written = 0;
+  CHECK(og::fs::FsWrite(
+          table, readonly.value(),
+          std::span<const uint8_t>(
+            reinterpret_cast<const uint8_t*>(&denied), 1),
+          denied_written) == og::Status::kUnsupported);
+  CHECK(og::IsOk(og::fs::FsClose(table, readonly.value())));
+
+  // Append writes at the current end even when the descriptor offset is zero.
+  const auto appended = og::fs::FsOpen(
+    table, "/file", og::fs::kOpenWrite | og::fs::kOpenAppend);
+  CHECK(appended.is_ok());
+  const char suffix[] = "Z!";
+  uint64_t suffix_written = 0;
+  CHECK(og::IsOk(og::fs::FsWrite(
+    table, appended.value(),
+    std::span<const uint8_t>(
+      reinterpret_cast<const uint8_t*>(suffix), 2),
+    suffix_written)));
+  CHECK(suffix_written == 2U);
+  CHECK(g_file_node.size == 18U);
+  CHECK(g_file_data[16] == 'Z' && g_file_data[17] == '!');
+  CHECK(og::IsOk(og::fs::FsSeek(table, appended.value(), 16)));
+  char suffix_read[2]{};
+  uint64_t suffix_read_count = 0;
+  CHECK(og::IsOk(og::fs::FsRead(
+    table, appended.value(),
+    std::span<uint8_t>(reinterpret_cast<uint8_t*>(suffix_read), 2),
+    suffix_read_count)));
+  CHECK(suffix_read_count == 2U);
+  CHECK(suffix_read[0] == 'Z' && suffix_read[1] == '!');
+  CHECK(og::IsOk(og::fs::FsClose(table, appended.value())));
 
   CHECK(og::fs::FsSeek(table, descriptor.value(), g_file_node.size + 1U) ==
         og::Status::kInvalidArg);

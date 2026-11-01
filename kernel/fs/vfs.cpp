@@ -130,6 +130,67 @@ bool g_ready = false;
   return Result<Node*>::Ok(current);
 }
 
+struct ParentPath {
+  Node* directory;
+  char name[64];
+};
+
+[[nodiscard]] Result<ParentPath> ResolveParent(const char* path) noexcept {
+  if (path == nullptr || path[0] != '/') {
+    return Result<ParentPath>::Err(Status::kInvalidArg);
+  }
+  const std::size_t length = mem::Length(path);
+  if (length <= 1U || length >= kMaxPath) {
+    return Result<ParentPath>::Err(Status::kInvalidArg);
+  }
+
+  std::size_t slash = length;
+  while (slash > 0U && path[slash - 1U] != '/') {
+    --slash;
+  }
+  if (slash == 0U) {
+    return Result<ParentPath>::Err(Status::kInvalidArg);
+  }
+
+  char parent_path[kMaxPath];
+  if (slash == 1U) {
+    parent_path[0] = '/';
+    parent_path[1] = '\0';
+  } else {
+    mem::Copy(parent_path, path, slash - 1U);
+    parent_path[slash - 1U] = '\0';
+  }
+
+  const char* name = path + slash;
+  const std::size_t name_length = length - slash;
+  if (name_length == 0U || name_length >= sizeof(ParentPath::name)) {
+    return Result<ParentPath>::Err(Status::kInvalidArg);
+  }
+
+  const Result<Node*> directory = FsResolve(parent_path);
+  if (directory.is_err()) {
+    return Result<ParentPath>::Err(directory.status());
+  }
+  if (directory.value()->type != NodeType::kDirectory) {
+    return Result<ParentPath>::Err(Status::kInvalidArg);
+  }
+
+  ParentPath parent{};
+  parent.directory = directory.value();
+  mem::Copy(parent.name, name, name_length);
+  parent.name[name_length] = '\0';
+  return Result<ParentPath>::Ok(parent);
+}
+
+[[nodiscard]] bool IsMountRoot(const char* path) noexcept {
+  for (uint32_t index = 0; index < g_mount_count; ++index) {
+    if (Equals(g_mounts[index].path, path)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 }  // namespace
 
 bool IsReady() noexcept {
@@ -212,6 +273,91 @@ Status FsList(const char* path, uint32_t index, DirEntry& entry, bool& found) no
     return Status::kUnsupported;
   }
   return node.value()->ops->iterate(node.value(), index, entry, found);
+}
+
+Result<Node*> FsCreate(const char* path, NodeType type) noexcept {
+  if (path == nullptr || IsMountRoot(path)) {
+    return Result<Node*>::Err(Status::kBusy);
+  }
+  const Result<ParentPath> parent = ResolveParent(path);
+  if (parent.is_err()) {
+    return Result<Node*>::Err(parent.status());
+  }
+  Node* directory = parent.value().directory;
+  if (directory->ops == nullptr || directory->ops->create == nullptr) {
+    return Result<Node*>::Err(Status::kUnsupported);
+  }
+  Node* created = nullptr;
+  const Status status = directory->ops->create(
+    directory, parent.value().name, type, &created);
+  if (IsErr(status)) {
+    return Result<Node*>::Err(status);
+  }
+  if (created == nullptr) {
+    return Result<Node*>::Err(Status::kIoError);
+  }
+  return Result<Node*>::Ok(created);
+}
+
+Status FsRemove(const char* path, NodeType type) noexcept {
+  if (path == nullptr || IsMountRoot(path)) {
+    return Status::kBusy;
+  }
+  const Result<ParentPath> parent = ResolveParent(path);
+  if (parent.is_err()) {
+    return parent.status();
+  }
+  Node* directory = parent.value().directory;
+  if (directory->ops == nullptr || directory->ops->lookup == nullptr ||
+      directory->ops->remove == nullptr) {
+    return Status::kUnsupported;
+  }
+  Node* node = nullptr;
+  Status status = directory->ops->lookup(
+    directory, parent.value().name, &node);
+  if (IsErr(status)) {
+    return status;
+  }
+  if (node == nullptr) {
+    return Status::kNotFound;
+  }
+  if (node->type != type) {
+    return Status::kInvalidArg;
+  }
+  return directory->ops->remove(directory, node);
+}
+
+Status FsRename(const char* old_path, const char* new_path) noexcept {
+  if (old_path == nullptr || new_path == nullptr ||
+      IsMountRoot(old_path) || IsMountRoot(new_path)) {
+    return Status::kBusy;
+  }
+  const Result<ParentPath> old_parent = ResolveParent(old_path);
+  if (old_parent.is_err()) {
+    return old_parent.status();
+  }
+  const Result<ParentPath> new_parent = ResolveParent(new_path);
+  if (new_parent.is_err()) {
+    return new_parent.status();
+  }
+  Node* old_directory = old_parent.value().directory;
+  Node* new_directory = new_parent.value().directory;
+  if (old_directory->ops == nullptr || old_directory->ops->lookup == nullptr ||
+      old_directory->ops->rename == nullptr ||
+      old_directory->ops != new_directory->ops) {
+    return Status::kUnsupported;
+  }
+  Node* node = nullptr;
+  Status status = old_directory->ops->lookup(
+    old_directory, old_parent.value().name, &node);
+  if (IsErr(status)) {
+    return status;
+  }
+  if (node == nullptr) {
+    return Status::kNotFound;
+  }
+  return old_directory->ops->rename(
+    old_directory, node, new_directory, new_parent.value().name);
 }
 
 }  // namespace og::fs

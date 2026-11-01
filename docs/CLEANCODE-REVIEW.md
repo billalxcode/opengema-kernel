@@ -241,6 +241,10 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   eksekusi dynamic.
 - Test SDK: install package dan contoh `examples/hello` berhasil dibangun
   sebagai ELF64 AArch64 memakai `find_package(gemapi)`.
+- Test FD flags: tulis ditolak pada descriptor read-only dan append menulis
+  di akhir berkas.
+- Test VFS mutation: mkdir, unlink, rmdir, rename, duplicate create, dan
+  mount root yang tidak boleh dihapus.
 
 Verifikasi branch `dev`:
 

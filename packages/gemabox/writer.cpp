@@ -32,7 +32,26 @@ int run_writer() {
   if (!count || count.value() < message_size || readback[0] != 'w') {
     return 1;
   }
+
+  auto appended = gemapi::fs::File::open(
+    "writer", gemapi::fs::kOpenWrite | gemapi::fs::kOpenAppend);
+  if (!appended) {
+    return 1;
+  }
+  if (appended.value().write("!", 1) != gemapi::Status::ok) {
+    return 1;
+  }
+  if (appended.value().seek(0) != gemapi::Status::ok) {
+    return 1;
+  }
+  auto appended_count = appended.value().read(readback, sizeof(readback));
+  if (!appended_count || appended_count.value() != (message_size + 1U) ||
+      readback[0] != 'w' || readback[message_size] != '!') {
+    return 1;
+  }
+
   gemapi::io::write(kWriteMessage);
+  gemapi::io::write("append ok\n");
   return 0;
 }
 

@@ -138,6 +138,43 @@ bool parse_u64(const char* text, gemapi::usize length, gemapi::u64& value) {
   return true;
 }
 
+void trim(const char*& text, gemapi::usize& length) {
+  while (length > 0U && text[0] == ' ') {
+    ++text;
+    --length;
+  }
+  while (length > 0U && text[length - 1U] == ' ') {
+    --length;
+  }
+}
+
+bool split_two(const char* args, gemapi::usize args_length,
+               const char*& first, gemapi::usize& first_length,
+               const char*& second, gemapi::usize& second_length) {
+  trim(args, args_length);
+  if (args_length == 0U) {
+    return false;
+  }
+  gemapi::usize split = 0;
+  while (split < args_length && args[split] != ' ') {
+    ++split;
+  }
+  if (split >= args_length) {
+    return false;
+  }
+  first = args;
+  first_length = split;
+  const char* rest = args + split;
+  gemapi::usize rest_length = args_length - split;
+  trim(rest, rest_length);
+  if (rest_length == 0U) {
+    return false;
+  }
+  second = rest;
+  second_length = rest_length;
+  return true;
+}
+
 bool finish_path(char* path, gemapi::usize capacity, gemapi::usize cursor) {
   if (cursor >= capacity) {
     return false;
@@ -292,6 +329,69 @@ CommandResult RunSleep(const char* args, gemapi::usize args_length) {
   return CommandResult::kContinue;
 }
 
+CommandResult RunMkdir(const char* args, gemapi::usize args_length) {
+  trim(args, args_length);
+  if (args_length == 0U) {
+    gemapi::io::write("mkdir: missing path\n");
+    return CommandResult::kContinue;
+  }
+  if (gemapi::fs::mkdir(args) != gemapi::Status::ok) {
+    gemapi::io::write("mkdir: failed\n");
+  }
+  return CommandResult::kContinue;
+}
+
+CommandResult RunRm(const char* args, gemapi::usize args_length) {
+  trim(args, args_length);
+  if (args_length == 0U) {
+    gemapi::io::write("rm: missing path\n");
+    return CommandResult::kContinue;
+  }
+  const auto info = gemapi::fs::stat(args);
+  if (!info) {
+    gemapi::io::write("rm: failed\n");
+    return CommandResult::kContinue;
+  }
+  const gemapi::Status status =
+    info.value().kind == gemapi::fs::Kind::directory
+      ? gemapi::fs::rmdir(args)
+      : gemapi::fs::unlink(args);
+  if (status != gemapi::Status::ok) {
+    gemapi::io::write("rm: failed\n");
+  }
+  return CommandResult::kContinue;
+}
+
+CommandResult RunMv(const char* args, gemapi::usize args_length) {
+  const char* old_path = nullptr;
+  const char* new_path = nullptr;
+  gemapi::usize old_length = 0;
+  gemapi::usize new_length = 0;
+  if (!split_two(args, args_length, old_path, old_length, new_path,
+                 new_length)) {
+    gemapi::io::write("mv: usage: mv <old> <new>\n");
+    return CommandResult::kContinue;
+  }
+  char old_buffer[128];
+  char new_buffer[128];
+  if (old_length >= sizeof(old_buffer) || new_length >= sizeof(new_buffer)) {
+    gemapi::io::write("mv: path too long\n");
+    return CommandResult::kContinue;
+  }
+  for (gemapi::usize index = 0; index < old_length; ++index) {
+    old_buffer[index] = old_path[index];
+  }
+  old_buffer[old_length] = '\0';
+  for (gemapi::usize index = 0; index < new_length; ++index) {
+    new_buffer[index] = new_path[index];
+  }
+  new_buffer[new_length] = '\0';
+  if (gemapi::fs::rename(old_buffer, new_buffer) != gemapi::Status::ok) {
+    gemapi::io::write("mv: failed\n");
+  }
+  return CommandResult::kContinue;
+}
+
 constexpr Command kCommands[] = {
   {"help", &RunHelp},
   {"echo", &RunEcho},
@@ -302,6 +402,9 @@ constexpr Command kCommands[] = {
   {"uptime", &RunUptime},
   {"sleep", &RunSleep},
   {"ps", &RunPs},
+  {"mkdir", &RunMkdir},
+  {"rm", &RunRm},
+  {"mv", &RunMv},
   {"halt", &RunHalt},
   {"shutdown", &RunShutdown},
   {"reboot", &RunReboot},

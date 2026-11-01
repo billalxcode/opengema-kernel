@@ -25,13 +25,20 @@ struct DirEntry {
 };
 
 struct NodeOps {
-  Status (*lookup)(Node* directory, const char* name, Node** out) noexcept;
+  Status (*lookup)(Node* directory, const char* name, Node** out) noexcept =
+    nullptr;
   Status (*read)(Node* node, uint64_t offset, std::span<uint8_t> buffer,
-                 uint64_t& out_read) noexcept;
-  Status (*write)(Node* node, uint64_t offset, std::span<const uint8_t> buffer,
-                  uint64_t& out_written) noexcept;
+                 uint64_t& out_read) noexcept = nullptr;
+  Status (*write)(Node* node, uint64_t offset,
+                  std::span<const uint8_t> buffer,
+                  uint64_t& out_written) noexcept = nullptr;
   Status (*iterate)(Node* directory, uint32_t index, DirEntry& entry,
-                    bool& found) noexcept;
+                    bool& found) noexcept = nullptr;
+  Status (*create)(Node* directory, const char* name, NodeType type,
+                   Node** out) noexcept = nullptr;
+  Status (*remove)(Node* directory, Node* node) noexcept = nullptr;
+  Status (*rename)(Node* directory, Node* node, Node* new_directory,
+                   const char* new_name) noexcept = nullptr;
 };
 
 struct Node {
@@ -58,6 +65,12 @@ struct FileEntry {
 constexpr uint32_t kMaxMounts = 16;
 constexpr uint32_t kMaxFiles = 16;
 constexpr uint32_t kMaxPath = 256;
+// Open flags. Write implies read access until a separate mode is needed.
+constexpr uint32_t kOpenRead = 0;
+constexpr uint32_t kOpenWrite = 1U << 0;
+constexpr uint32_t kOpenAppend = 1U << 1;
+constexpr uint32_t kOpenCreate = 1U << 2;
+constexpr uint32_t kOpenTruncate = 1U << 3;
 // 0 stdin, 1 stdout, 2 stderr are reserved. Files start at 3.
 constexpr uint32_t kFirstFileDescriptor = 3;
 
@@ -88,5 +101,11 @@ struct FileTable {
 [[nodiscard]] Result<Node*> FsResolve(const char* path) noexcept;
 [[nodiscard]] Status FsList(const char* path, uint32_t index, DirEntry& entry,
                             bool& found) noexcept;
+
+[[nodiscard]] Result<Node*> FsCreate(const char* path,
+                                     NodeType type) noexcept;
+[[nodiscard]] Status FsRemove(const char* path, NodeType type) noexcept;
+[[nodiscard]] Status FsRename(const char* old_path,
+                              const char* new_path) noexcept;
 
 }  // namespace og::fs

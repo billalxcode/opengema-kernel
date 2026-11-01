@@ -91,6 +91,18 @@ constexpr uint64_t kResultError = static_cast<uint64_t>(-1);
     case kSysSleep:
       status = DoSleep(frame->x[0], result);
       break;
+    case kSysMkdir:
+      status = DoMkdir(frame->x[0], result);
+      break;
+    case kSysUnlink:
+      status = DoUnlink(frame->x[0], result);
+      break;
+    case kSysRmdir:
+      status = DoRmdir(frame->x[0], result);
+      break;
+    case kSysRename:
+      status = DoRename(frame->x[0], frame->x[1], result);
+      break;
     default:
       status = Status::kInvalidArg;
       break;

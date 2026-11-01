@@ -8,6 +8,9 @@ namespace kgema {
 
 constexpr u64 kOpenRead = 0;
 constexpr u64 kOpenWrite = 1;
+constexpr u64 kOpenAppend = 2;
+constexpr u64 kOpenCreate = 4;
+constexpr u64 kOpenTruncate = 8;
 
 struct Stat {
   u64 type;
@@ -28,6 +31,10 @@ struct DirEntry {
 [[nodiscard]] bool seek(i64 descriptor, u64 offset) noexcept;
 [[nodiscard]] bool stat(const char* path, Stat& result) noexcept;
 [[nodiscard]] bool chdir(const char* path) noexcept;
+[[nodiscard]] bool mkdir(const char* path) noexcept;
+[[nodiscard]] bool unlink(const char* path) noexcept;
+[[nodiscard]] bool rmdir(const char* path) noexcept;
+[[nodiscard]] bool rename(const char* old_path, const char* new_path) noexcept;
 
 // Returns 1 when an entry is written, 0 at the end, -1 on error.
 [[nodiscard]] i64 list(const char* path, u64 index, DirEntry& entry) noexcept;

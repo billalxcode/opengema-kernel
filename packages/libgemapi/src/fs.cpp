@@ -147,4 +147,32 @@ Result<bool> list(const char* path, u64 index, DirEntry& entry) noexcept {
   return true;
 }
 
+Status mkdir(const char* path) noexcept {
+  if (path == nullptr) {
+    return Status::invalid_argument;
+  }
+  return kgema::mkdir(path) ? Status::ok : Status::not_found;
+}
+
+Status unlink(const char* path) noexcept {
+  if (path == nullptr) {
+    return Status::invalid_argument;
+  }
+  return kgema::unlink(path) ? Status::ok : Status::not_found;
+}
+
+Status rmdir(const char* path) noexcept {
+  if (path == nullptr) {
+    return Status::invalid_argument;
+  }
+  return kgema::rmdir(path) ? Status::ok : Status::not_found;
+}
+
+Status rename(const char* old_path, const char* new_path) noexcept {
+  if (old_path == nullptr || new_path == nullptr) {
+    return Status::invalid_argument;
+  }
+  return kgema::rename(old_path, new_path) ? Status::ok : Status::not_found;
+}
+
 }  // namespace gemapi::fs

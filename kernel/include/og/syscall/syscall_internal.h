@@ -93,4 +93,13 @@ namespace og::syscall {
 
 [[nodiscard]] Status DoSleep(uint64_t milliseconds, uint64_t& result) noexcept;
 
+[[nodiscard]] Status DoMkdir(uint64_t user_path, uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoUnlink(uint64_t user_path, uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoRmdir(uint64_t user_path, uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoRename(uint64_t user_old_path, uint64_t user_new_path,
+                              uint64_t& result) noexcept;
+
 }  // namespace og::syscall

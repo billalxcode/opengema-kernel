@@ -19,6 +19,14 @@ Result<uint32_t> FsOpen(FileTable& table, const char* path,
   if (!IsReady()) {
     return Result<uint32_t>::Err(Status::kNotInit);
   }
+  constexpr uint32_t kKnownFlags =
+    kOpenWrite | kOpenAppend | kOpenCreate | kOpenTruncate;
+  if ((flags & ~kKnownFlags) != 0U) {
+    return Result<uint32_t>::Err(Status::kInvalidArg);
+  }
+  if ((flags & (kOpenCreate | kOpenTruncate)) != 0U) {
+    return Result<uint32_t>::Err(Status::kUnsupported);
+  }
   Result<Node*> node = FsResolve(path);
   if (node.is_err()) {
     return Result<uint32_t>::Err(node.status());
@@ -107,17 +115,25 @@ Status FsWrite(FileTable& table, uint32_t descriptor,
   if (buffer.empty()) {
     return Status::kInvalidArg;
   }
+  const uint32_t flags = table.entries[descriptor].flags;
+  if ((flags & (kOpenWrite | kOpenAppend)) == 0U) {
+    return Status::kUnsupported;
+  }
   Node* node = table.entries[descriptor].node;
   if (node == nullptr || node->ops == nullptr || node->ops->write == nullptr) {
     return Status::kUnsupported;
   }
 
+  uint64_t offset = table.entries[descriptor].offset;
+  if ((flags & kOpenAppend) != 0U) {
+    offset = node->size;
+  }
   const Status status =
-    node->ops->write(node, table.entries[descriptor].offset, buffer, out_written);
+    node->ops->write(node, offset, buffer, out_written);
   if (IsErr(status)) {
     return status;
   }
-  table.entries[descriptor].offset += out_written;
+  table.entries[descriptor].offset = offset + out_written;
   return Status::kOk;
 }
 

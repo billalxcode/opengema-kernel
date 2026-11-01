@@ -55,6 +55,13 @@ CXX="${CXX:-clang++}"
 
 "$CXX" -std=c++20 -O1 -Wall -Wextra -Werror \
   -I libs/core -I kernel/include \
+  tests/host/vfs_mutation_probe.cpp kernel/fs/vfs.cpp kernel/fs/fd_table.cpp \
+  kernel/fs/ramfs.cpp libs/core/memory.cpp \
+  -o "$BUILD_DIR/vfs_mutation_probe"
+"$BUILD_DIR/vfs_mutation_probe"
+
+"$CXX" -std=c++20 -O1 -Wall -Wextra -Werror \
+  -I libs/core -I kernel/include \
   tests/host/framebuffer_probe.cpp kernel/io/framebuffer_console.cpp \
   kernel/io/framebuffer_draw.cpp kernel/io/font.cpp libs/core/memory.cpp \
   -o "$BUILD_DIR/framebuffer_probe"
