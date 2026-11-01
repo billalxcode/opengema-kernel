@@ -261,3 +261,18 @@ Fase ini tidak menghalangi v1.0 dan bisa ditunda.
    discovery dari driver.
 6. Jangan menambah exception/RTTI ke kernel atau SDK tanpa runtime yang
    lengkap.
+
+## 16. GEMA System Layer
+
+Arah jangka panjang userland, API, packaging, dan filesystem ada di
+`docs/gsl/README.md`.
+
+Ringkasnya:
+
+- Aplikasi hanya boleh memakai `libgemapi`.
+- `libgemapi` memakai `libkgema` secara privat.
+- Binary dan library berasal dari filesystem.
+- Kernel menjalankan init, init memasang volume dan menjalankan shell.
+- Setiap layer punya validasi dan batas kegagalan.
+
+Roadmap GSL ada di `docs/gsl/06-roadmap.md`.

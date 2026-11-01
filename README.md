@@ -136,4 +136,5 @@ sebelum spawn.
 Roadmap inti selesai. Berikutnya: pengembangan lanjutan di atas fondasi ini.
 
 Roadmap lengkap ada di `docs/ROADMAP.md`. Rencana lanjutan dan analisis
-kesenjangan ada di `docs/ROADMAP-NEXT.md`.
+kesenjangan ada di `docs/ROADMAP-NEXT.md`. Arsitektur layer, API, packaging,
+dan layout filesystem ada di `docs/gsl/README.md`.
