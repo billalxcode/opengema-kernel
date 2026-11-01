@@ -547,7 +547,7 @@ Catatan hasil Fase 11:
 3. Saat menulis ulang stub, `ELR` dan `SPSR` sempat lupa disimpan sehingga
    `eret` memakai nilai sampah dan CPU masuk AArch32. Sudah diperbaiki dan
    dikunci di urutan instruksi stub.
-4. Program user 1136 byte ditulis dalam C++20 dengan SDK `libkgema`
+4. Program user 1464 byte ditulis dalam C++20 dengan SDK `libkgema`
    (`packages/gemabox/main.cpp`), dipanggil dengan `svc`, menerima argv,
    mencetak `hello from el0`, lalu `exit`.
 5. Program user ditautkan di 1 TiB dan dijalankan di `AddressSpace` milik

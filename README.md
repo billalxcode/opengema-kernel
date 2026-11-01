@@ -75,7 +75,7 @@ virtio-gpu: display height: 800
 virtio-gpu: scanouts: 1
 virtio-gpu: scanout ok
 fs: mounted devfs and fat32
-fs: ramfs gemabox bytes: 1136
+fs: ramfs gemabox bytes: 1464
 fs: ramfs write ok
 fs: devfs console ok
 fs: fat32 file read ok
@@ -96,7 +96,7 @@ sync: mutex, semaphore, refcount, once ok
 time: timeout ok
 uart: ready
 uart: rx ok
-user: program bytes: 1136
+user: program bytes: 1464
 hello from el0
 file ok
 mmap ok
@@ -104,15 +104,18 @@ hello from el0
 file ok
 mmap ok
 child ok
-spawn ok
 child ok
 spawn ok
+spawn ok
+write ok
 user: exit pid: 1
 user: exit status: 0
 user: exit pid: 2
 user: exit status: 0
-user: frames before: 120001
-user: frames after: 120001
+user: exit pid: 3
+user: exit status: 0
+user: frames before: 119999
+user: frames after: 119999
 process: remaining: 0
 kernel: halt
 ```
@@ -122,8 +125,9 @@ Framebuffer console memakai virtio-gpu 1280x800 dan diuji otomatis dengan
 SDK `packages/libkgema`, berjalan di address space sendiri pada 1 TiB,
 dengan ASID yang dipasang saat context switch. Dua proses gemabox berjalan
 bersamaan, masing masing punya tabel file sendiri, lalu setiap proses
-menjalankan child dengan argv, menunggu, dan membebaskan stack, address
-space, dan FD. Jumlah frame bebas kembali ke angka sebelum spawn.
+menjalankan child dengan argv dan menunggu. Proses ketiga menguji `chdir`,
+write ke FD, seek, dan read. Jumlah frame bebas kembali ke angka sebelum
+spawn.
 
 Roadmap inti selesai. Berikutnya: pengembangan lanjutan di atas fondasi ini.
 

@@ -25,7 +25,9 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
 4. `write` dari halaman hasil pemetaan.
 5. `munmap` halaman tersebut.
 6. `spawn` child dengan argv `{"gemabox", "child"}`, lalu `wait`.
-7. `exit`.
+7. Mode `writer`: `chdir("/ram")`, tulis `write ok` ke file `writer`,
+   seek, read, lalu cetak `write ok`.
+8. `exit`.
 
 Child mendeteksi argv kedua dan hanya mencetak `child ok`.
 
@@ -37,6 +39,7 @@ file ok
 mmap ok
 child ok
 spawn ok
+write ok
 user: exit pid: 1
 user: exit status: 0
 ```

@@ -12,7 +12,7 @@ program seperti `gemabox` cukup menulis C++20 tanpa menyalin instruksi
 | `kgema/types.h` | Tipe dasar `usize`, `u64`, `i64` tanpa header standar |
 | `kgema/syscall.h` | Nomor syscall dan `invoke3` |
 | `kgema/io.h` | `write` untuk buffer dan string literal |
-| `kgema/file.h` | `open`, `close`, `read`, `seek`, dan `stat` |
+| `kgema/file.h` | `open`, `close`, `read`, `write`, `seek`, `stat`, dan `chdir` |
 | `kgema/memory.h` | `mmap` dan `munmap` |
 | `kgema/process.h` | `getpid`, `spawn`, `wait`, dan `exit` |
 
@@ -50,4 +50,4 @@ ditautkan bersama program memakai `packages/libkgema/link.ld`.
 - Global object dengan konstruktor dinamis belum dijalankan otomatis.
   Gunakan `constexpr`, `const`, atau static initialization.
 - Setiap proses punya satu address space dan satu thread user saat ini.
-- `write` baru mendukung stdout; write ke FD berkas belum.
+- Descriptor 0, 1, dan 2 dicadangkan untuk stdio. Berkas mulai dari fd 3.
