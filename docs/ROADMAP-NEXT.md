@@ -10,11 +10,11 @@ Prioritas: P0 blocker, P1 penting, P2 menengah, P3 nanti.
 
 | Area | Kondisi sekarang | Yang kurang | Dampak | Prioritas |
 |---|---|---|---|---|
-| Model proses | Dua proses, PID, parent, wait, exit status, dan reklamasi | argv/env, exec, cwd, daftar anak, banyak thread per proses | Shell dan program berbeda belum bisa dijalankan | P0 |
-| File descriptor | FD per proses sudah ada | Write ke FD, open flags, FD 0/1/2 standar | Program belum bisa menulis berkas | P0 |
+| Model proses | Dua proses, PID, parent, wait, exit status, argv, cwd, dan reklamasi | env, exec, daftar anak, banyak thread per proses | Shell dan program berbeda belum bisa dijalankan | P0 |
+| File descriptor | FD per proses, open, read, write, dan stdout | Open flags lengkap, append, create, truncate | Program belum bisa membuat berkas baru | P0 |
 | Syscall | open, close, read, write stdout, stat, seek, getpid, wait, spawn, exit, mmap | Write file, exec, error/errno konsisten, validasi lengkap | Userland belum bisa menjalankan program lain dengan argumen | P0 |
 | Reklamasi | Stack, address space, FD, dan slot proses dibebaskan; frame kembali | PID reuse, reklamasi saat gagal di tengah jalan | Aman untuk dua proses, belum untuk beban besar | P0 |
-| SDK dan shell | API berkas/proses awal, gemabox dua proses uji | argv, konstruktor C++, shell multi perintah, packaging SDK | Belum ada pengalaman userland yang nyata | P1 |
+| SDK dan shell | API berkas/proses/waktu, argv, konstruktor C++, shell multi perintah | Packaging SDK, contoh program, dan template package | Belum ada pengalaman userland yang nyata | P1 |
 | Filesystem | FAT32 read-only, ramfs statis, mount internal | Tulis berkas, mkdir, unlink, rename, mount/umount, permission, sync | Data tidak bisa disimpan atau diubah | P1 |
 | Memori user | Semua halaman user RWX, tanpa demand paging | W^X user, guard stack, stack growth, COW, file-backed mmap, accounting, OOM | Isolasi dan keamanan user lemah | P1 |
 | Scheduler | Per-CPU, thread tidak migrasi, tanpa prioritas | Migrasi/work stealing, prioritas, join, condvar, rwlock, futex, TLS | Beban tidak seimbang, primitif sinkronisasi kurang | P1 |
@@ -112,13 +112,13 @@ Tujuan: userland punya API yang layak dan gemabox menjadi shell nyata.
 - [x] SDK-03a API waktu: `now_ms` dan `sleep_ms` di libkgema dan libgemapi.
 - [ ] SDK-03b Error/errno yang konsisten untuk semua syscall.
 - [ ] SDK-03 API waktu dan error yang konsisten, tanpa libc.
-- [ ] SDK-04 Jalankan `.init_array` di `_start`, dukung konstruktor global
+- [x] SDK-04 Jalankan `.init_array` di `_start`, dukung konstruktor global
       sederhana tanpa exception dan tanpa RTTI.
 - [x] SDK-05 `_start` meneruskan argc/argv ke `main`.
 - [x] SDK-06 gemabox shell: `help`, `echo`, `cat`, `ls`, `clear`, `acpi`,
       `uptime`, `sleep`, `ps`, `halt`, `shutdown`, dan `reboot` sudah.
 - [x] SDK-07 Input UART ke TTY: line buffer, backspace, echo, read blocking.
-- [ ] SDK-08 Packaging: install header dan `libkgema.a`, CMake package
+- [x] SDK-08 Packaging: install header dan `libkgema.a`, CMake package
       config, satu contoh program baru, dan dokumentasi link.
 - [x] SDK-09 Uji: shell menerima `help`, `ls`, `acpi`, `uptime`, `sleep`,
       `ps`, `shutdown`, `reboot`, dan `halt`.

@@ -181,6 +181,7 @@ count_check() {
 }
 
 count_check "hello from el0" 2
+count_check "init ok" 2
 count_check "file ok" 2
 count_check "mmap ok" 2
 count_check "child ok" 2

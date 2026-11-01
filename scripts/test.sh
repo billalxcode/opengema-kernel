@@ -15,6 +15,9 @@ echo "== host unit tests =="
 echo "== kernel build =="
 ./scripts/build.sh
 
+echo "== sdk package =="
+./scripts/test-sdk.sh
+
 echo "== esp image =="
 pkill -f qemu-system-aarch64 2>/dev/null || true
 sleep 1

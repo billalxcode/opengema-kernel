@@ -1,0 +1,29 @@
+@PACKAGE_INIT@
+
+set(GEMAPI_LINKER_SCRIPT
+    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/opengema/link.ld")
+set(GEMAPI_SDK_TOOLCHAIN
+    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/opengema/opengema-sdk-toolchain.cmake")
+set(GEMAPI_DYNAMIC_LINKER "/system/boot/ld-gem")
+
+# Static SDK target. libgemapi.a already carries the private kgema objects,
+# so applications link this target only.
+add_library(gemapi::gemapi STATIC IMPORTED)
+set_target_properties(gemapi::gemapi PROPERTIES
+  IMPORTED_LOCATION
+    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/libgemapi.a"
+  INTERFACE_INCLUDE_DIRECTORIES
+    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_INCLUDEDIR@"
+  INTERFACE_COMPILE_FEATURES "cxx_std_20"
+  INTERFACE_COMPILE_OPTIONS
+    "-ffreestanding;-nostdlib;-nostdinc;-mgeneral-regs-only;-fno-exceptions;-fno-rtti;-fno-threadsafe-statics;-fno-stack-protector;-fno-builtin;-fno-unwind-tables;-fno-asynchronous-unwind-tables;-fno-use-cxa-atexit"
+  INTERFACE_LINK_OPTIONS
+    "-nostdlib;-T${GEMAPI_LINKER_SCRIPT};-u;_start;-z;max-page-size=4096;-s;--ld-path=aarch64-linux-gnu-ld")
+
+# Advanced target for system components that need the raw kernel ABI.
+add_library(gemapi::kgema STATIC IMPORTED)
+set_target_properties(gemapi::kgema PROPERTIES
+  IMPORTED_LOCATION
+    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/libkgema.a"
+  INTERFACE_INCLUDE_DIRECTORIES
+    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_INCLUDEDIR@")

@@ -615,3 +615,41 @@ add_custom_command(TARGET BOOTAA64EFI POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/esp/EFI/BOOT
   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/BOOTAA64.EFI ${CMAKE_SOURCE_DIR}/esp/EFI/BOOT/BOOTAA64.EFI
   COMMENT "Copy BOOTAA64.EFI to esp/EFI/BOOT")
+
+# Exported userland SDK. Applications use only libgemapi, while libkgema is
+# installed for system components that need the raw ABI.
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
+install(DIRECTORY packages/libgemapi/include/gemapi
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(DIRECTORY packages/libkgema/include/kgema
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(DIRECTORY packages/libgsl/include/gsl
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(DIRECTORY libs/cxx/
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+install(FILES ${OG_GEMAPI_ARCHIVE} ${OG_KGEMA_ARCHIVE}
+        DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(FILES ${OG_GEMAPI_SO} ${OG_KGEMA_SO}
+        DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(FILES ${CMAKE_BINARY_DIR}/libgemapi.so ${CMAKE_BINARY_DIR}/libkgema.so
+        DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(FILES packages/libgemapi/link.ld
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/opengema)
+install(FILES cmake/opengema-sdk-toolchain.cmake
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/opengema)
+
+configure_package_config_file(
+  cmake/gemapi-config.cmake.in
+  ${CMAKE_BINARY_DIR}/gemapi-config.cmake
+  INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/gemapi)
+write_basic_package_version_file(
+  ${CMAKE_BINARY_DIR}/gemapi-config-version.cmake
+  VERSION 0.1.0
+  COMPATIBILITY SameMajorVersion)
+install(FILES
+  ${CMAKE_BINARY_DIR}/gemapi-config.cmake
+  ${CMAKE_BINARY_DIR}/gemapi-config-version.cmake
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/gemapi)

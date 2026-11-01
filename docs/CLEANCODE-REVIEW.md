@@ -237,6 +237,10 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   lewat ACPI FADT dan PSCI.
 - Test QEMU waktu: `sleep` menunggu dan `uptime` mencetak waktu sejak boot.
 - Test QEMU proses: `ps` mencetak header dan daftar proses dari kernel.
+- Test QEMU init array: konstruktor global `hello` berjalan sekali per
+  eksekusi dynamic.
+- Test SDK: install package dan contoh `examples/hello` berhasil dibangun
+  sebagai ELF64 AArch64 memakai `find_package(gemapi)`.
 
 Verifikasi branch `dev`:
 

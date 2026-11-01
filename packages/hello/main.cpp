@@ -1,5 +1,17 @@
 #include "gemapi/io.h"
 
+namespace {
+
+struct InitMarker {
+  InitMarker() {
+    gemapi::io::write("init ok\n");
+  }
+};
+
+InitMarker g_init_marker;
+
+}  // namespace
+
 int main(int argc, char** argv, char** envp) {
   (void)argc;
   (void)argv;

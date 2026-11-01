@@ -18,6 +18,12 @@ SECTIONS
   .rela.dyn : { *(.rela.dyn) } :image
   .interp : { *(.interp) } :image :interp
   .data : { *(.data*) } :image
+  .init_array : {
+    __init_array_start = .;
+    KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*)))
+    KEEP(*(.init_array))
+    __init_array_end = .;
+  } :image
   .dynamic : { *(.dynamic) } :image :dynamic
   .bss : { *(.bss*) *(COMMON) } :image
 }
