@@ -76,7 +76,7 @@ kernel/
     core/         status, log, panic, assert, bootinfo, kmain
     arch/         barriers, cache, context, cpu, descriptor, mmu,
                   registers, spinlock, tlb, trap, user
-    io/           mmio, console, print, register
+    io/           mmio, console, print, register, framebuffer
     mem/          pmm, vmm, heap, mem_selftest
     events/       irq, trap, workqueue, event_selftest
     time/         timer, delay
@@ -88,7 +88,7 @@ kernel/
     syscall/      syscall
     platform/     platform, fdt, psci, smp, memory_map
   arch/aarch64/   barriers.cpp, cache.S, context.S, vectors.S, mmu_primitives.cpp
-  io/             mmio.cpp, console.cpp, print.cpp
+  io/             mmio.cpp, console.cpp, print.cpp, framebuffer.cpp
   core/           log.cpp, panic.cpp, assert.cpp, init.cpp, version.cpp
   mem/            pmm.cpp, vmm.cpp, heap.cpp, address_space.cpp
   events/         vector.cpp, trap.cpp, irq.cpp, workqueue.cpp, waitqueue.cpp
@@ -399,7 +399,9 @@ alamat CPU, pola data bertahan, dan jumlah frame bebas kembali setelah
 - [x] DRV-06 virtio PCI transport: capability modern, feature negotiation,
       queue setup, notify.
 - [x] DRV-07 virtio-blk: baca blok, polled completion, tanpa IRQ.
-- [ ] DRV-08 virtio-gpu: belum, ditunda sampai ada kebutuhan framebuffer.
+- [x] DRV-08 virtio-gpu 2D: control queue polled, resource 2D, attach
+      backing, transfer, flush, dan scanout. Framebuffer console 32 bit
+      dengan font 8x8 dan damage tracking ada di `og/io/framebuffer.h`.
 - [x] DRV-09 watchdog: QEMU virt tidak punya device ini, jadi sengaja
       dilewati.
 
@@ -418,6 +420,14 @@ Catatan hasil Fase 8:
    ukuran image 64 MiB.
 4. Virtio masih polled. MSI-X dan jalur IRQ menyusul bersama driver yang
    butuh throughput.
+5. virtio-gpu memakai format B8G8R8A8 dan satu scanout. Console serial dan
+   framebuffer digabung lewat `io::Tee`, jadi log tetap muncul di kedua
+   tempat. Smoke test mengambil `screendump` lewat monitor dan memeriksa
+   jumlah pixel teks.
+6. BAR virtio-gpu ada di `0x8000000000`, di atas 4 GiB. Core kedua sempat
+   fault karena TCR warisan firmware hanya mengizinkan alamat fisik 32 bit.
+   `ActivateAddressSpace` sekarang menurunkan IPS dari PARange, sehingga
+   semua core memakai ukuran alamat fisik yang sama.
 
 ### Fase 9 - Filesystem
 
@@ -663,7 +673,6 @@ yang belum selesai, supaya tidak ada yang hilang di antara fase.
 ### 9.3 Ditunda karena belum ada pemakai nyata
 
 - [ ] SMP penjadwalan lintas core (SCH-05): butuh per-CPU scheduler.
-- [ ] DRV-08 virtio-gpu: menunggu kebutuhan framebuffer.
 
 ### 9.4 Selesai
 

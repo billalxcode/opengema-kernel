@@ -47,8 +47,8 @@ karena image dimuat identity.
 - `0x15` SVC64.
 - `0x20` instruction abort dari EL0.
 - `0x21` instruction abort dari EL1.
-- `0x24` data abort dari EL1.
-- `0x25` data abort dari EL0.
+- `0x24` data abort dari EL0 (lower EL).
+- `0x25` data abort dari EL1 (same EL).
 - `0x07` akses FP/SIMD/SVE yang di-trap. Kernel memakai
   `-mgeneral-regs-only`, jadi ini tanda ada kode FP tak sengaja.
 - DFSC bit 5:0 untuk abort: `0b000100` sampai `0b000111` translation fault
@@ -65,6 +65,9 @@ Panic sudah mencetak `esr_el1`, `esr_ec`, `esr_iss`, `far_el1`, `elr_el1`,
 - Aktifkan `-d int,guest_errors -D int.log` untuk melihat exception per
   CPU. Hati-hati, log bisa ratusan MB.
 - Cek entry point dan simbol dengan `llvm-nm` dan `objdump -d`.
+- Ambil isi framebuffer dengan monitor HMP: `screendump /tmp/screen.ppm`.
+  Smoke test memakai ini untuk membuktikan console grafis benar-benar
+  menggambar.
 - Bandingkan perilaku HVF dan TCG dengan `-accel tcg` untuk memisahkan
   masalah virtualisasi dari kode kernel.
 
@@ -77,5 +80,12 @@ Panic sudah mencetak `esr_el1`, `esr_ec`, `esr_iss`, `far_el1`, `elr_el1`,
 - ECAM QEMU 11 ada di `0x4010000000`, bukan `0x3F000000`.
 - Stub vector yang menimpa `x0` sebelum menyimpan register merusak argumen
   syscall.
+- BAR virtio-gpu ada di `0x8000000000`. Core sekunder mewarisi TCR dengan
+  IPS 0 (alamat fisik 32 bit), sehingga akses ke BAR di atas 4 GiB memicu
+  translation fault level 3. IPS sekarang diturunkan dari PARange di
+  `ActivateAddressSpace`.
+- Fault yang terjadi saat print lock dipegang membuat panic menunggu lock
+  yang sama. Saat memburu kasus seperti ini, simpan ESR, FAR, dan ELR ke
+  variabel global di stub vektor sebelum panic, lalu baca lewat monitor.
 - Compiler bisa memakai SIMD untuk menyalin struct kecil. Core sekunder
   dengan FPEN nol akan trap. Solusi permanen: `-mgeneral-regs-only`.

@@ -45,8 +45,8 @@ Test lain:
 
 ## Status
 
-Sudah boot sampai kernel dengan MMU, memori, GIC, timer, virtio, FAT32,
-ramfs, procfs, scheduler, dan user mode. Program user pertama ada di
+Sudah boot sampai kernel dengan MMU, memori, GIC, timer, virtio-blk,
+virtio-gpu, FAT32, ramfs, procfs, scheduler, dan user mode. Program user pertama ada di
 `pubs/gemabox`:
 
 ```
@@ -69,6 +69,11 @@ dma test: streaming ok
 dma test: pool ok
 pci: virtio device id: 4097
 virtio-blk: queue size: 256
+pci: virtio-gpu device id: 4176
+virtio-gpu: display width: 1280
+virtio-gpu: display height: 800
+virtio-gpu: scanouts: 1
+virtio-gpu: scanout ok
 fs: mounted devfs and fat32
 fs: ramfs gemabox bytes: 147
 fs: ramfs write ok
@@ -94,7 +99,9 @@ user: exit ok
 kernel: halt
 ```
 
-Berikutnya: driver grafis, penjadwalan lintas core, dan address space
-per proses.
+Framebuffer console memakai virtio-gpu 1280x800 dan diuji otomatis dengan
+`screendump` dari monitor QEMU.
+
+Berikutnya: penjadwalan lintas core dan address space per proses.
 
 Roadmap lengkap ada di `docs/ROADMAP.md`.
