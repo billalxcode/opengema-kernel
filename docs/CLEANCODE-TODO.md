@@ -204,12 +204,12 @@ Commit: `test(dev): add gslfs endian and list error tests`.
 |---|---|---|
 | 0 Baseline | selesai | `4400e7a` |
 | 1 Shared primitives | selesai | `54ae45b` |
-| 2 Filesystem | selesai | `498f618` |
+| 2 Filesystem | selesai | `9122747` |
 | 3 Process | sebagian | `7250ab5` |
 | 4 VMM/scheduler | sebagian | `2f87675` |
 | 5 Driver/platform | sebagian | `e6a9bfa` |
 | 6 Userland | sebagian | `54ae45b` |
-| 7 Test/dokumentasi | sebagian | `419a27d` |
+| 7 Test/dokumentasi | sebagian | `679dcb3` |
 
 Verifikasi yang berjalan di sesi ini:
 
@@ -217,6 +217,9 @@ Verifikasi yang berjalan di sesi ini:
 python3 scripts/compile-check.py
 host tests: all passed
 ramfs probe: OK
+procfs probe: OK
+devfs probe: OK
+fat32 probe: OK
 gslfs probe: OK
 gslfs test: OK
 ```
