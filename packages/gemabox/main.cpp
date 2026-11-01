@@ -50,14 +50,6 @@ bool starts_with(const char* text, const char* prefix) {
   return true;
 }
 
-gemapi::usize text_length(const char* text) {
-  gemapi::usize length = 0;
-  while (text[length] != '\0') {
-    ++length;
-  }
-  return length;
-}
-
 void cat_file(const char* path) {
   auto file = gemapi::fs::File::open(path);
   if (!file) {
@@ -113,44 +105,47 @@ bool run_path(const char* path, const char* name) {
   return true;
 }
 
-bool run_external(const char* name) {
-  char path[128];
-  constexpr char kCommandsPrefix[] = "/commands/";
-  constexpr char kApplicationsPrefix[] = "/applications/";
-  const gemapi::usize name_length = text_length(name);
+gemapi::usize append_text(char* out, gemapi::usize capacity,
+                          gemapi::usize cursor, const char* text) {
+  for (gemapi::usize index = 0; text[index] != '\0'; ++index) {
+    if (cursor >= capacity) {
+      return capacity;
+    }
+    out[cursor] = text[index];
+    ++cursor;
+  }
+  return cursor;
+}
 
-  gemapi::usize cursor = sizeof(kCommandsPrefix) - 1U;
-  if ((cursor + name_length + 1U) >= sizeof(path)) {
+bool finish_path(char* path, gemapi::usize capacity, gemapi::usize cursor) {
+  if (cursor >= capacity) {
     return false;
   }
-  for (gemapi::usize index = 0; index < cursor; ++index) {
-    path[index] = kCommandsPrefix[index];
+  path[cursor] = '\0';
+  return true;
+}
+
+bool run_external(const char* name) {
+  char path[128];
+
+  gemapi::usize cursor = 0;
+  cursor = append_text(path, sizeof(path), cursor, "/commands/");
+  cursor = append_text(path, sizeof(path), cursor, name);
+  if (!finish_path(path, sizeof(path), cursor)) {
+    return false;
   }
-  for (gemapi::usize index = 0; index < name_length; ++index) {
-    path[cursor + index] = name[index];
-  }
-  path[cursor + name_length] = '\0';
   if (gemapi::fs::stat(path)) {
     return run_path(path, name);
   }
 
-  cursor = sizeof(kApplicationsPrefix) - 1U;
-  if ((cursor + name_length + 1U + name_length + 1U) >= sizeof(path)) {
+  cursor = 0;
+  cursor = append_text(path, sizeof(path), cursor, "/applications/");
+  cursor = append_text(path, sizeof(path), cursor, name);
+  cursor = append_text(path, sizeof(path), cursor, "/");
+  cursor = append_text(path, sizeof(path), cursor, name);
+  if (!finish_path(path, sizeof(path), cursor)) {
     return false;
   }
-  for (gemapi::usize index = 0; index < cursor; ++index) {
-    path[index] = kApplicationsPrefix[index];
-  }
-  for (gemapi::usize index = 0; index < name_length; ++index) {
-    path[cursor + index] = name[index];
-  }
-  cursor += name_length;
-  path[cursor] = '/';
-  ++cursor;
-  for (gemapi::usize index = 0; index < name_length; ++index) {
-    path[cursor + index] = name[index];
-  }
-  path[cursor + name_length] = '\0';
   if (!gemapi::fs::stat(path)) {
     return false;
   }

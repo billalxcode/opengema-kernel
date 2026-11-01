@@ -22,6 +22,7 @@ struct GslfsNode {
   uint32_t index;
   uint32_t parent;
   uint64_t data_offset;
+  // Kept so permission enforcement can use the on-disk mode later.
   uint32_t mode;
   uint32_t data_checksum;
 };
