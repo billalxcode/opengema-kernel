@@ -52,7 +52,7 @@ constexpr uint32_t kTickHz = 1000;
 // The host can starve the vCPU, so prove interrupts arrive without
 // asserting a wall clock rate. Only zero ticks is treated as a failure.
 constexpr uint64_t kTargetTicks = 10;
-constexpr uint64_t kTimeoutSeconds = 10;
+constexpr uint64_t kTimeoutSeconds = 20;
 constexpr uint64_t kSectorSize = 512;
 constexpr uint64_t kUserCodeVa = 0x100000000ULL;
 constexpr uint64_t kUserStackVa = 0x100100000ULL;

@@ -82,7 +82,7 @@ fi
 
 if [ "$FAILED" -ne 0 ]; then
   echo "--- serial tail ---"
-  tail -n 25 "$LOG" || true
+  tail -n 40 "$LOG" || true
   rm -f "$LOG"
   exit 1
 fi
