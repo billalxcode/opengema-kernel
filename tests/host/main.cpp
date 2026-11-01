@@ -171,6 +171,35 @@ void TestGpt() {
   CHECK(gslfs.is_ok());
   CHECK(gslfs.value().start_sector == 4096U);
   CHECK(gslfs.value().sector_count == 2048U);
+
+  // A disk without the GPT signature is reported as no device, not a
+  // malformed table.
+  const uint8_t saved_signature = image[512U];
+  image[512U] = 'X';
+  CHECK(og::fs::FindEspPartition(device).status() == og::Status::kNoDevice);
+  image[512U] = saved_signature;
+
+  const uint8_t unknown[8] = {'N', 'O', 'P', 'E', '0', '0', '0', '0'};
+  CHECK(og::fs::FindPartitionByMagic(device, unknown, sizeof(unknown)).status() ==
+        og::Status::kNotFound);
+  CHECK(og::fs::FindPartitionByMagic(device, nullptr, 0).status() ==
+        og::Status::kInvalidArg);
+
+  const og::fs::BlockDevice no_read{nullptr, nullptr, 0, 0};
+  CHECK(og::fs::FindEspPartition(no_read).status() ==
+        og::Status::kInvalidArg);
+
+  const og::fs::BlockDevice tiny{&ReadFakeDisk, &disk, 1, 0};
+  CHECK(og::fs::FindEspPartition(tiny).status() ==
+        og::Status::kInvalidArg);
+
+  std::vector<uint8_t> broken = image;
+  PutLe32(broken.data() + 512U + 80U, 0U);
+  FakeDisk broken_disk{broken.data(), kSectors};
+  const og::fs::BlockDevice broken_device{&ReadFakeDisk, &broken_disk, kSectors,
+                                          0};
+  CHECK(og::fs::FindEspPartition(broken_device).status() ==
+        og::Status::kInvalidArg);
 }
 
 void PutBe32(uint8_t* data, uint32_t value) {

@@ -174,6 +174,8 @@ Commit: `refactor(core): share endian and linker text helpers`.
 - [x] Tambah test image GSLFS valid dan rusak.
 - [x] Tambah test host untuk `endian.h`.
 - [x] Tambah test host GPT/partition (`FindEspPartition`, `FindPartitionByMagic`).
+- [x] Tambah test host GPT error path (signature rusak, count 0, disk
+  pendek, tanpa reader, magic tidak dikenal).
 - [x] Tambah test host VFS (`FsMount`, `FsResolve`, `FsStat`, path `..`).
 - [x] Tambah test host VFS FD (`FsOpen`, `FsRead`, `FsWrite`, `FsSeek`,
   `FsClose`, descriptor reuse).
