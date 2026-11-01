@@ -15,6 +15,10 @@ constexpr uint32_t kTimerIrq = 30;
 
 using TickCallback = void (*)(void* context);
 
+struct Timeout;
+
+using TimeoutCallback = void (*)(void* context);
+
 [[nodiscard]] Status TimerInit() noexcept;
 [[nodiscard]] Status TimerStartPeriodic(uint32_t hz) noexcept;
 [[nodiscard]] Status TimerStop() noexcept;
@@ -24,5 +28,16 @@ void TimerSetTickCallback(TickCallback callback, void* context) noexcept;
 
 [[nodiscard]] uint64_t TimerTicks() noexcept;
 [[nodiscard]] uint64_t TimerFrequency() noexcept;
+
+// Clocksource helpers. Safe before TimerInit; they read CNTFRQ directly.
+[[nodiscard]] uint64_t TimeNowNs() noexcept;
+[[nodiscard]] uint64_t TimeNowMs() noexcept;
+
+// One shot timeout. The callback runs in IRQ context, so it must be short
+// and must not sleep.
+[[nodiscard]] Result<Timeout*> ScheduleAfter(uint64_t milliseconds,
+                                            TimeoutCallback callback,
+                                            void* context) noexcept;
+[[nodiscard]] Status CancelTimeout(Timeout* timeout) noexcept;
 
 }  // namespace og::time
