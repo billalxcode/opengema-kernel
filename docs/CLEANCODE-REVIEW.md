@@ -154,6 +154,7 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 - `SpawnWithArgs` memakai `BuildInterpreterEnvironment` agar state
   environment tidak berserakan.
 - `vfs.cpp` memisahkan `FindBestMount` dan `ResolveSegments`.
+- `devfs.cpp` memakai satu tabel `g_devices` untuk lookup dan iteration.
 - FD table dipindah ke `fd_table.cpp`; `vfs_internal.h` hanya membawa
   `IsReady()` untuk kode kernel, bukan header publik.
 - `fd_table.cpp` meng-include `og/fs/vfs.h` yang mendeklarasikan fungsi

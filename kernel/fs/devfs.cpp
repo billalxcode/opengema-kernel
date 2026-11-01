@@ -12,6 +12,10 @@ Node g_console{};
 Node g_null{};
 Node g_zero{};
 
+constexpr uint32_t kDeviceCount = 3;
+// Single source for lookup and iteration order.
+Node* const g_devices[kDeviceCount] = {&g_console, &g_null, &g_zero};
+
 bool g_created = false;
 
 Status ConsoleWrite(Node* /*node*/, uint64_t /*offset*/, std::span<const uint8_t> buffer,
@@ -66,37 +70,21 @@ Status RootLookup(Node* /*directory*/, const char* name, Node** out) noexcept {
   if (name == nullptr) {
     return Status::kInvalidArg;
   }
-  if (mem::Same(name, "console")) {
-    *out = &g_console;
-    return Status::kOk;
-  }
-  if (mem::Same(name, "null")) {
-    *out = &g_null;
-    return Status::kOk;
-  }
-  if (mem::Same(name, "zero")) {
-    *out = &g_zero;
-    return Status::kOk;
+  for (uint32_t index = 0; index < kDeviceCount; ++index) {
+    if (mem::Same(name, g_devices[index]->name)) {
+      *out = g_devices[index];
+      return Status::kOk;
+    }
   }
   return Status::kNotFound;
 }
 
 Status RootIterate(Node* /*directory*/, uint32_t index, DirEntry& entry, bool& found) noexcept {
   found = false;
-  Node* node = nullptr;
-  switch (index) {
-    case 0:
-      node = &g_console;
-      break;
-    case 1:
-      node = &g_null;
-      break;
-    case 2:
-      node = &g_zero;
-      break;
-    default:
-      return Status::kOk;
+  if (index >= kDeviceCount) {
+    return Status::kOk;
   }
+  const Node* node = g_devices[index];
   mem::Zero(&entry, sizeof(entry));
   const std::size_t length = mem::Length(node->name);
   if (length >= sizeof(entry.name)) {
