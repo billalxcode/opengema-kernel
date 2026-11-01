@@ -90,15 +90,19 @@ Tujuan: fungsi kecil, satu tanggung jawab.
   `MountWritableTree`, `SeedEtcConfig`, dan `VerifyTmpWrite`.
 - [x] Pisahkan mount lookup dan path walk di `vfs.cpp` (`FindBestMount`,
   `ResolveSegments`).
-- [ ] Pisahkan FD table dari path resolution di `vfs.cpp` jika aman.
+- [x] Pisahkan FD table dari path resolution di `vfs.cpp`
+  (`fd_table.cpp` + `vfs_internal.h`).
 - [x] Tambah test host GSLFS dari `mkgslimg`.
 - [x] Tambah test host driver GSLFS (`Mount`, lookup, read, checksum).
 - [x] Tambah test host ramfs (`Create`, `CreateDir`, `CreateFile`, read, write, iterate).
 - [x] Tambah test host VFS untuk mount, path, dan `..`.
+- [x] Tambah test host VFS FD (`FsOpen`, `FsRead`, `FsWrite`, `FsSeek`,
+  `FsClose`, descriptor reuse).
 - [x] Compile-check grup.
 
-Catatan: pemisahan FD table di `vfs.cpp` ditunda karena menyentuh jalur
-syscall dan lebih aman setelah QEMU tersedia.
+Catatan: `vfs_internal.h` hanya berisi `IsReady()` dan tidak masuk header
+publik. `fd_table.cpp` meng-include header publik `og/fs/vfs.h` sebagai
+deklarasi fungsi yang diimplementasikannya.
 
 Commit: `refactor(fs): split gslfs mount and writable setup`.
 

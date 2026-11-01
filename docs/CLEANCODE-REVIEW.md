@@ -154,12 +154,17 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 - `SpawnWithArgs` memakai `BuildInterpreterEnvironment` agar state
   environment tidak berserakan.
 - `vfs.cpp` memisahkan `FindBestMount` dan `ResolveSegments`.
+- FD table dipindah ke `fd_table.cpp`; `vfs_internal.h` hanya membawa
+  `IsReady()` untuk kode kernel, bukan header publik.
+- `fd_table.cpp` meng-include `og/fs/vfs.h` yang mendeklarasikan fungsi
+  yang diimplementasikannya, sesuai aturan include header di .cpp.
 - `fdt.cpp` memakai satu `NodeBodyOffset` untuk prolog node.
 - `docs/LOCKING.md` mencatat urutan lock yang diketahui: heap -> PMM,
   scheduler -> PMM, dan virtio-blk sebagai leaf.
 - `VmmMapDevice` diperbaiki formatting-nya.
 - Test host baru: endian reader, image GSLFS valid/rusak/deterministik,
-  driver GSLFS, ramfs, GPT/partition, VFS, ELF parser, dan FDT parser.
+  driver GSLFS, ramfs, GPT/partition, VFS, VFS FD, ELF parser, dan FDT
+  parser.
 - Test QEMU baru: `ls /missing` diharapkan menghasilkan
   `ls: list failed`.
 

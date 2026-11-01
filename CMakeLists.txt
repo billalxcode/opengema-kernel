@@ -460,6 +460,7 @@ og_add_module(og_drivers
 og_add_module(og_fs
   SOURCES
     kernel/fs/vfs.cpp
+    kernel/fs/fd_table.cpp
     kernel/fs/devfs.cpp
     kernel/fs/ramfs.cpp
     kernel/fs/procfs.cpp
