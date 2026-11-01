@@ -153,18 +153,21 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   `MountWritableTree`, `SeedEtcConfig`, dan `VerifyTmpWrite`.
 - `SpawnWithArgs` memakai `BuildInterpreterEnvironment` agar state
   environment tidak berserakan.
+- `vfs.cpp` memisahkan `FindBestMount` dan `ResolveSegments`.
+- `fdt.cpp` memakai satu `NodeBodyOffset` untuk prolog node.
 - `docs/LOCKING.md` mencatat urutan lock yang diketahui: heap -> PMM,
   scheduler -> PMM, dan virtio-blk sebagai leaf.
 - `VmmMapDevice` diperbaiki formatting-nya.
 - Test host baru: endian reader, image GSLFS valid/rusak/deterministik,
-  GPT/partition lookup, dan FDT parser.
+  driver GSLFS, ramfs, GPT/partition, VFS, ELF parser, dan FDT parser.
 - Test QEMU baru: `ls /missing` diharapkan menghasilkan
   `ls: list failed`.
 
 Verifikasi branch `dev`:
 
 - `python3 scripts/compile-check.py`: 90 file OK, 1 entri lama dilewati.
-- `./scripts/test-host.sh`: host tests, GPT/FDT/endian, dan GSLFS test OK.
+- `./scripts/test-host.sh`: host tests, ramfs, GPT, FDT, VFS, ELF, dan
+  GSLFS probe OK.
 - `test.sh` penuh belum dijalankan karena podman/QEMU tidak tersedia.
 
 ## Kesimpulan
