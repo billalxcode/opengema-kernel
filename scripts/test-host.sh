@@ -16,6 +16,7 @@ CXX="${CXX:-clang++}"
   -I libs/core -I kernel/include \
   tests/host/main.cpp libs/core/memory.cpp libs/core/format.cpp \
   kernel/fs/partition.cpp kernel/fs/vfs.cpp kernel/platform/fdt.cpp \
+  kernel/process/elf.cpp \
   -o "$BUILD_DIR/host_tests"
 
 "$BUILD_DIR/host_tests"

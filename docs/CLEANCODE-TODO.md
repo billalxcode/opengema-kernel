@@ -105,6 +105,7 @@ Commit: `refactor(fs): split gslfs mount and writable setup`.
 Tujuan: batas tanggung jawab yang jelas.
 
 - [x] Ekstrak `BuildInterpreterEnvironment` dari `SpawnWithArgs`.
+- [x] Tambah host test ELF parser (`Parse` valid dan invalid).
 - [ ] Pindahkan load ELF dari `process.cpp` ke helper `elf.cpp`.
 - [ ] Pisahkan `SpawnWithArgs` menjadi `LoadProgram`, `CreateAddressSpace`,
   `CreateProcess`.
@@ -166,6 +167,7 @@ Commit: `refactor(core): share endian and linker text helpers`.
 - [x] Tambah test host untuk `endian.h`.
 - [x] Tambah test host GPT/partition (`FindEspPartition`, `FindPartitionByMagic`).
 - [x] Tambah test host VFS (`FsMount`, `FsResolve`, `FsStat`, path `..`).
+- [x] Tambah test host ELF parser valid dan invalid.
 - [x] Tambah test negative `ls /missing` di test QEMU (menunggu QEMU).
 - [ ] Update `docs/CLEANCODE-REVIEW.md`.
 - [ ] Jalankan `test.sh` di environment build.

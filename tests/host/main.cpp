@@ -11,6 +11,7 @@
 #include "og/fs/partition.h"
 #include "og/fs/vfs.h"
 #include "og/platform/fdt.h"
+#include "og/process/elf.h"
 
 namespace {
 
@@ -315,6 +316,70 @@ void TestVfs() {
   CHECK(stat.value().type == og::fs::NodeType::kDevice);
 }
 
+void PutLe16(uint8_t* data, uint16_t value) {
+  data[0] = static_cast<uint8_t>(value);
+  data[1] = static_cast<uint8_t>(value >> 8U);
+}
+
+void BuildMinimalElf(std::vector<uint8_t>& header) {
+  header.assign(1024, 0);
+  header[0] = 0x7FU;
+  header[1] = 'E';
+  header[2] = 'L';
+  header[3] = 'F';
+  header[4] = 2U;
+  header[5] = 1U;
+  header[6] = 1U;
+  PutLe16(header.data() + 16U, 2U);
+  PutLe16(header.data() + 18U, 183U);
+  PutLe32(header.data() + 20U, 1U);
+  PutLe64(header.data() + 24U, 0x10000000000ULL);
+  PutLe64(header.data() + 32U, 64U);
+  PutLe16(header.data() + 52U, 64U);
+  PutLe16(header.data() + 54U, 56U);
+  PutLe16(header.data() + 56U, 1U);
+
+  uint8_t* phdr = header.data() + 64U;
+  PutLe32(phdr, 1U);
+  PutLe32(phdr + 4U, 1U);
+  PutLe64(phdr + 8U, 0x1000U);
+  PutLe64(phdr + 16U, 0x10000000000ULL);
+  PutLe64(phdr + 32U, 0x100U);
+  PutLe64(phdr + 40U, 0x100U);
+  PutLe64(phdr + 48U, 0x1000U);
+}
+
+void TestElf() {
+  std::vector<uint8_t> header;
+  BuildMinimalElf(header);
+  const auto valid = og::process::elf::Parse(
+    std::span<const uint8_t>(header.data(), header.size()), 0x2000U);
+  CHECK(valid.is_ok());
+  CHECK(valid.value().entry == 0x10000000000ULL);
+  CHECK(valid.value().dynamic_address == 0U);
+  CHECK(valid.value().interpreter_size == 0U);
+  CHECK(valid.value().segment_count == 1U);
+
+  header[1] = 'X';
+  CHECK(!og::process::elf::Parse(
+    std::span<const uint8_t>(header.data(), header.size()), 0x2000U).is_ok());
+
+  header[1] = 'E';
+  PutLe16(header.data() + 56U, 0U);
+  CHECK(!og::process::elf::Parse(
+    std::span<const uint8_t>(header.data(), header.size()), 0x2000U).is_ok());
+
+  BuildMinimalElf(header);
+  PutLe64(header.data() + 64U + 16U, 0x1000U);
+  CHECK(!og::process::elf::Parse(
+    std::span<const uint8_t>(header.data(), header.size()), 0x2000U).is_ok());
+
+  BuildMinimalElf(header);
+  PutLe64(header.data() + 24U, 0x2000U);
+  CHECK(!og::process::elf::Parse(
+    std::span<const uint8_t>(header.data(), header.size()), 0x2000U).is_ok());
+}
+
 }  // namespace
 
 int main() {
@@ -325,6 +390,7 @@ int main() {
   TestGpt();
   TestFdt();
   TestVfs();
+  TestElf();
 
   if (g_failures != 0) {
     std::printf("host tests: %d failure(s)\n", g_failures);
