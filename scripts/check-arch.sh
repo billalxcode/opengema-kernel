@@ -49,6 +49,10 @@ rank_of_header() {
     og/mmu.h) echo 1 ;;
     og/mmio.h | og/console.h | og/print.h | og/register.h) echo 2 ;;
     og/pmm.h | og/vmm.h | og/heap.h | og/mem_selftest.h) echo 4 ;;
+    og/irq.h | og/trap.h | og/workqueue.h | og/event_selftest.h) echo 5 ;;
+    og/timer.h) echo 6 ;;
+    og/delay.h) echo 6 ;;
+    og/gic.h) echo 8 ;;
     og/memory_map.h) echo 13 ;;
     og/uart.h) echo 8 ;;
     *) echo -1 ;;
