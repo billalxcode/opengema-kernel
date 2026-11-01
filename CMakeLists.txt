@@ -34,19 +34,17 @@ find_program(OG_USER_OBJCOPY NAMES aarch64-linux-gnu-objcopy REQUIRED)
 set(OG_USER_OBJECT ${CMAKE_BINARY_DIR}/user_hello.o)
 set(OG_USER_ELF ${CMAKE_BINARY_DIR}/user_program.elf)
 set(OG_USER_BIN ${CMAKE_BINARY_DIR}/user_program.bin)
-set(OG_USER_HEADER ${CMAKE_BINARY_DIR}/user_program.h)
 
 add_custom_command(
-  OUTPUT ${OG_USER_HEADER}
+  OUTPUT ${OG_USER_BIN}
   COMMAND ${CMAKE_C_COMPILER} --target=aarch64-linux-gnu -ffreestanding -nostdlib
           -c ${CMAKE_SOURCE_DIR}/user/hello.S -o ${OG_USER_OBJECT}
   COMMAND ${OG_USER_LD} -Ttext=0x100000000 -e _start ${OG_USER_OBJECT} -o ${OG_USER_ELF}
   COMMAND ${OG_USER_OBJCOPY} -O binary ${OG_USER_ELF} ${OG_USER_BIN}
-  COMMAND python3 ${CMAKE_SOURCE_DIR}/scripts/bin2header.py ${OG_USER_BIN} ${OG_USER_HEADER}
-  DEPENDS ${CMAKE_SOURCE_DIR}/user/hello.S ${CMAKE_SOURCE_DIR}/scripts/bin2header.py
-  COMMENT "build and embed user program")
+  DEPENDS ${CMAKE_SOURCE_DIR}/user/hello.S
+  COMMENT "build user program")
 
-add_custom_target(og_user_program DEPENDS ${OG_USER_HEADER})
+add_custom_target(og_user_program DEPENDS ${OG_USER_BIN})
 
 # One OBJECT library per module. DEPS lists lower layers only, so the
 # link graph mirrors the architecture in docs/ROADMAP.md.
@@ -132,9 +130,11 @@ og_add_module(og_fs
   SOURCES
     kernel/fs/vfs.cpp
     kernel/fs/devfs.cpp
+    kernel/fs/ramfs.cpp
+    kernel/fs/procfs.cpp
     kernel/fs/partition.cpp
     kernel/fs/fat32.cpp
-  DEPS og_mem og_core og_inc_kernel)
+  DEPS og_sched og_mem og_core og_inc_kernel)
 
 og_add_module(og_sched
   SOURCES kernel/sched/scheduler.cpp
@@ -169,7 +169,6 @@ og_add_module(og_boot
     kernel/boot/uefi/efi_exit.cpp
   DEPS og_kernel og_inc_efi og_inc_kernel)
 
-target_include_directories(og_kernel PRIVATE ${CMAKE_BINARY_DIR})
 add_dependencies(og_kernel og_user_program)
 
 # Direct PE/COFF link. lld-link emits proper headers and .reloc.

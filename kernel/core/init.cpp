@@ -23,6 +23,8 @@
 #include "og/platform.h"
 #include "og/pmm.h"
 #include "og/print.h"
+#include "og/procfs.h"
+#include "og/ramfs.h"
 #include "og/psci.h"
 #include "og/rtc.h"
 #include "og/sched.h"
@@ -37,7 +39,6 @@
 #include "og/vmm.h"
 #include "og/workqueue.h"
 
-#include "user_program.h"
 #include "og/workqueue.h"
 
 extern "C" uintptr_t __stack_chk_guard;
@@ -147,12 +148,42 @@ void UserThreadEntry(void* /*argument*/) noexcept {
 }
 
 Status LoadUserProgram() noexcept {
-  const uint64_t code_size = (user::kProgramSize + 4095U) & ~4095U;
-  Status status = mem::VmmMapUser(kUserCodeVa, code_size, true);
+  const Result<fs::Stat> stat = fs::FsStat("/ram/init");
+  if (stat.is_err()) {
+    return stat.status();
+  }
+  const uint64_t size = stat.value().size;
+  if (size == 0 || size > 65536U) {
+    return Status::kInvalidArg;
+  }
+
+  const Result<void*> buffer = mem::HeapAlloc(size);
+  if (buffer.is_err()) {
+    return buffer.status();
+  }
+  const Result<uint32_t> file = fs::FsOpen("/ram/init");
+  if (file.is_err()) {
+    (void)mem::HeapFree(buffer.value());
+    return file.status();
+  }
+  uint64_t read = 0;
+  Status status = fs::FsRead(
+    file.value(),
+    std::span<uint8_t>(static_cast<uint8_t*>(buffer.value()), size), read);
+  (void)fs::FsClose(file.value());
+  if (IsErr(status) || read != size) {
+    (void)mem::HeapFree(buffer.value());
+    return Status::kIoError;
+  }
+
+  const uint64_t code_size = (size + 4095U) & ~4095U;
+  status = mem::VmmMapUser(kUserCodeVa, code_size, true);
   if (IsErr(status)) {
+    (void)mem::HeapFree(buffer.value());
     return status;
   }
-  status = mem::VmmCopyOut(kUserCodeVa, user::kProgram, user::kProgramSize);
+  status = mem::VmmCopyOut(kUserCodeVa, buffer.value(), size);
+  (void)mem::HeapFree(buffer.value());
   if (IsErr(status)) {
     return status;
   }
@@ -160,6 +191,123 @@ Status LoadUserProgram() noexcept {
   if (IsErr(status)) {
     return status;
   }
+  LogDec(LogLevel::kInfo, "user: program bytes", size);
+  return Status::kOk;
+}
+
+fs::Node* g_ram_root = nullptr;
+
+Status PopulateRamfs() noexcept {
+  Result<fs::Node*> ram = fs::ramfs::Create();
+  if (ram.is_err()) {
+    return ram.status();
+  }
+  g_ram_root = ram.value();
+  Status status = fs::FsMount("/ram", g_ram_root);
+  if (IsErr(status)) {
+    return status;
+  }
+
+  const Result<fs::Stat> stat = fs::FsStat("/INIT.BIN");
+  if (stat.is_err()) {
+    Log(LogLevel::kWarn, "fs: INIT.BIN missing\n");
+    return stat.status();
+  }
+  const uint64_t size = stat.value().size;
+  if (size == 0 || size > 65536U) {
+    return Status::kInvalidArg;
+  }
+
+  const Result<void*> buffer = mem::HeapAlloc(size);
+  if (buffer.is_err()) {
+    return buffer.status();
+  }
+  const Result<uint32_t> file = fs::FsOpen("/INIT.BIN");
+  if (file.is_err()) {
+    (void)mem::HeapFree(buffer.value());
+    return file.status();
+  }
+  uint64_t read = 0;
+  status = fs::FsRead(
+    file.value(),
+    std::span<uint8_t>(static_cast<uint8_t*>(buffer.value()), size), read);
+  (void)fs::FsClose(file.value());
+  if (IsErr(status) || read != size) {
+    (void)mem::HeapFree(buffer.value());
+    return Status::kIoError;
+  }
+
+  const Result<fs::Node*> init =
+    fs::ramfs::CreateFile(g_ram_root, "init", buffer.value(), size);
+  (void)mem::HeapFree(buffer.value());
+  if (init.is_err()) {
+    return init.status();
+  }
+  LogDec(LogLevel::kInfo, "fs: ramfs init bytes", size);
+
+  const Result<fs::Node*> hello = fs::ramfs::CreateFile(g_ram_root, "hello", nullptr, 0);
+  if (hello.is_err()) {
+    return hello.status();
+  }
+
+  const Result<uint32_t> hello_file = fs::FsOpen("/ram/hello");
+  if (hello_file.is_err()) {
+    return hello_file.status();
+  }
+  constexpr char kHello[] = "ramfs write ok\n";
+  uint64_t written = 0;
+  status = fs::FsWrite(
+    hello_file.value(),
+    std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(kHello), sizeof(kHello) - 1U),
+    written);
+  if (IsErr(status) || written != (sizeof(kHello) - 1U)) {
+    (void)fs::FsClose(hello_file.value());
+    return Status::kIoError;
+  }
+  status = fs::FsSeek(hello_file.value(), 0);
+  if (IsErr(status)) {
+    (void)fs::FsClose(hello_file.value());
+    return status;
+  }
+  char readback[32];
+  uint64_t readback_size = 0;
+  status = fs::FsRead(hello_file.value(),
+                      std::span<uint8_t>(reinterpret_cast<uint8_t*>(readback),
+                                         sizeof(kHello) - 1U),
+                      readback_size);
+  (void)fs::FsClose(hello_file.value());
+  if (IsErr(status) || !mem::Equal(readback, kHello, sizeof(kHello) - 1U)) {
+    return Status::kIoError;
+  }
+  Log(LogLevel::kInfo, "fs: ramfs write ok\n");
+  return Status::kOk;
+}
+
+Status MountProcfs() noexcept {
+  Result<fs::Node*> proc = fs::procfs::Create(&sched::ThreadCount);
+  if (proc.is_err()) {
+    return proc.status();
+  }
+  const Status status = fs::FsMount("/proc", proc.value());
+  if (IsErr(status)) {
+    return status;
+  }
+
+  const Result<uint32_t> uptime = fs::FsOpen("/proc/uptime");
+  if (uptime.is_err()) {
+    return uptime.status();
+  }
+  char text[32];
+  uint64_t read = 0;
+  const Status read_status =
+    fs::FsRead(uptime.value(), std::span<uint8_t>(reinterpret_cast<uint8_t*>(text), sizeof(text) - 1U), read);
+  (void)fs::FsClose(uptime.value());
+  if (IsErr(read_status)) {
+    return read_status;
+  }
+  text[read] = '\0';
+  (void)PrintText("proc: uptime ");
+  (void)PrintText(text);
   return Status::kOk;
 }
 
@@ -273,6 +421,15 @@ void InitFilesystem() noexcept {
     return;
   }
   Log(LogLevel::kInfo, "fs: mounted devfs and fat32\n");
+
+  const Status ram_status = PopulateRamfs();
+  if (IsErr(ram_status)) {
+    Log(LogLevel::kError, "fs: ramfs setup failed\n");
+  }
+  const Status proc_status = MountProcfs();
+  if (IsErr(proc_status)) {
+    Log(LogLevel::kWarn, "fs: procfs setup failed\n");
+  }
 
   Result<uint32_t> console = fs::FsOpen("/dev/console");
   if (console.is_ok()) {
@@ -601,7 +758,6 @@ void kmain(BootInfo* info) noexcept {
   if (user_thread.is_err()) {
     Panic("user: thread create failed");
   }
-  LogDec(LogLevel::kInfo, "user: program bytes", user::kProgramSize);
 
   arch::aarch64::DisableIrq();
   sched::SchedulerStart();

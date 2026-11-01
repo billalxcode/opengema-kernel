@@ -18,6 +18,9 @@ if [ -n \"\$LOOP\" ]; then
   mount \"\$LOOP\" /mnt/esp
   mkdir -p /mnt/esp/EFI/BOOT
   cp esp/EFI/BOOT/BOOTAA64.EFI /mnt/esp/EFI/BOOT/
+  if [ -f build/user_program.bin ]; then
+    cp build/user_program.bin /mnt/esp/INIT.BIN
+  fi
   printf '%s\r\n' 'FS0:\EFI\BOOT\BOOTAA64.EFI' > /mnt/esp/startup.nsh
   umount /mnt/esp
   losetup -d \"\$LOOP\" || true
@@ -30,6 +33,9 @@ else
   mmd -i esp.img@@\$((\$START_SECTOR * 512)) ::/EFI
   mmd -i esp.img@@\$((\$START_SECTOR * 512)) ::/EFI/BOOT
   mcopy -i esp.img@@\$((\$START_SECTOR * 512)) esp/EFI/BOOT/BOOTAA64.EFI ::/EFI/BOOT/BOOTAA64.EFI
+  if [ -f build/user_program.bin ]; then
+    mcopy -i esp.img@@\$((\$START_SECTOR * 512)) build/user_program.bin ::/INIT.BIN
+  fi
   printf '%s\r\n' 'FS0:\EFI\BOOT\BOOTAA64.EFI' > /tmp/startup.nsh
   mcopy -i esp.img@@\$((\$START_SECTOR * 512)) /tmp/startup.nsh ::/startup.nsh
   mdir -i esp.img@@\$((\$START_SECTOR * 512)) ::/EFI/BOOT
