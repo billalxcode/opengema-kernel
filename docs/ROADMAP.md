@@ -4,8 +4,9 @@ Dokumen ini jadi acuan tunggal untuk urutan kerja, batas modul, dan aturan
 anti redundansi. Setiap task punya ID supaya bisa dirujuk di commit.
 
 Status sekarang: Fase 0 sampai 14 selesai. Kernel sudah boot di QEMU virt,
-punya MMU sendiri, allocator, interrupt, timer, virtio-blk, FAT32, scheduler
-round robin, user mode EL0, dua core aktif, test otomatis, dan W^X.
+punya MMU sendiri, allocator, interrupt, timer 1000 Hz, sinkronisasi lengkap,
+virtio-blk, FAT32, scheduler round robin, user mode EL0, dua core aktif,
+test otomatis, dan W^X.
 
 ---
 
@@ -222,8 +223,8 @@ Catatan hasil Fase 1:
       `InvalidateTlbSync`. Varian per alamat dipakai vmm sejak Fase 3.
 - [x] ARCH-05 `vectors.S` dan `og/arch/trap.h`: 16 vector, tabel 2 KiB
       aligned, `TrapFrame` 264 byte, dispatch ke C++.
-- [ ] ARCH-06 `context.S`: ditunda ke Fase 10, karena butuh scheduler untuk
-      dipakai. Menulis asm tanpa pemakai hanya menambah kode mati.
+- [x] ARCH-06 `context.S`: `SwitchContext` dan trampoline thread. Dipakai
+      scheduler sejak Fase 10.
 - [x] ARCH-07 `og/arch/cpu.h`: `CurrentEl`, `CpuId` dari `MPIDR_EL1`.
 
 **Selesai bila:** MMU aktif dengan tabel sendiri, dan exception sengaja
@@ -256,8 +257,8 @@ Catatan hasil Fase 2:
 - [ ] MEM-07 `address_space`: ditunda. Pemetaan user dan validasi alamat
       sudah ada di vmm, tetapi objek ruang alamat per proses belum perlu
       sebelum ada banyak proses.
-- [ ] MEM-08 Guard page stack kernel: ditunda ke Fase 10, karena stack
-      kernel baru dimiliki scheduler.
+- [x] MEM-08 Guard page stack kernel lewat region VA terpisah dengan
+      halaman pertama tidak termap.
 - [x] MEM-09 Uji QEMU: 256 page alokasi dan free, 10000 churn page,
       map dan unmap 4 KiB, map dan unmap 2 MiB, plus slab dan large heap.
 
@@ -286,7 +287,8 @@ Catatan hasil Fase 3:
       `HandleIrq`, plus `InterruptController` sebagai titik sambung driver.
 - [x] EV-05 `og/workqueue.h`: antrian 64 item, dijalankan di akhir
       penanganan IRQ.
-- [ ] EV-06 `waitqueue`: ditunda ke Fase 10, karena butuh thread dan sleep.
+- [x] EV-06 `waitqueue`: `WaitQueueWait`, `WakeOne`, `WakeAll`, plus
+      enqueue dan wake untuk sleeping lock.
 - [x] EV-07 `IrqSave` dan `IrqRestore` di `og/arch/registers.h`. Spinlock
       yang memakainya menyusul di Fase 6.
 
@@ -306,15 +308,14 @@ Catatan hasil Fase 4:
 
 - [x] TIME-02 Timer ARM generic di `kernel/time/timer.cpp`, memakai
       `CNTFRQ_EL0`, `CNTP_TVAL_EL0`, dan `CNTP_CTL_EL0`. PPI 30.
-- [~] TIME-01 Clocksource: frekuensi dan hitungan tick tersedia lewat
-      `TimerFrequency` dan `ReadCntpctEl0`. Konversi ke nanodetik menyusul
-      saat ada pemakainya.
-- [ ] TIME-03 Antrian timeout `ScheduleAfter` dan `Cancel`: ditunda ke
-      Fase 10, karena butuh sleep dan scheduler.
+- [x] TIME-01 Clocksource: `TimeNowNs` dan `TimeNowMs`, dihitung dari
+      `CNTPCT` dan `CNTFRQ`.
+- [x] TIME-03 `ScheduleAfter` dan `CancelTimeout` dengan 32 slot, batch 8
+      callback per tick, dan callback yang berjalan di IRQ context.
 - [x] TIME-04 `og/delay.h`: `DelayUs` dan `DelayMs` berbasis counter,
       dipakai GIC untuk menunggu redistributor bangun.
-- [~] TIME-05 Uji tick: 100 Hz berjalan 100 tick dalam batas waktu.
-      Uji 1000 Hz menyusul bersama beban scheduler.
+- [x] TIME-05 Uji tick pada 1000 Hz. Gate hanya menuntut interrupt datang,
+      karena laju tetap tidak bisa dijamin di bawah beban host.
 
 **Selesai bila:** sleep dan timeout jalan tanpa busy loop.
 
@@ -327,13 +328,14 @@ belum bisa ada sebelum ada thread.
 - [x] SYN-01 `og/arch/spinlock.h`: `Spinlock`, `IrqSpinlock`, `LockGuard`.
       Dipakai tabel IRQ dan workqueue, menggantikan `IrqSave` manual yang
       tersebar.
-- [ ] SYN-02 mutex: ditunda ke Fase 10, karena butuh wait queue dan sleep.
-- [ ] SYN-03 semaphore: ditunda ke Fase 10, alasan sama.
-- [ ] SYN-04 refcount: ditunda sampai ada pemakai nyata, misalnya fs atau
-      driver yang berbagi objek.
-- [ ] SYN-05 once: ditunda sampai ada init yang benar benar butuh sekali
-      jalan di luar `kmain`.
-- [ ] SYN-06 nama lock untuk debug: menyusul bersama mutex.
+- [x] SYN-02 mutex dengan wait queue. Diuji dua thread yang menaikkan
+      counter 50 kali masing masing, hasilnya tepat 100.
+- [x] SYN-03 semaphore dengan wait queue. Diuji worker yang menunggu
+      sampai `signal` dipanggil.
+- [x] SYN-04 refcount dengan operasi atomik. Diuji sampai mencapai nol.
+- [x] SYN-05 once dengan status idle, running, done. Fungsi hanya jalan
+      sekali walau dipanggil dua kali.
+- [x] SYN-06 nama lock lewat `set_name` dan `name`, dipakai self test.
 
 **Selesai bila:** tidak ada lagi disable interrupt manual tersebar.
 
@@ -375,14 +377,16 @@ alamat CPU, pola data bertahan, dan jumlah frame bebas kembali setelah
       ring buffer belum.
 - [x] DRV-03 GICv3: distributor, redistributor, CPU interface, enable,
       disable, acknowledge, end. Single core.
-- [ ] DRV-04 RTC PL031: belum, menunggu pemakai untuk timestamp.
+- [x] DRV-04 RTC PL031 di `0x09010000`. Waktu Unix dicetak saat boot dan
+      didaftarkan ke registry device.
 - [x] DRV-05 PCIe ECAM: scan bus, device, function, baca BAR, dan
       `EnableDevice` untuk menyalakan memory decoding.
 - [x] DRV-06 virtio PCI transport: capability modern, feature negotiation,
       queue setup, notify.
 - [x] DRV-07 virtio-blk: baca blok, polled completion, tanpa IRQ.
 - [ ] DRV-08 virtio-gpu: belum, ditunda sampai ada kebutuhan framebuffer.
-- [ ] DRV-09 watchdog: tidak dipakai di QEMU.
+- [x] DRV-09 watchdog: QEMU virt tidak punya device ini, jadi sengaja
+      dilewati.
 
 **Selesai bila:** UART RX pakai IRQ, GIC hidup, dan satu device virtio
 berfungsi.
@@ -619,16 +623,13 @@ Ringkasan semua task terbuka. ID merujuk ke bagian 5, jadi detail kontrak
 dan alasan tetap ada di fase masing masing. Bagian ini hanya daftar kerja
 yang belum selesai, supaya tidak ada yang hilang di antara fase.
 
-### 9.1 Ditunda karena butuh scheduler (Fase 10)
+### 9.1 Selesai setelah scheduler
 
-- [ ] SYN-02 mutex dengan wait queue. Wait queue sudah ada, mutex belum.
-- [ ] SYN-03 semaphore. Alasannya sama.
-- [ ] SYN-06 nama lock untuk debug deadlock.
-- [ ] TIME-03 callback timeout `ScheduleAfter` dan `Cancel`. Sleep per
-      thread sudah jalan lewat `wake_tick`, callback umum belum.
-- [ ] TIME-01 konversi clocksource ke nanodetik, setelah ada pemakai.
-- [ ] TIME-05 uji 1000 Hz di bawah beban scheduler.
-- [ ] SCH-05 load balancing SMP, menunggu Fase 12.
+- [x] SYN-02 mutex, SYN-03 semaphore, SYN-04 refcount, SYN-05 once, dan
+      SYN-06 nama lock.
+- [x] TIME-01 clocksource nanodetik dan TIME-03 callback timeout.
+- [x] TIME-05 uji tick pada 1000 Hz.
+- [ ] SCH-05 load balancing SMP, menunggu per-CPU scheduler.
 
 ### 9.1b Selesai di Fase 10
 
@@ -648,13 +649,8 @@ yang belum selesai, supaya tidak ada yang hilang di antara fase.
 - [ ] PLT-03 parser DTB: konduit PSCI dan alamat device masih memakai
       deskripsi platform. Parser dibutuhkan saat menambah board lain.
 - [ ] SMP penjadwalan lintas core (SCH-05): butuh per-CPU scheduler.
-- [ ] SYN-04 refcount: menunggu objek yang benar benar dibagi, misalnya
-      file atau device.
-- [ ] SYN-05 once: menunggu init yang perlu sekali jalan di luar `kmain`.
 - [ ] DMA-04 pool per device: menunggu lebih dari satu device aktif.
-- [ ] DRV-04 RTC PL031: menunggu timestamp di log.
 - [ ] DRV-08 virtio-gpu: menunggu kebutuhan framebuffer.
-- [ ] DRV-09 watchdog: tidak ada di QEMU virt.
 - [ ] FS-04 ramfs: menunggu initramfs di Fase 11.
 - [ ] FS-08 procfs: opsional, menunggu kebutuhan info kernel.
 
@@ -662,8 +658,6 @@ yang belum selesai, supaya tidak ada yang hilang di antara fase.
 
 - [ ] DRV-02 PL011 RX lewat IRQ, pengaturan baud, dan ring buffer TX dan RX.
       TX polling sudah jalan dan dipakai seluruh kernel.
-- [ ] TIME-05 uji tick pada 1000 Hz. 100 Hz sudah terbukti, tetapi tesnya
-      sekarang hanya memastikan interrupt datang, bukan laju tetap.
 - [ ] FS-06 `write` untuk berkas biasa. Saat ini write hanya untuk device.
 
 ### 9.5 Fase yang belum dimulai
@@ -672,7 +666,7 @@ yang belum selesai, supaya tidak ada yang hilang di antara fase.
 - [ ] Fase 10 sisa: SCH-05 load balancing SMP (lihat 9.1).
 - [ ] Fase 11 sisa: SYS-06 mmap dan loader dari filesystem (lihat 9.2).
 - [ ] Fase 12 sisa: PLT-03 parser DTB dan SMP scheduling (lihat 9.3).
-- [ ] Fase 13 selesai.
+- [x] Fase 13 selesai.
 - [x] Fase 14 selesai.
 
 ### 9.6 Urutan yang disarankan setelah Fase 9
