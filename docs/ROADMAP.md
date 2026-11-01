@@ -108,7 +108,7 @@ kernel/
   platform/       qemu_virt.cpp, fdt.cpp, psci.cpp
   boot/uefi/      efi_main.cpp, efi_console.cpp, efi_memmap.cpp, efi_exit.cpp
 pubs/
-  gemabox/        main.S, README.md
+  gemabox/        main.c, link.ld, README.md
 tests/
   host/           unit test modul murni
   qemu/           smoke test script
@@ -537,8 +537,8 @@ Catatan hasil Fase 11:
 3. Saat menulis ulang stub, `ELR` dan `SPSR` sempat lupa disimpan sehingga
    `eret` memakai nilai sampah dan CPU masuk AArch32. Sudah diperbaiki dan
    dikunci di urutan instruksi stub.
-4. Program user 147 byte dibangun dari `pubs/gemabox/main.S`, dipanggil
-   dengan `svc`, mencetak `hello from el0`, lalu `exit`.
+4. Program user 217 byte ditulis dalam C freestanding (`pubs/gemabox/main.c`),
+   dipanggil dengan `svc`, mencetak `hello from el0`, lalu `exit`.
 5. Program user ditautkan di 1 TiB dan dijalankan di `AddressSpace` milik
    sendiri. Loader dan syscall memakai pointer ruang alamat itu, bukan
    variabel global.

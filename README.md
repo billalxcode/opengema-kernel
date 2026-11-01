@@ -75,7 +75,7 @@ virtio-gpu: display height: 800
 virtio-gpu: scanouts: 1
 virtio-gpu: scanout ok
 fs: mounted devfs and fat32
-fs: ramfs gemabox bytes: 147
+fs: ramfs gemabox bytes: 217
 fs: ramfs write ok
 fs: devfs console ok
 fs: fat32 file read ok
@@ -96,7 +96,7 @@ sync: mutex, semaphore, refcount, once ok
 time: timeout ok
 uart: ready
 uart: rx ok
-user: program bytes: 147
+user: program bytes: 217
 hello from el0
 mmap ok
 user: exit ok
