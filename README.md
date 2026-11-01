@@ -46,8 +46,8 @@ Test lain:
 ## Status
 
 Sudah boot sampai kernel dengan MMU, memori, GIC, timer, virtio-blk,
-virtio-gpu, FAT32, ramfs, procfs, scheduler, dan user mode. Program user pertama ada di
-`pubs/gemabox`:
+virtio-gpu, FAT32, ramfs, procfs, scheduler, dan user mode. Program user
+pertama ada di `packages/gemabox`:
 
 ```
 opengema-kernel: uefi entry
@@ -75,7 +75,7 @@ virtio-gpu: display height: 800
 virtio-gpu: scanouts: 1
 virtio-gpu: scanout ok
 fs: mounted devfs and fat32
-fs: ramfs gemabox bytes: 217
+fs: ramfs gemabox bytes: 373
 fs: ramfs write ok
 fs: devfs console ok
 fs: fat32 file read ok
@@ -96,7 +96,7 @@ sync: mutex, semaphore, refcount, once ok
 time: timeout ok
 uart: ready
 uart: rx ok
-user: program bytes: 217
+user: program bytes: 373
 hello from el0
 mmap ok
 user: exit ok
@@ -104,8 +104,9 @@ kernel: halt
 ```
 
 Framebuffer console memakai virtio-gpu 1280x800 dan diuji otomatis dengan
-`screendump` dari monitor QEMU. Program user berjalan di address space
-sendiri pada 1 TiB, dengan ASID yang dipasang saat context switch.
+`screendump` dari monitor QEMU. Program user ditulis dengan C++20 di atas
+SDK `packages/libkgema`, berjalan di address space sendiri pada 1 TiB,
+dengan ASID yang dipasang saat context switch.
 
 Roadmap inti selesai. Berikutnya: pengembangan lanjutan di atas fondasi ini.
 

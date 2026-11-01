@@ -107,8 +107,13 @@ kernel/
   syscall/        syscall.cpp, usercopy.cpp
   platform/       qemu_virt.cpp, fdt.cpp, psci.cpp
   boot/uefi/      efi_main.cpp, efi_console.cpp, efi_memmap.cpp, efi_exit.cpp
-pubs/
-  gemabox/        main.c, link.ld, README.md
+packages/
+  gemabox/        main.cpp, README.md
+  libkgema/
+    include/kgema/ types.h, syscall.h, io.h, memory.h, process.h
+    src/           syscall.cpp, io.cpp, memory.cpp, process.cpp, start.cpp
+    link.ld        linker script program user
+    README.md
 tests/
   host/           unit test modul murni
   qemu/           smoke test script
@@ -537,11 +542,15 @@ Catatan hasil Fase 11:
 3. Saat menulis ulang stub, `ELR` dan `SPSR` sempat lupa disimpan sehingga
    `eret` memakai nilai sampah dan CPU masuk AArch32. Sudah diperbaiki dan
    dikunci di urutan instruksi stub.
-4. Program user 217 byte ditulis dalam C freestanding (`pubs/gemabox/main.c`),
-   dipanggil dengan `svc`, mencetak `hello from el0`, lalu `exit`.
+4. Program user 373 byte ditulis dalam C++20 dengan SDK `libkgema`
+   (`packages/gemabox/main.cpp`), dipanggil dengan `svc`, mencetak
+   `hello from el0`, lalu `exit`.
 5. Program user ditautkan di 1 TiB dan dijalankan di `AddressSpace` milik
    sendiri. Loader dan syscall memakai pointer ruang alamat itu, bukan
    variabel global.
+6. `libkgema` menyediakan `_start`, pembungkus syscall, output, mmap, dan
+   exit. Program cukup menulis `main()` dan menautkan `libkgema.a` dengan
+   `link.ld` bersama.
 
 ### Fase 12 - Platform dan SMP
 
