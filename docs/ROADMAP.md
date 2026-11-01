@@ -211,22 +211,33 @@ Catatan hasil Fase 1:
 
 ### Fase 2 - Arch dasar
 
-- [ ] ARCH-01 `arch/aarch64/registers.h`: baca tulis `SCTLR_EL1`, `TCR_EL1`,
+- [x] ARCH-01 `og/arch/registers.h`: baca tulis `SCTLR_EL1`, `TCR_EL1`,
       `TTBR0_EL1`, `MAIR_EL1`, `VBAR_EL1`, `ESR_EL1`, `FAR_EL1`, `ELR_EL1`,
       `SPSR_EL1`, `DAIF`.
-- [ ] ARCH-02 `arch/aarch64/cache.h`: `CleanInvalidateRange`, `InvalidateIcache`,
-      `DcCivac`, `DcIvacin`.
-- [ ] ARCH-03 `arch/aarch64/mmu_primitives.cpp`: bangun tabel L0 sampai L3,
-      atribut normal dan device, set `MAIR`, `TCR`, `TTBR0`, aktifkan `SCTLR.M`.
-- [ ] ARCH-04 `arch/aarch64/tlb.h`: `TlbiVae1`, `TlbiVaal1`, `Dsb`, `Isb`.
-- [ ] ARCH-05 `arch/aarch64/vectors.S`: 16 vector, `alignas(2048)`, stub
-      simpan register ke `TrapFrame`, panggil handler C++.
-- [ ] ARCH-06 `arch/aarch64/context.S`: `SwitchContext`, simpan dan pulihkan
-      callee-saved register.
-- [ ] ARCH-07 `arch/aarch64/cpu.h`: `CpuId`, `CurrentEl`, `CoreIndex` nanti.
+- [x] ARCH-02 `og/arch/cache.h`: `CleanInvalidateDcacheRange`,
+      `InvalidateIcacheAll`, dengan ukuran line dari `CTR_EL0`.
+- [x] ARCH-03 `kernel/arch/aarch64/mmu.cpp`: tabel L0 dan L1, blok 1 GiB,
+      atribut normal dan device, `MAIR`, `TCR`, `TTBR0`, `SCTLR.M`.
+- [~] ARCH-04 `og/arch/tlb.h`: `InvalidateTlbAllLocal` selesai. Varian
+      per alamat menyusul di Fase 3 bersama vmm.
+- [x] ARCH-05 `vectors.S` dan `og/arch/trap.h`: 16 vector, tabel 2 KiB
+      aligned, `TrapFrame` 264 byte, dispatch ke C++.
+- [ ] ARCH-06 `context.S`: ditunda ke Fase 10, karena butuh scheduler untuk
+      dipakai. Menulis asm tanpa pemakai hanya menambah kode mati.
+- [x] ARCH-07 `og/arch/cpu.h`: `CurrentEl`, `CpuId` dari `MPIDR_EL1`.
 
 **Selesai bila:** MMU aktif dengan tabel sendiri, dan exception sengaja
 memicu panic yang benar, bukan hang.
+
+Catatan hasil Fase 2:
+
+1. Identity map memakai dua blok 1 GiB: di bawah `ram_base` sebagai device,
+   di atasnya sebagai normal write back. Cukup untuk QEMU virt 512 MiB.
+2. `MAIR` dan `TCR` dibaca lalu diubah sebagian, bukan ditimpa total, supaya
+   setelan firmware yang masih valid tidak rusak.
+3. Uji exception: `svc #0` menghasilkan vector 4, ESR `0x56000000` (SVC64),
+   lalu panic dengan dump register lengkap. Hasil ini sudah diverifikasi
+   di QEMU, bukan asumsi.
 
 ### Fase 3 - Memori
 

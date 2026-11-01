@@ -25,17 +25,19 @@ Mau lihat jendela QEMU:
 
 ## Status
 
-Sudah boot sampai kernel dan keluar dari boot services UEFI:
+Sudah boot sampai kernel dengan MMU dan exception handler aktif:
 
 ```
 opengema-kernel: uefi entry
 uefi: boot services exited
 kernel: kmain entered
-memory ranges: 29
+current el: 1
+cpu id: 0
 uart base: 0x0000000009000000
+mmu: identity map active
 kernel: halt
 ```
 
-Berikutnya: MMU, interrupt, dan driver.
+Berikutnya: memori (pmm, vmm, heap), lalu interrupt.
 
 Roadmap lengkap ada di `docs/ROADMAP.md`.
