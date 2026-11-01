@@ -177,10 +177,10 @@ Commit: `test(dev): add gslfs endian and list error tests`.
 | 1 Shared primitives | selesai | `54ae45b` |
 | 2 Filesystem | selesai | `48bea8e` |
 | 3 Process | sebagian | `6387efd` |
-| 4 VMM/scheduler | ditunda | - |
-| 5 Driver/platform | ditunda | - |
+| 4 VMM/scheduler | sebagian | `2f87675` |
+| 5 Driver/platform | sebagian | `30c9b0e` |
 | 6 Userland | sebagian | `54ae45b` |
-| 7 Test/dokumentasi | sebagian | `8e2828d` |
+| 7 Test/dokumentasi | sebagian | `30c9b0e` |
 
 Verifikasi yang berjalan di sesi ini:
 
