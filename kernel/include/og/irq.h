@@ -24,6 +24,11 @@ struct InterruptController {
 // Must be called before interrupts are enabled.
 void SetInterruptController(InterruptController controller) noexcept;
 
+// Runs after EOI and after pending work, in IRQ context. Used by the
+// scheduler to switch threads only after the interrupt is finished.
+using IrqExitHook = void (*)(void* context) noexcept;
+void SetIrqExitHook(IrqExitHook hook, void* context) noexcept;
+
 [[nodiscard]] Status RegisterIrq(uint32_t irq, IrqHandler handler, void* context) noexcept;
 [[nodiscard]] Status UnregisterIrq(uint32_t irq) noexcept;
 

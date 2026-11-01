@@ -12,6 +12,8 @@ uint64_t g_frequency = 0;
 uint64_t g_period = 0;
 uint64_t g_ticks = 0;
 bool g_ready = false;
+TickCallback g_tick_callback = nullptr;
+void* g_tick_context = nullptr;
 
 constexpr uint64_t kCntpCtlEnable = 1ULL << 0U;
 constexpr uint64_t kCntpCtlMask = 1ULL << 1U;
@@ -21,6 +23,9 @@ constexpr uint64_t kCntpCtlMask = 1ULL << 1U;
     arch::aarch64::WriteCntpTvalEl0(g_period);
   }
   ++g_ticks;
+  if (g_tick_callback != nullptr) {
+    g_tick_callback(g_tick_context);
+  }
   return Status::kOk;
 }
 
@@ -77,6 +82,11 @@ Status TimerStop() noexcept {
 
 uint64_t TimerTicks() noexcept {
   return g_ticks;
+}
+
+void TimerSetTickCallback(TickCallback callback, void* context) noexcept {
+  g_tick_callback = callback;
+  g_tick_context = context;
 }
 
 uint64_t TimerFrequency() noexcept {

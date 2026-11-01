@@ -1,6 +1,7 @@
 #include "og/print.h"
 
 #include "format.h"
+#include "og/arch/spinlock.h"
 #include "og/console.h"
 
 namespace og {
@@ -9,10 +10,13 @@ namespace {
 
 constexpr std::size_t kMaxLine = 128;
 
+arch::aarch64::IrqSpinlock g_print_lock;
+
 [[nodiscard]] const char* LabelOrEmpty(const char* label) noexcept {
   return label == nullptr ? "" : label;
 }
 
+// Caller holds g_print_lock.
 [[nodiscard]] Status PrintLabeled(const char* label, uint64_t value, bool hex) noexcept {
   char buffer[kMaxLine];
   fmt::LineBuilder line(buffer, sizeof(buffer));
@@ -33,14 +37,17 @@ constexpr std::size_t kMaxLine = 128;
 }  // namespace
 
 Status Print(std::span<const uint8_t> bytes) noexcept {
+  arch::aarch64::LockGuard<arch::aarch64::IrqSpinlock> guard(g_print_lock);
   return io::ConsoleWriteActive(bytes);
 }
 
 Status PrintText(const char* text) noexcept {
+  arch::aarch64::LockGuard<arch::aarch64::IrqSpinlock> guard(g_print_lock);
   return io::ConsoleWriteTextActive(text);
 }
 
 Status PrintLn(const char* text) noexcept {
+  arch::aarch64::LockGuard<arch::aarch64::IrqSpinlock> guard(g_print_lock);
   char buffer[kMaxLine];
   fmt::LineBuilder line(buffer, sizeof(buffer));
   line.Text(LabelOrEmpty(text));
@@ -49,10 +56,12 @@ Status PrintLn(const char* text) noexcept {
 }
 
 Status PrintDec(const char* label, uint64_t value) noexcept {
+  arch::aarch64::LockGuard<arch::aarch64::IrqSpinlock> guard(g_print_lock);
   return PrintLabeled(label, value, false);
 }
 
 Status PrintHex(const char* label, uint64_t value) noexcept {
+  arch::aarch64::LockGuard<arch::aarch64::IrqSpinlock> guard(g_print_lock);
   return PrintLabeled(label, value, true);
 }
 

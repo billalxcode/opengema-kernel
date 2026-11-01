@@ -15,11 +15,18 @@ struct IrqEntry {
 IrqEntry g_table[kMaxIrq];
 InterruptController g_controller{};
 arch::aarch64::IrqSpinlock g_table_lock;
+IrqExitHook g_exit_hook = nullptr;
+void* g_exit_context = nullptr;
 
 }  // namespace
 
 void SetInterruptController(InterruptController controller) noexcept {
   g_controller = controller;
+}
+
+void SetIrqExitHook(IrqExitHook hook, void* context) noexcept {
+  g_exit_hook = hook;
+  g_exit_context = context;
 }
 
 Status RegisterIrq(uint32_t irq, IrqHandler handler, void* context) noexcept {
@@ -79,6 +86,9 @@ Status HandleIrq() noexcept {
   const Status status = DispatchIrq(irq);
   g_controller.end(g_controller.context, irq);
   (void)RunPendingWork();
+  if (g_exit_hook != nullptr) {
+    g_exit_hook(g_exit_context);
+  }
   return status;
 }
 
