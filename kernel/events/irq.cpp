@@ -1,6 +1,6 @@
 #include "og/irq.h"
 
-#include "og/arch/registers.h"
+#include "og/arch/spinlock.h"
 #include "og/workqueue.h"
 
 namespace og::events {
@@ -14,6 +14,7 @@ struct IrqEntry {
 
 IrqEntry g_table[kMaxIrq];
 InterruptController g_controller{};
+arch::aarch64::IrqSpinlock g_table_lock;
 
 }  // namespace
 
@@ -28,38 +29,33 @@ Status RegisterIrq(uint32_t irq, IrqHandler handler, void* context) noexcept {
   if (handler == nullptr) {
     return Status::kInvalidArg;
   }
-  const uint64_t state = arch::aarch64::IrqSave();
-  Status status = Status::kOk;
+  arch::aarch64::LockGuard<arch::aarch64::IrqSpinlock> guard(g_table_lock);
   if (g_table[irq].handler != nullptr) {
-    status = Status::kExists;
-  } else {
-    g_table[irq].handler = handler;
-    g_table[irq].context = context;
+    return Status::kExists;
   }
-  arch::aarch64::IrqRestore(state);
-  return status;
+  g_table[irq].handler = handler;
+  g_table[irq].context = context;
+  return Status::kOk;
 }
 
 Status UnregisterIrq(uint32_t irq) noexcept {
   if (irq >= kMaxIrq) {
     return Status::kInvalidArg;
   }
-  const uint64_t state = arch::aarch64::IrqSave();
-  Status status = Status::kOk;
+  arch::aarch64::LockGuard<arch::aarch64::IrqSpinlock> guard(g_table_lock);
   if (g_table[irq].handler == nullptr) {
-    status = Status::kNotFound;
-  } else {
-    g_table[irq].handler = nullptr;
-    g_table[irq].context = nullptr;
+    return Status::kNotFound;
   }
-  arch::aarch64::IrqRestore(state);
-  return status;
+  g_table[irq].handler = nullptr;
+  g_table[irq].context = nullptr;
+  return Status::kOk;
 }
 
 Status DispatchIrq(uint32_t irq) noexcept {
   if (irq >= kMaxIrq) {
     return Status::kInvalidArg;
   }
+  // Runs with IRQ masked, so the entry cannot change under us on this core.
   const IrqHandler handler = g_table[irq].handler;
   if (handler == nullptr) {
     return Status::kNotFound;

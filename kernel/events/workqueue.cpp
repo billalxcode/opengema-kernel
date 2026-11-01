@@ -1,6 +1,6 @@
 #include "og/workqueue.h"
 
-#include "og/arch/registers.h"
+#include "og/arch/spinlock.h"
 
 namespace og::events {
 
@@ -18,6 +18,7 @@ uint32_t g_head = 0;
 uint32_t g_tail = 0;
 uint32_t g_count = 0;
 bool g_ready = false;
+arch::aarch64::IrqSpinlock g_lock;
 
 }  // namespace
 
@@ -37,18 +38,15 @@ Status ScheduleWork(WorkFn function, void* context) noexcept {
     return Status::kInvalidArg;
   }
 
-  const uint64_t state = arch::aarch64::IrqSave();
-  Status status = Status::kOk;
+  arch::aarch64::LockGuard<arch::aarch64::IrqSpinlock> guard(g_lock);
   if (g_count == kQueueCapacity) {
-    status = Status::kNoMem;
-  } else {
-    g_queue[g_tail].function = function;
-    g_queue[g_tail].context = context;
-    g_tail = (g_tail + 1U) % kQueueCapacity;
-    ++g_count;
+    return Status::kNoMem;
   }
-  arch::aarch64::IrqRestore(state);
-  return status;
+  g_queue[g_tail].function = function;
+  g_queue[g_tail].context = context;
+  g_tail = (g_tail + 1U) % kQueueCapacity;
+  ++g_count;
+  return Status::kOk;
 }
 
 uint32_t RunPendingWork() noexcept {
@@ -58,15 +56,15 @@ uint32_t RunPendingWork() noexcept {
   uint32_t ran = 0;
   for (;;) {
     WorkItem item{};
-    const uint64_t state = arch::aarch64::IrqSave();
-    if (g_count == 0) {
-      arch::aarch64::IrqRestore(state);
-      break;
+    {
+      arch::aarch64::LockGuard<arch::aarch64::IrqSpinlock> guard(g_lock);
+      if (g_count == 0) {
+        break;
+      }
+      item = g_queue[g_head];
+      g_head = (g_head + 1U) % kQueueCapacity;
+      --g_count;
     }
-    item = g_queue[g_head];
-    g_head = (g_head + 1U) % kQueueCapacity;
-    --g_count;
-    arch::aarch64::IrqRestore(state);
     item.function(item.context);
     ++ran;
   }
