@@ -241,23 +241,37 @@ Catatan hasil Fase 2:
 
 ### Fase 3 - Memori
 
-- [ ] MEM-01 `mem/pmm.h`: bitmap allocator atas `BootInfo` memory map,
-      `AllocPage`, `AllocPages(n)`, `FreePage`, `FreePages`.
-- [ ] MEM-02 `mem/pmm.cpp`: tandai region reserved: kernel image, boot info,
-      MMIO, ACPI, framebuffer.
-- [ ] MEM-03 `mem/vmm.h`: `Map(va, pa, size, Attr)`, `Unmap`, `MapDevice`,
-      `Protect`, `Translate`.
-- [ ] MEM-04 `mem/vmm.cpp`: walk tabel 4 level, alokasi tabel dari pmm,
-      dukung 4K, 2M, 1G.
-- [ ] MEM-05 `mem/heap.h`: `kmalloc`, `kzalloc`, `kfree`, `krealloc` minimal,
-      alignment, dan `HeapStats`.
-- [ ] MEM-06 `mem/heap.cpp`: TLSF atau slab sederhana di atas `AllocPages`.
-- [ ] MEM-07 `mem/address_space.h`: objek address space, siap untuk user mode.
-- [ ] MEM-08 Guard page di bawah stack kernel dan deteksi overflow.
-- [ ] MEM-09 Uji QEMU: alokasi dan free 10 ribu page, cek tidak bocor.
+- [x] MEM-01 `og/pmm.h` dan `kernel/mem/pmm.cpp`: bitmap allocator,
+      `PmmAllocPage`, `PmmAllocPages`, `PmmFreePage`, `PmmFreePages`.
+- [x] MEM-02 Hanya `ConventionalMemory` yang dilepas. Image kernel, stack
+      firmware, MMIO, dan ACPI tetap reserved.
+- [x] MEM-03 `og/vmm.h`: `VmmMap`, `VmmUnmap`, `VmmTranslate`, dan
+      `VmmInit` untuk identity map.
+- [x] MEM-04 Walk 4 level dengan tabel dialokasikan dari pmm. Mendukung
+      1 GiB, 2 MiB, dan 4 KiB sesuai alignment.
+- [x] MEM-05 `og/heap.h`: `HeapAlloc`, `HeapZalloc`, `HeapRealloc`,
+      `HeapFree`, `GetHeapStats`.
+- [x] MEM-06 Slab untuk 16 sampai 2048 byte, alokasi page langsung untuk
+      yang lebih besar. Header 16 byte menyimpan kelas dan jumlah page.
+- [ ] MEM-07 `address_space`: ditunda ke Fase 11, karena baru dipakai user
+      mode. Membuat objek tanpa pemakai hanya menambah kode mati.
+- [ ] MEM-08 Guard page stack kernel: ditunda ke Fase 10, karena stack
+      kernel baru dimiliki scheduler.
+- [x] MEM-09 Uji QEMU: 256 page alokasi dan free, 10000 churn page,
+      map dan unmap 4 KiB, map dan unmap 2 MiB, plus slab dan large heap.
 
 **Selesai bila:** `mmu.init_identity` diganti `vmm` sungguhan, dan heap
 dipakai minimal satu modul.
+
+Catatan hasil Fase 3:
+
+1. Alamat fisik sama dengan alamat virtual selama identity map berlaku.
+   Deskriptor tabel bisa langsung dipakai sebagai pointer, dan asumsi ini
+   ditulis di header vmm.
+2. `kernel/core/init.cpp` ditandai sebagai composition root di
+   `check-arch.sh`. Itu satu satunya file yang boleh include modul atas.
+3. Self test berjalan saat boot dan hasilnya terverifikasi di QEMU:
+   131072 frame total, 122093 bebas, semua tes pmm, vmm, dan heap lolos.
 
 ### Fase 4 - Events dan interrupt
 

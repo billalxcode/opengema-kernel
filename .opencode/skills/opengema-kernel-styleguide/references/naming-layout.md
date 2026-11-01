@@ -6,7 +6,10 @@ Basis: Core Guidelines NL, SF.
 
 - Namespace: `og::arch::aarch64`, snake_case.
 - Type: `PascalCase`.
-- Fungsi: `snake_case`.
+- Free function: `PascalCase`, contoh `Log`, `PrintHex`, `PmmAllocPage`.
+  Alasannya, free function dibaca sebagai layanan lintas modul.
+- Method: `snake_case`, contoh `uart.init`, `uart.write`.
+- Variabel lokal: `snake_case`.
 - Member: trailing `_`.
 - Konstanta: `kPascalCase`.
 - Macro: `UPPER_SNAKE`, hanya glue asm dan linker.
