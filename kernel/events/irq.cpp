@@ -17,6 +17,8 @@ InterruptController g_controller{};
 arch::aarch64::IrqSpinlock g_table_lock;
 IrqExitHook g_exit_hook = nullptr;
 void* g_exit_context = nullptr;
+SyncHook g_sync_hook = nullptr;
+void* g_sync_context = nullptr;
 
 }  // namespace
 
@@ -27,6 +29,18 @@ void SetInterruptController(InterruptController controller) noexcept {
 void SetIrqExitHook(IrqExitHook hook, void* context) noexcept {
   g_exit_hook = hook;
   g_exit_context = context;
+}
+
+void SetSyncHook(SyncHook hook, void* context) noexcept {
+  g_sync_hook = hook;
+  g_sync_context = context;
+}
+
+Status RunSyncHook(arch::aarch64::TrapFrame* frame) noexcept {
+  if (g_sync_hook == nullptr) {
+    return Status::kUnsupported;
+  }
+  return g_sync_hook(g_sync_context, frame);
 }
 
 Status RegisterIrq(uint32_t irq, IrqHandler handler, void* context) noexcept {

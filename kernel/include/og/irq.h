@@ -6,6 +6,7 @@
 
 #include <cstdint>
 
+#include "og/arch/trap.h"
 #include "og/status.h"
 
 namespace og::events {
@@ -28,6 +29,12 @@ void SetInterruptController(InterruptController controller) noexcept;
 // scheduler to switch threads only after the interrupt is finished.
 using IrqExitHook = void (*)(void* context) noexcept;
 void SetIrqExitHook(IrqExitHook hook, void* context) noexcept;
+
+// Synchronous exception hook. The syscall layer registers here. Returning
+// kOk means the exception was handled and the trap can return.
+using SyncHook = Status (*)(void* context, arch::aarch64::TrapFrame* frame) noexcept;
+void SetSyncHook(SyncHook hook, void* context) noexcept;
+[[nodiscard]] Status RunSyncHook(arch::aarch64::TrapFrame* frame) noexcept;
 
 [[nodiscard]] Status RegisterIrq(uint32_t irq, IrqHandler handler, void* context) noexcept;
 [[nodiscard]] Status UnregisterIrq(uint32_t irq) noexcept;

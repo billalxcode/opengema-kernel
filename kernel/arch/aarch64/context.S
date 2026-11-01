@@ -29,3 +29,11 @@ ThreadStartTrampoline:
     blr  x19
     bl   SchedulerThreadExit
 1:  b    1b
+
+// void EnterUserMode(uint64_t entry, uint64_t stack_pointer)
+    .global EnterUserMode
+EnterUserMode:
+    msr  elr_el1, x0
+    msr  sp_el0, x1
+    msr  spsr_el1, xzr
+    eret

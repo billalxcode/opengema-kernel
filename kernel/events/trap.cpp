@@ -31,7 +31,11 @@ namespace {
 }
 
 [[nodiscard]] bool IsIrqVector(uint64_t vector) noexcept {
-  return vector == 1U || vector == 5U;
+  return vector == 1U || vector == 5U || vector == 9U;
+}
+
+[[nodiscard]] bool IsSyncVector(uint64_t vector) noexcept {
+  return vector == 0U || vector == 4U || vector == 8U;
 }
 
 void DispatchTrap(arch::aarch64::TrapFrame* frame, uint64_t vector) noexcept {
@@ -42,6 +46,13 @@ void DispatchTrap(arch::aarch64::TrapFrame* frame, uint64_t vector) noexcept {
     }
     // The stub restores registers and returns with eret.
     return;
+  }
+
+  if (IsSyncVector(vector)) {
+    const Status status = RunSyncHook(frame);
+    if (IsOk(status)) {
+      return;
+    }
   }
 
   LogHex(LogLevel::kError, "trap: vector", vector);
