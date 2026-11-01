@@ -323,28 +323,45 @@ belum bisa ada sebelum ada thread.
 
 ### Fase 6 - Sync
 
-- [ ] SYN-01 `sync/spinlock.h`: `Spinlock` dan `SpinlockIrqSave`, dengan
-      `DAIF` simpan pulih.
-- [ ] SYN-02 `sync/mutex.h`: mutex dengan wait queue, hanya untuk konteks
-      yang boleh tidur.
-- [ ] SYN-03 `sync/semaphore.h`: hitung, `Wait`, `Signal`.
-- [ ] SYN-04 `sync/refcount.h`: `Ref`, `Unref`, `Release`.
-- [ ] SYN-05 `sync/once.h`: `CallOnce`.
-- [ ] SYN-06 Semua lock punya nama untuk debug deadlock.
+- [x] SYN-01 `og/arch/spinlock.h`: `Spinlock`, `IrqSpinlock`, `LockGuard`.
+      Dipakai tabel IRQ dan workqueue, menggantikan `IrqSave` manual yang
+      tersebar.
+- [ ] SYN-02 mutex: ditunda ke Fase 10, karena butuh wait queue dan sleep.
+- [ ] SYN-03 semaphore: ditunda ke Fase 10, alasan sama.
+- [ ] SYN-04 refcount: ditunda sampai ada pemakai nyata, misalnya fs atau
+      driver yang berbagi objek.
+- [ ] SYN-05 once: ditunda sampai ada init yang benar benar butuh sekali
+      jalan di luar `kmain`.
+- [ ] SYN-06 nama lock untuk debug: menyusul bersama mutex.
 
 **Selesai bila:** tidak ada lagi disable interrupt manual tersebar.
 
+Catatan hasil Fase 6:
+
+1. Spinlock dipindah ke `arch`, bukan `sync`. Alasannya, `events` dan `mem`
+   berada di bawah `sync` di roadmap, jadi lock tingkat CPU harus lebih
+   rendah dari keduanya. Lock yang boleh tidur tetap di `sync` nanti.
+2. Semua kunci memakai `__atomic_*` dengan acquire dan release, bukan
+   volatile dan bukan barrier manual.
+
 ### Fase 7 - DMA
 
-- [ ] DMA-01 `dma/dma.h`: `DmaAddr`, translasi CPU ke device. Identitas
-      sekarang, siap untuk IOMMU.
-- [ ] DMA-02 `AllocCoherent(size, align)`: page contiguous plus map device.
-- [ ] DMA-03 `MapStreaming(span, dir)`, `UnmapStreaming` dengan cache
-      maintenance dari `arch/cache.h`.
-- [ ] DMA-04 `dma/pool.cpp`: pool per device supaya tidak fragmentasi.
-- [ ] DMA-05 Uji dengan virtio-blk setelah Fase 8.
+- [x] DMA-01 `og/dma.h`: `DmaAddress` dan translasi identitas. Nanti saat
+      higher half masuk, hanya fungsi ini yang berubah.
+- [x] DMA-02 `AllocCoherent`: page dari pmm, di-zero, device address sama
+      dengan CPU address selama identity map berlaku.
+- [x] DMA-03 `MapStreaming` dan `UnmapStreaming` dengan cache maintenance
+      sesuai arah data.
+- [ ] DMA-04 `dma/pool.cpp`: ditunda sampai virtio butuh pool per device.
+- [ ] DMA-05 Uji dengan virtio-blk: menyusul di Fase 8.
 
 **Selesai bila:** driver virtio memakai DMA API, bukan alamat fisik mentah.
+
+Catatan hasil Fase 7: `SyncForDevice` dan `SyncForCpu` memakai `dc civac`
+dan `dc ivac` dari `arch/cache.h`, dengan ukuran line dari `CTR_EL0`.
+Self test membuktikan alokasi selaras 4 KiB, alamat device sama dengan
+alamat CPU, pola data bertahan, dan jumlah frame bebas kembali setelah
+`FreeCoherent`.
 
 ### Fase 8 - Driver
 

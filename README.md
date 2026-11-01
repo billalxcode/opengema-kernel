@@ -38,6 +38,8 @@ mem test: pmm ok
 mem test: vmm 4k ok
 mem test: vmm 2m ok
 mem test: heap ok
+dma test: coherent ok
+dma test: streaming ok
 event test: irq and workqueue ok
 gic: ready
 timer: frequency: 62500000
@@ -46,6 +48,6 @@ timer: periodic tick ok
 kernel: halt
 ```
 
-Berikutnya: sinkronisasi, lalu DMA dan driver virtio.
+Berikutnya: PCIe dan virtio, lalu filesystem.
 
 Roadmap lengkap ada di `docs/ROADMAP.md`.
