@@ -11,8 +11,12 @@ namespace og::arch::aarch64 {
 namespace {
 
 // TCR: 48 bit VA, 4 KiB granule, write back walks, inner shareable.
-// IPS and other fields are preserved from firmware.
+// IPS is derived from PARange so secondary cores do not inherit a 32 bit
+// physical address limit from firmware.
 constexpr uint64_t kTcrT0Sz48 = 16;
+constexpr uint64_t kTcrIpsShift = 32;
+constexpr uint64_t kTcrIpsMask = 0x7ULL << kTcrIpsShift;
+constexpr uint64_t kTcrMaxIps = 5;
 constexpr uint64_t kTcrIrgn0Shift = 8;
 constexpr uint64_t kTcrOrgn0Shift = 10;
 constexpr uint64_t kTcrSh0Shift = 12;
@@ -39,8 +43,13 @@ Status ActivateAddressSpace(uint64_t ttbr0) noexcept {
   mair = (mair & ~kMairAttributeMask) | kMairNormalWriteBack | (kMairDevice << 8U);
   WriteMairEl1(mair);
 
+  const uint64_t parange = ReadIdAa64Mmfr0El1() & 0xFULL;
+  const uint64_t ips = parange > kTcrMaxIps ? kTcrMaxIps : parange;
+
   uint64_t tcr = ReadTcrEl1();
   tcr &= ~kTcrAttributeMask;
+  tcr &= ~kTcrIpsMask;
+  tcr |= ips << kTcrIpsShift;
   tcr |= kTcrT0Sz48;
   tcr |= 1ULL << kTcrIrgn0Shift;
   tcr |= 1ULL << kTcrOrgn0Shift;
