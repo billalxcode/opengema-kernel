@@ -21,6 +21,8 @@ fi
 SERIAL_DIR="$(mktemp -d)"
 SOCKET="$SERIAL_DIR/serial.sock"
 LOG="$SERIAL_DIR/serial.log"
+MONITOR="$SERIAL_DIR/monitor.sock"
+SCREEN="$SERIAL_DIR/screen.ppm"
 VARS_TMP="$(mktemp /tmp/AAVMF_VARS.XXXXXX.fd)"
 cleanup() {
   if [ -n "${QEMU_PID:-}" ]; then
@@ -42,14 +44,20 @@ qemu-system-aarch64 \
   -drive if=pflash,format=raw,file="$CODE",readonly=on \
   -drive if=pflash,format=raw,file="$VARS_TMP" \
   -drive file="$ESP",format=raw,if=virtio \
+  -device virtio-gpu-pci \
   -serial "unix:$SOCKET,server=on,wait=off" \
   -display none \
-  -monitor none \
+  -monitor "unix:$MONITOR,server=on,wait=off" \
   2>/dev/null &
 QEMU_PID=$!
 
 CLIENT_STATUS=0
 python3 "$ROOT/scripts/uart_test_client.py" "$SOCKET" "$LOG" 120 || CLIENT_STATUS=$?
+
+# Give the last framebuffer flush time to land, then capture the scanout.
+sleep 1
+SCREEN_STATUS=0
+python3 "$ROOT/scripts/check-screen.py" "$MONITOR" "$SCREEN" || SCREEN_STATUS=$?
 
 kill "$QEMU_PID" 2>/dev/null || true
 wait "$QEMU_PID" 2>/dev/null || true
@@ -68,6 +76,7 @@ check() {
 }
 
 check "fs: fat32 file read ok"
+check "virtio-gpu: scanout ok"
 check "hardening: wx attributes ok"
 check "smp: cpus online: 2"
 check "sched: round robin ok"
@@ -76,6 +85,11 @@ check "hello from el0"
 check "mmap ok"
 check "user: exit ok"
 check "kernel: halt"
+
+if [ "$SCREEN_STATUS" -ne 0 ]; then
+  echo "qemu test: FAIL framebuffer screen"
+  FAILED=1
+fi
 
 if grep -q "panic:" "$LOG" 2>/dev/null; then
   echo "qemu test: FAIL panic detected"
