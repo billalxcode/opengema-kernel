@@ -272,6 +272,34 @@ add_custom_command(
 add_custom_target(og_init DEPENDS ${OG_INIT_ELF})
 add_dependencies(og_init og_libgemapi)
 
+# hello is the first external application used to test command lookup from
+# the shell.
+add_library(og_hello_user OBJECT packages/hello/main.cpp)
+target_include_directories(og_hello_user PRIVATE ${OG_GEMAPI_INCLUDE})
+target_compile_options(og_hello_user PRIVATE ${OG_USER_CXX_FLAGS})
+
+set(OG_HELLO_ELF ${CMAKE_BINARY_DIR}/hello.elf)
+add_custom_command(
+  OUTPUT ${OG_HELLO_ELF}
+  COMMAND ${OG_GEMABOX_LD} -T ${CMAKE_SOURCE_DIR}/packages/libgemapi/link.ld
+          -z max-page-size=4096 -s
+          --dynamic-linker=/system/boot/ld-gem
+          -u _start
+          $<TARGET_OBJECTS:og_hello_user>
+          $<TARGET_OBJECTS:og_gemapi_start>
+          -L${CMAKE_BINARY_DIR} -rpath-link=${CMAKE_BINARY_DIR} -lgemapi
+          -o ${OG_HELLO_ELF}
+  DEPENDS
+    og_hello_user
+    og_gemapi_start
+    ${OG_GEMAPI_SO}
+    ${CMAKE_SOURCE_DIR}/packages/libgemapi/link.ld
+  COMMAND_EXPAND_LISTS
+  COMMENT "link hello")
+
+add_custom_target(og_hello DEPENDS ${OG_HELLO_ELF})
+add_dependencies(og_hello og_libgemapi)
+
 # System image for GSLFS. The staging tree mirrors the Unix-like layout in
 # docs/gsl/03-filesystem-layout.md.
 set(OG_SYSTEM_ROOT ${CMAKE_BINARY_DIR}/system-root)
@@ -287,6 +315,7 @@ add_custom_command(
           ${OG_SYSTEM_ROOT}/system/config
           ${OG_SYSTEM_ROOT}/system/commands
           ${OG_SYSTEM_ROOT}/applications/gemabox/resources
+          ${OG_SYSTEM_ROOT}/applications/hello
           ${OG_SYSTEM_ROOT}/commands
           ${OG_SYSTEM_ROOT}/etc
           ${OG_SYSTEM_ROOT}/users
@@ -304,6 +333,11 @@ add_custom_command(
           ${OG_SYSTEM_ROOT}/system/boot/ld-gem
   COMMAND ${CMAKE_COMMAND} -E copy ${OG_INIT_ELF}
           ${OG_SYSTEM_ROOT}/system/boot/init
+  COMMAND ${CMAKE_COMMAND} -E copy ${OG_HELLO_ELF}
+          ${OG_SYSTEM_ROOT}/applications/hello/hello
+  COMMAND ${CMAKE_COMMAND} -E copy
+          ${CMAKE_SOURCE_DIR}/packages/system-root/applications/hello/manifest.txt
+          ${OG_SYSTEM_ROOT}/applications/hello/manifest.txt
   COMMAND ${CMAKE_COMMAND} -E copy ${OG_GEMAPI_SO}
           ${OG_SYSTEM_ROOT}/system/libraries/libgemapi.so.1
   COMMAND ${CMAKE_COMMAND} -E copy ${OG_KGEMA_SO}
@@ -325,11 +359,13 @@ add_custom_command(
     ${OG_GEMABOX_ELF}
     ${OG_LDGEM_ELF}
     ${OG_INIT_ELF}
+    ${OG_HELLO_ELF}
     ${OG_GEMAPI_SO}
     ${OG_KGEMA_SO}
     ${CMAKE_SOURCE_DIR}/packages/system-root/system/config/version
     ${CMAKE_SOURCE_DIR}/packages/system-root/system/config/gsl.conf
     ${CMAKE_SOURCE_DIR}/packages/system-root/applications/gemabox/manifest.txt
+    ${CMAKE_SOURCE_DIR}/packages/system-root/applications/hello/manifest.txt
     ${CMAKE_SOURCE_DIR}/scripts/mkgslimg.py
   COMMENT "build gema system image")
 

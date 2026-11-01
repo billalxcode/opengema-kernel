@@ -58,6 +58,8 @@ Kode sekarang berada di awal GSL:
 - Root `/` adalah volume GSLFS read-only. `/dev`, `/proc`, `/tmp`,
   `/etc`, `/users`, `/var`, dan `/volumes/boot` sudah di-mount.
 - `/system/boot/init` berjalan sebagai PID 1 dan menjalankan shell.
+- Shell gemabox mendukung `help`, `echo`, `cat`, `ls`, `clear`, dan
+  eksekusi aplikasi dari `/applications/<name>/<name>`.
 - `/etc`, `/users`, dan `/var` memakai ramfs writable sementara.
 - `scripts/check-gsl.sh` menolak aplikasi yang menyentuh lapisan bawah.
 - Service manager, volume persisten, dan recovery belum ada.

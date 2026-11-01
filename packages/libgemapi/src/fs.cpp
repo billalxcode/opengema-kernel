@@ -120,4 +120,40 @@ Status chdir(const char* path) noexcept {
   return kgema::chdir(path) ? Status::ok : Status::not_found;
 }
 
+Result<bool> list(const char* path, u64 index, DirEntry& entry) noexcept {
+  if (path == nullptr) {
+    return Status::invalid_argument;
+  }
+  kgema::DirEntry raw{};
+  const i64 result = kgema::list(path, index, raw);
+  if (result < 0) {
+    return Status::io;
+  }
+  if (result == 0) {
+    return false;
+  }
+  usize length = 0;
+  while (length + 1U < sizeof(entry.name) && raw.name[length] != '\0') {
+    entry.name[length] = raw.name[length];
+    ++length;
+  }
+  entry.name[length] = '\0';
+  switch (raw.type) {
+    case 0:
+      entry.kind = Kind::file;
+      break;
+    case 1:
+      entry.kind = Kind::directory;
+      break;
+    case 2:
+      entry.kind = Kind::device;
+      break;
+    default:
+      entry.kind = Kind::other;
+      break;
+  }
+  entry.size = raw.size;
+  return true;
+}
+
 }  // namespace gemapi::fs

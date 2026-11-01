@@ -54,4 +54,13 @@ bool chdir(const char* path) noexcept {
   return syscall::invoke3(syscall::kChdir, reinterpret_cast<i64>(path), 0, 0) == 0;
 }
 
+i64 list(const char* path, u64 index, DirEntry& entry) noexcept {
+  if (path == nullptr) {
+    return -1;
+  }
+  return syscall::invoke3(syscall::kList, reinterpret_cast<i64>(path),
+                          static_cast<i64>(index),
+                          reinterpret_cast<i64>(&entry));
+}
+
 }  // namespace kgema

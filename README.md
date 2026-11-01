@@ -75,7 +75,7 @@ virtio-gpu: display width: 1280
 virtio-gpu: display height: 800
 virtio-gpu: scanouts: 1
 virtio-gpu: scanout ok
-fs: gslfs nodes: 31
+fs: gslfs nodes: 34
 fs: gslfs mounted
 fs: libgemapi bytes: 9352
 fs: library probe ok
@@ -114,7 +114,9 @@ spawn ok
 spawn ok
 write ok
 gemabox> help
-commands: help, echo, cat, exit
+commands: help, echo, cat, ls, clear, exit
+gemabox> hello
+hello from applications
 gemabox> exit
 user: exit pid: 1
 user: exit status: 0
@@ -144,8 +146,10 @@ Program berjalan di address space sendiri pada 1 TiB, dengan ASID yang
 dipasang saat context switch. Dua proses gemabox berjalan bersamaan, masing
 masing punya tabel file sendiri, lalu setiap proses menjalankan child dengan
 argv dan menunggu. Proses writer menguji `chdir`, write ke FD, seek, dan
-read di `/tmp`. Proses shell menerima input UART, menjalankan `help`, dan
-keluar lewat `exit`. Jumlah frame bebas kembali ke angka sebelum spawn.
+read di `/tmp`. Shell menerima input UART, menjalankan `help`, `echo`,
+`cat`, `ls`, `clear`, `exit`, dan aplikasi eksternal `hello` dari
+`/applications/hello/hello`. Jumlah frame bebas kembali ke angka sebelum
+spawn.
 
 Roadmap inti selesai. Berikutnya: pengembangan lanjutan di atas fondasi ini.
 

@@ -14,6 +14,12 @@ struct Stat {
   u64 size;
 };
 
+struct DirEntry {
+  char name[64];
+  u64 type;
+  u64 size;
+};
+
 // Returns a descriptor, or -1 on error.
 [[nodiscard]] i64 open(const char* path, u64 flags = kOpenRead) noexcept;
 [[nodiscard]] bool close(i64 descriptor) noexcept;
@@ -22,5 +28,8 @@ struct Stat {
 [[nodiscard]] bool seek(i64 descriptor, u64 offset) noexcept;
 [[nodiscard]] bool stat(const char* path, Stat& result) noexcept;
 [[nodiscard]] bool chdir(const char* path) noexcept;
+
+// Returns 1 when an entry is written, 0 at the end, -1 on error.
+[[nodiscard]] i64 list(const char* path, u64 index, DirEntry& entry) noexcept;
 
 }  // namespace kgema

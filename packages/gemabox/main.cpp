@@ -21,7 +21,7 @@ constexpr char kChildOk[] = "child ok\n";
 constexpr char kSpawnOk[] = "spawn ok\n";
 constexpr char kWriteMessage[] = "write ok\n";
 constexpr char kPrompt[] = "gemabox> ";
-constexpr char kHelp[] = "commands: help, echo, cat, exit\n";
+constexpr char kHelp[] = "commands: help, echo, cat, ls, clear, exit\n";
 // Test file under the fixed /tmp mount.
 constexpr char kHelloPath[] = "/tmp/hello";
 
@@ -50,6 +50,14 @@ bool starts_with(const char* text, const char* prefix) {
   return true;
 }
 
+gemapi::usize text_length(const char* text) {
+  gemapi::usize length = 0;
+  while (text[length] != '\0') {
+    ++length;
+  }
+  return length;
+}
+
 void cat_file(const char* path) {
   auto file = gemapi::fs::File::open(path);
   if (!file) {
@@ -68,6 +76,85 @@ void cat_file(const char* path) {
     }
     gemapi::io::write(buffer, count.value());
   }
+}
+
+void list_dir(const char* path) {
+  for (gemapi::u64 index = 0;; ++index) {
+    gemapi::fs::DirEntry entry{};
+    auto found = gemapi::fs::list(path, index, entry);
+    if (!found) {
+      if (found.status() != gemapi::Status::ok) {
+        gemapi::io::write("ls: list failed\n");
+      }
+      return;
+    }
+    if (!found.value()) {
+      return;
+    }
+    gemapi::io::write(entry.name);
+    if (entry.kind == gemapi::fs::Kind::directory) {
+      gemapi::io::write("/");
+    }
+    gemapi::io::write("\n");
+  }
+}
+
+bool run_path(const char* path, const char* name) {
+  const char* argv[] = {name};
+  auto child = gemapi::process::spawn(path, argv, 1);
+  if (!child) {
+    gemapi::io::write("run: spawn failed\n");
+    return true;
+  }
+  int status = 0;
+  if (gemapi::process::wait(child.value(), status) != gemapi::Status::ok) {
+    gemapi::io::write("run: wait failed\n");
+  }
+  return true;
+}
+
+bool run_external(const char* name) {
+  char path[128];
+  constexpr char kCommandsPrefix[] = "/commands/";
+  constexpr char kApplicationsPrefix[] = "/applications/";
+  const gemapi::usize name_length = text_length(name);
+
+  gemapi::usize cursor = sizeof(kCommandsPrefix) - 1U;
+  if ((cursor + name_length + 1U) >= sizeof(path)) {
+    return false;
+  }
+  for (gemapi::usize index = 0; index < cursor; ++index) {
+    path[index] = kCommandsPrefix[index];
+  }
+  for (gemapi::usize index = 0; index < name_length; ++index) {
+    path[cursor + index] = name[index];
+  }
+  path[cursor + name_length] = '\0';
+  if (gemapi::fs::stat(path)) {
+    return run_path(path, name);
+  }
+
+  cursor = sizeof(kApplicationsPrefix) - 1U;
+  if ((cursor + name_length + 1U + name_length + 1U) >= sizeof(path)) {
+    return false;
+  }
+  for (gemapi::usize index = 0; index < cursor; ++index) {
+    path[index] = kApplicationsPrefix[index];
+  }
+  for (gemapi::usize index = 0; index < name_length; ++index) {
+    path[cursor + index] = name[index];
+  }
+  cursor += name_length;
+  path[cursor] = '/';
+  ++cursor;
+  for (gemapi::usize index = 0; index < name_length; ++index) {
+    path[cursor + index] = name[index];
+  }
+  path[cursor + name_length] = '\0';
+  if (!gemapi::fs::stat(path)) {
+    return false;
+  }
+  return run_path(path, name);
 }
 
 int run_shell() {
@@ -96,6 +183,28 @@ int run_shell() {
     }
     if (starts_with(line, "cat ") && size > 4U) {
       cat_file(line + 4);
+      continue;
+    }
+    if (same(line, "ls")) {
+      list_dir("/");
+      continue;
+    }
+    if (starts_with(line, "ls ") && size > 3U) {
+      list_dir(line + 3);
+      continue;
+    }
+    if (same(line, "clear")) {
+      gemapi::io::write("\x1b[2J\x1b[H");
+      continue;
+    }
+    bool has_space = false;
+    for (gemapi::usize index = 0; index < size; ++index) {
+      if (line[index] == ' ') {
+        has_space = true;
+        break;
+      }
+    }
+    if (!has_space && run_external(line)) {
       continue;
     }
     gemapi::io::write("unknown: ");

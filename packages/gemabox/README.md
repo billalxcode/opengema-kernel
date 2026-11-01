@@ -36,8 +36,10 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
 7. Mode `writer`: `chdir("/tmp")`, tulis `write ok` ke file `writer`,
    seek, read, lalu cetak `write ok`.
 8. Mode `shell`: prompt `gemabox>`, baca input UART, jalankan `help`,
-   `echo`, `cat`, dan `exit`.
-9. `exit`.
+   `echo`, `cat`, `ls`, `clear`, dan `exit`.
+9. Command di luar applet dicari di `/commands/<name>`, lalu
+   `/applications/<name>/<name>`.
+10. `exit`.
 
 Child mendeteksi argv kedua dan hanya mencetak `child ok`.
 
@@ -51,7 +53,9 @@ child ok
 spawn ok
 write ok
 gemabox> help
-commands: help, echo, cat, exit
+commands: help, echo, cat, ls, clear, exit
+gemabox> hello
+hello from applications
 gemabox> exit
 user: exit pid: 1
 user: exit status: 0
@@ -59,7 +63,6 @@ user: exit status: 0
 
 ## Rencana
 
-gemabox akan menjadi kumpulan perintah dasar kernel, misalnya `ls`, `cat`,
-`mount`, `ps`, dan `help`, dengan satu titik masuk `_start` yang memilih
-perintah dari argumen. Argv dan spawn sudah ada; `exec` dan input interaktif
-belum.
+gemabox tetap menjadi multi-call binary untuk command inti. Applet `ps`,
+`sleep`, dan `mount` menyusul. Aplikasi besar tetap binary terpisah di
+`/applications`.

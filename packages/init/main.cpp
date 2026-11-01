@@ -16,18 +16,25 @@ int main(int argc, char** argv, char** envp) {
   (void)argv;
   (void)envp;
 
-  const char* shell_argv[] = {kShellName, kShellArgument};
-  auto shell =
-    gemapi::process::spawn(gemapi::paths::kGemabox, shell_argv, 2);
-  if (!shell) {
-    gemapi::io::write("init: cannot start shell\n");
-    return 1;
-  }
+  constexpr int kMaxRestarts = 2;
+  for (int attempt = 0; attempt <= kMaxRestarts; ++attempt) {
+    const char* shell_argv[] = {kShellName, kShellArgument};
+    auto shell =
+      gemapi::process::spawn(gemapi::paths::kGemabox, shell_argv, 2);
+    if (!shell) {
+      gemapi::io::write("init: cannot start shell\n");
+      return 1;
+    }
 
-  int status = 0;
-  if (gemapi::process::wait(shell.value(), status) != gemapi::Status::ok) {
-    gemapi::io::write("init: wait failed\n");
-    return 1;
+    int status = 0;
+    if (gemapi::process::wait(shell.value(), status) != gemapi::Status::ok) {
+      gemapi::io::write("init: wait failed\n");
+      return 1;
+    }
+    if (status == 0) {
+      return 0;
+    }
+    gemapi::io::write("init: shell failed, restarting\n");
   }
-  return status;
+  return 1;
 }

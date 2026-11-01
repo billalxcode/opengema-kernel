@@ -286,6 +286,8 @@ satu-satunya API aplikasi, `packages/libgsl` memegang layout tetap, kernel
 memuat ELF64 dynamic, dan `ld-gem` memuat library dari `/system/libraries`.
 Root `/` adalah volume GSLFS read-only dari partisi kedua. `/dev`, `/proc`,
 `/tmp`, `/etc`, `/users`, `/var`, dan `/volumes/boot` sudah di-mount.
-`/system/boot/init` berjalan sebagai PID 1 dan menjalankan shell. `/etc`,
-`/users`, dan `/var` masih ramfs writable sementara; service manager,
-volume persisten, dan recovery belum ada.
+`/system/boot/init` berjalan sebagai PID 1 dan menjalankan shell. Shell
+mendukung `help`, `echo`, `cat`, `ls`, `clear`, dan aplikasi eksternal di
+`/applications/<name>/<name>`. `/etc`, `/users`, dan `/var` masih ramfs
+writable sementara; service manager penuh, volume persisten, dan recovery
+belum ada.

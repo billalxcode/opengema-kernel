@@ -14,7 +14,7 @@ masuk `_start` berada di `libgemapi`.
 | `kgema/types.h` | Tipe dasar `usize`, `u64`, `i64` tanpa header standar |
 | `kgema/syscall.h` | Nomor syscall dan `invoke3` |
 | `kgema/io.h` | `write` untuk buffer dan string literal |
-| `kgema/file.h` | `open`, `close`, `read`, `write`, `seek`, `stat`, dan `chdir` |
+| `kgema/file.h` | `open`, `close`, `read`, `write`, `seek`, `stat`, `chdir`, dan `list` |
 | `kgema/memory.h` | `mmap`, `mmap_executable`, dan `munmap` |
 | `kgema/process.h` | `getpid`, `spawn`, `wait`, dan `exit` |
 

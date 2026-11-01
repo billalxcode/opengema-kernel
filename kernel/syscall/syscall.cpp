@@ -35,6 +35,12 @@ struct UserStat {
   uint64_t size;
 };
 
+struct UserDirEntry {
+  char name[64];
+  uint64_t type;
+  uint64_t size;
+};
+
 [[nodiscard]] process::Process* CurrentProcess() noexcept {
   return process::Current();
 }
@@ -303,6 +309,42 @@ struct UserStat {
   return Status::kOk;
 }
 
+[[nodiscard]] Status DoList(uint64_t user_path, uint64_t index,
+                            uint64_t user_entry, uint64_t& result) noexcept {
+  process::Process* process = CurrentProcess();
+  if (process == nullptr) {
+    return Status::kNotInit;
+  }
+  if (index > 0xFFFFFFFFULL) {
+    return Status::kInvalidArg;
+  }
+  char path[fs::kMaxPath];
+  Status status = CopyUserPath(*process, user_path, path);
+  if (IsErr(status)) {
+    return status;
+  }
+  fs::DirEntry entry{};
+  bool found = false;
+  status = fs::FsList(path, static_cast<uint32_t>(index), entry, found);
+  if (IsErr(status)) {
+    return status;
+  }
+  if (!found) {
+    result = 0;
+    return Status::kOk;
+  }
+  UserDirEntry output{};
+  mem::Copy(output.name, entry.name, sizeof(output.name));
+  output.type = static_cast<uint64_t>(entry.type);
+  output.size = entry.size;
+  status = mem::VmmCopyOut(process->space, user_entry, &output, sizeof(output));
+  if (IsErr(status)) {
+    return status;
+  }
+  result = 1;
+  return Status::kOk;
+}
+
 [[nodiscard]] Status DoWrite(uint64_t descriptor, uint64_t user_buffer,
                              uint64_t length, uint64_t& result) noexcept {
   process::Process* process = CurrentProcess();
@@ -524,6 +566,9 @@ struct UserStat {
       break;
     case kSysChdir:
       status = DoChdir(frame->x[0], result);
+      break;
+    case kSysList:
+      status = DoList(frame->x[0], frame->x[1], frame->x[2], result);
       break;
     default:
       status = Status::kInvalidArg;

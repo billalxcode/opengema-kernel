@@ -13,8 +13,9 @@ namespace og::boot {
 void RunUserSelfTest() noexcept {
   syscall::SyscallInit();
 
-  // gemabox uses the 2048 byte slab. Warm two blocks so concurrent spawns
-  // do not grow the heap after the frame baseline is recorded.
+  // init uses the 2048 byte slab and hello uses the 1024 byte slab. Warm
+  // both so no slab grows after the frame baseline is recorded. Larger
+  // programs use whole pages and return them on exit.
   const Result<void*> warm_a = mem::HeapAlloc(2048);
   if (warm_a.is_err()) {
     Panic("user: heap warm a failed");
@@ -24,8 +25,15 @@ void RunUserSelfTest() noexcept {
     (void)mem::HeapFree(warm_a.value());
     Panic("user: heap warm b failed");
   }
+  const Result<void*> warm_c = mem::HeapAlloc(1024);
+  if (warm_c.is_err()) {
+    (void)mem::HeapFree(warm_a.value());
+    (void)mem::HeapFree(warm_b.value());
+    Panic("user: heap warm c failed");
+  }
   (void)mem::HeapFree(warm_a.value());
   (void)mem::HeapFree(warm_b.value());
+  (void)mem::HeapFree(warm_c.value());
 
   // A text file must not be accepted as an executable. This exercises the
   // negative path of the ELF loader before the frame baseline is recorded.

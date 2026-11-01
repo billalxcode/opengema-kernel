@@ -22,6 +22,12 @@ struct Info {
   u64 size;
 };
 
+struct DirEntry {
+  char name[64];
+  Kind kind;
+  u64 size;
+};
+
 // An open file. The handle is opaque and owns one descriptor; copying is
 // rejected so a descriptor cannot be closed twice. Closing is idempotent.
 class File {
@@ -52,5 +58,9 @@ class File {
 
 [[nodiscard]] Result<Info> stat(const char* path) noexcept;
 [[nodiscard]] Status chdir(const char* path) noexcept;
+
+// Reads one directory entry. Returns false at the end of the directory.
+[[nodiscard]] Result<bool> list(const char* path, u64 index,
+                                DirEntry& entry) noexcept;
 
 }  // namespace gemapi::fs

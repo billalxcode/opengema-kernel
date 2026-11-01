@@ -129,16 +129,23 @@ persisten, service manager, dan recovery belum ada.
 
 ## GSL-5 - Package dan command
 
-- [ ] Manifest `key=value`.
-- [ ] Dependency resolver.
-- [ ] PATH dan command lookup.
-- [ ] gemabox multi-call applet.
-- [ ] Aplikasi eksternal di `/applications`.
+- [~] Manifest `key=value` sudah ada di image, parser belum.
+- [x] Dependency resolver memakai `DT_NEEDED` di `ld-gem`.
+- [~] Command lookup shell: `/commands/<name>` lalu
+  `/applications/<name>/<name>`. Symlink belum didukung.
+- [~] gemabox multi-call applet: `help`, `echo`, `cat`, `ls`, `clear`,
+  `exit`.
+- [x] Aplikasi eksternal di `/applications` diuji dengan `hello`.
 - [ ] Install dan update package.
-- [ ] `ls`, `ps`, `sleep`, dan `clear` di gemabox.
+- [~] `ls` dan `clear` sudah; `ps` dan `sleep` belum.
 
 Selesai bila: shell bisa menjalankan command internal dan aplikasi eksternal
 hanya dari filesystem.
+
+Status: shell menjalankan applet inti dan aplikasi `/applications/hello`
+lewat lookup path tetap. `ls` membaca direktori dari GSLFS/ramfs lewat
+syscall list. `ps`, `sleep`, parser manifest, dan package manager belum
+ada.
 
 ## GSL-6 - Capability dan sandbox
 

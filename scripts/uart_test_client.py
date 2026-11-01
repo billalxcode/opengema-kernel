@@ -38,6 +38,8 @@ def main(argv):
     client.settimeout(0.5)
     buffer = bytearray()
     help_sent = False
+    ls_sent = False
+    hello_sent = False
     exit_sent = False
     halted = False
 
@@ -57,7 +59,15 @@ def main(argv):
                 client.sendall(b"help\n")
                 help_sent = True
 
-            if help_sent and not exit_sent and b"commands: help, echo, cat, exit" in buffer:
+            if help_sent and not ls_sent and b"commands: help, echo, cat, ls, clear, exit" in buffer:
+                client.sendall(b"ls /\n")
+                ls_sent = True
+
+            if ls_sent and not hello_sent and b"system/" in buffer:
+                client.sendall(b"hello\n")
+                hello_sent = True
+
+            if hello_sent and not exit_sent and b"hello from applications" in buffer:
                 client.sendall(b"exit\n")
                 exit_sent = True
 
