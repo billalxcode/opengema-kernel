@@ -178,6 +178,8 @@ Commit: `refactor(core): share endian and linker text helpers`.
 - [x] Tambah test host `FsList` dan error path (`nullptr`, mount
   non-directory, directory tanpa iterate).
 - [x] Tambah test host procfs (`uptime`, `threads`, offset, iterate).
+- [x] Tambah test host devfs (`console`, `null`, `zero`, lookup, iterate,
+  read/write).
 - [x] Tambah test host ELF parser valid dan invalid.
 - [x] Tambah test negative `ls /missing` di test QEMU (menunggu QEMU).
 - [ ] Update `docs/CLEANCODE-REVIEW.md`.

@@ -163,16 +163,16 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   scheduler -> PMM, dan virtio-blk sebagai leaf.
 - `VmmMapDevice` diperbaiki formatting-nya.
 - Test host baru: endian reader, image GSLFS valid/rusak/deterministik,
-  driver GSLFS, ramfs, procfs, GPT/partition, VFS, VFS FD, ELF parser, dan
-  FDT parser.
+  driver GSLFS, ramfs, procfs, devfs, GPT/partition, VFS, VFS FD, ELF
+  parser, dan FDT parser.
 - Test QEMU baru: `ls /missing` diharapkan menghasilkan
   `ls: list failed`.
 
 Verifikasi branch `dev`:
 
 - `python3 scripts/compile-check.py`: 90 file OK, 1 entri lama dilewati.
-- `./scripts/test-host.sh`: host tests, ramfs, procfs, GPT, FDT, VFS, ELF,
-  dan GSLFS probe OK.
+- `./scripts/test-host.sh`: host tests, ramfs, procfs, devfs, GPT, FDT,
+  VFS, ELF, dan GSLFS probe OK.
 - `test.sh` penuh belum dijalankan karena podman/QEMU tidak tersedia.
 
 ## Kesimpulan
