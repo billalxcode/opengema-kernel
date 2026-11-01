@@ -21,6 +21,7 @@
 #include "og/pci.h"
 #include "og/pmm.h"
 #include "og/print.h"
+#include "og/sched.h"
 #include "og/status.h"
 #include "og/timer.h"
 #include "og/trap.h"
@@ -40,10 +41,27 @@ constexpr uint64_t kTargetTicks = 10;
 constexpr uint64_t kTimeoutSeconds = 10;
 constexpr uint64_t kSectorSize = 512;
 uint64_t g_work_runs = 0;
+uint64_t g_workers_done = 0;
 drivers::virtio::Blk g_block_device;
 
 void CountWork(void* /*context*/) noexcept {
   ++g_work_runs;
+}
+
+void WorkerA(void* /*argument*/) noexcept {
+  for (uint32_t index = 0; index < 3U; ++index) {
+    (void)PrintLn("sched: worker a");
+    (void)sched::ThreadSleep(3);
+  }
+  ++g_workers_done;
+}
+
+void WorkerB(void* /*argument*/) noexcept {
+  for (uint32_t index = 0; index < 3U; ++index) {
+    (void)PrintLn("sched: worker b");
+    (void)sched::ThreadSleep(3);
+  }
+  ++g_workers_done;
 }
 
 void InitBlockDevice() noexcept {
@@ -319,6 +337,36 @@ void kmain(BootInfo* info) noexcept {
   } else {
     Log(LogLevel::kInfo, "timer: periodic tick ok\n");
   }
+
+  status = sched::SchedulerInit();
+  if (IsErr(status)) {
+    LogHex(LogLevel::kError, "sched: init status", static_cast<uint64_t>(status));
+    Panic("sched: init failed");
+  }
+  const Result<sched::Thread*> worker_a = sched::ThreadCreate("worker-a", &WorkerA, nullptr);
+  if (worker_a.is_err()) {
+    Panic("sched: create worker a failed");
+  }
+  const Result<sched::Thread*> worker_b = sched::ThreadCreate("worker-b", &WorkerB, nullptr);
+  if (worker_b.is_err()) {
+    Panic("sched: create worker b failed");
+  }
+  LogDec(LogLevel::kInfo, "sched: threads", sched::ThreadCount());
+
+  arch::aarch64::DisableIrq();
+  sched::SchedulerStart();
+  arch::aarch64::EnableIrq();
+
+  uint32_t waits = 0;
+  while (g_workers_done < 2U && waits < 2000U) {
+    (void)sched::ThreadSleep(1);
+    ++waits;
+  }
+  LogDec(LogLevel::kInfo, "sched: workers done", g_workers_done);
+  if (g_workers_done < 2U) {
+    Panic("sched: workers did not finish");
+  }
+  Log(LogLevel::kInfo, "sched: round robin ok\n");
 
   (void)PrintLn("kernel: halt");
   arch::aarch64::HaltForever();
