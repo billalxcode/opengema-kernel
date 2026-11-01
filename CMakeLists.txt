@@ -56,65 +56,45 @@ set(OG_USER_CXX_FLAGS
 
 set(OG_KGEMA_INCLUDE ${CMAKE_SOURCE_DIR}/packages/libkgema/include)
 set(OG_KGEMA_ARCHIVE ${CMAKE_BINARY_DIR}/libkgema.a)
-set(OG_KGEMA_OBJECTS
-  ${CMAKE_BINARY_DIR}/kgema_syscall.o
-  ${CMAKE_BINARY_DIR}/kgema_io.o
-  ${CMAKE_BINARY_DIR}/kgema_memory.o
-  ${CMAKE_BINARY_DIR}/kgema_process.o
-  ${CMAKE_BINARY_DIR}/kgema_start.o)
+
+add_library(og_kgema_user OBJECT
+  packages/libkgema/src/syscall.cpp
+  packages/libkgema/src/io.cpp
+  packages/libkgema/src/memory.cpp
+  packages/libkgema/src/process.cpp
+  packages/libkgema/src/start.cpp)
+target_include_directories(og_kgema_user PRIVATE ${OG_KGEMA_INCLUDE})
+target_compile_options(og_kgema_user PRIVATE ${OG_USER_CXX_FLAGS})
 
 add_custom_command(
-  OUTPUT ${OG_KGEMA_OBJECTS} ${OG_KGEMA_ARCHIVE}
-  COMMAND ${CMAKE_CXX_COMPILER} ${OG_USER_CXX_FLAGS} -I${OG_KGEMA_INCLUDE}
-          -c ${CMAKE_SOURCE_DIR}/packages/libkgema/src/syscall.cpp
-          -o ${CMAKE_BINARY_DIR}/kgema_syscall.o
-  COMMAND ${CMAKE_CXX_COMPILER} ${OG_USER_CXX_FLAGS} -I${OG_KGEMA_INCLUDE}
-          -c ${CMAKE_SOURCE_DIR}/packages/libkgema/src/io.cpp
-          -o ${CMAKE_BINARY_DIR}/kgema_io.o
-  COMMAND ${CMAKE_CXX_COMPILER} ${OG_USER_CXX_FLAGS} -I${OG_KGEMA_INCLUDE}
-          -c ${CMAKE_SOURCE_DIR}/packages/libkgema/src/memory.cpp
-          -o ${CMAKE_BINARY_DIR}/kgema_memory.o
-  COMMAND ${CMAKE_CXX_COMPILER} ${OG_USER_CXX_FLAGS} -I${OG_KGEMA_INCLUDE}
-          -c ${CMAKE_SOURCE_DIR}/packages/libkgema/src/process.cpp
-          -o ${CMAKE_BINARY_DIR}/kgema_process.o
-  COMMAND ${CMAKE_CXX_COMPILER} ${OG_USER_CXX_FLAGS} -I${OG_KGEMA_INCLUDE}
-          -c ${CMAKE_SOURCE_DIR}/packages/libkgema/src/start.cpp
-          -o ${CMAKE_BINARY_DIR}/kgema_start.o
+  OUTPUT ${OG_KGEMA_ARCHIVE}
   COMMAND ${CMAKE_COMMAND} -E rm -f ${OG_KGEMA_ARCHIVE}
-  COMMAND ${OG_KGEMA_AR} rcs ${OG_KGEMA_ARCHIVE} ${OG_KGEMA_OBJECTS}
-  DEPENDS
-    ${CMAKE_SOURCE_DIR}/packages/libkgema/src/syscall.cpp
-    ${CMAKE_SOURCE_DIR}/packages/libkgema/src/io.cpp
-    ${CMAKE_SOURCE_DIR}/packages/libkgema/src/memory.cpp
-    ${CMAKE_SOURCE_DIR}/packages/libkgema/src/process.cpp
-    ${CMAKE_SOURCE_DIR}/packages/libkgema/src/start.cpp
-    ${CMAKE_SOURCE_DIR}/packages/libkgema/include/kgema/types.h
-    ${CMAKE_SOURCE_DIR}/packages/libkgema/include/kgema/syscall.h
-    ${CMAKE_SOURCE_DIR}/packages/libkgema/include/kgema/io.h
-    ${CMAKE_SOURCE_DIR}/packages/libkgema/include/kgema/memory.h
-    ${CMAKE_SOURCE_DIR}/packages/libkgema/include/kgema/process.h
-  COMMENT "build libkgema")
+  COMMAND ${OG_KGEMA_AR} rcs ${OG_KGEMA_ARCHIVE} $<TARGET_OBJECTS:og_kgema_user>
+  DEPENDS og_kgema_user
+  COMMAND_EXPAND_LISTS
+  COMMENT "archive libkgema")
 
 add_custom_target(og_libkgema DEPENDS ${OG_KGEMA_ARCHIVE})
 
-set(OG_GEMABOX_OBJECT ${CMAKE_BINARY_DIR}/gemabox.o)
+add_library(og_gemabox_user OBJECT packages/gemabox/main.cpp)
+target_include_directories(og_gemabox_user PRIVATE ${OG_KGEMA_INCLUDE})
+target_compile_options(og_gemabox_user PRIVATE ${OG_USER_CXX_FLAGS})
+
 set(OG_GEMABOX_ELF ${CMAKE_BINARY_DIR}/gemabox.elf)
 set(OG_GEMABOX_BIN ${CMAKE_BINARY_DIR}/gemabox.bin)
 
 add_custom_command(
   OUTPUT ${OG_GEMABOX_BIN}
-  COMMAND ${CMAKE_CXX_COMPILER} ${OG_USER_CXX_FLAGS} -I${OG_KGEMA_INCLUDE}
-          -c ${CMAKE_SOURCE_DIR}/packages/gemabox/main.cpp
-          -o ${OG_GEMABOX_OBJECT}
   COMMAND ${OG_GEMABOX_LD} -T ${CMAKE_SOURCE_DIR}/packages/libkgema/link.ld
-          -u _start ${OG_GEMABOX_OBJECT} ${OG_KGEMA_ARCHIVE}
+          -u _start $<TARGET_OBJECTS:og_gemabox_user> ${OG_KGEMA_ARCHIVE}
           -o ${OG_GEMABOX_ELF}
   COMMAND ${OG_GEMABOX_OBJCOPY} -O binary ${OG_GEMABOX_ELF} ${OG_GEMABOX_BIN}
   DEPENDS
-    ${CMAKE_SOURCE_DIR}/packages/gemabox/main.cpp
+    og_gemabox_user
+    og_libkgema
     ${CMAKE_SOURCE_DIR}/packages/libkgema/link.ld
-    ${OG_KGEMA_ARCHIVE}
-  COMMENT "build gemabox")
+  COMMAND_EXPAND_LISTS
+  COMMENT "link gemabox")
 
 add_custom_target(og_gemabox DEPENDS ${OG_GEMABOX_BIN})
 add_dependencies(og_gemabox og_libkgema)
