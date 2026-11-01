@@ -87,6 +87,9 @@ smp: cpus online: 2
 smp: cpu online: 1
 smp: ipi count: 1
 timer: periodic tick ok
+sched: threads: 5
+sched: workers done: 2
+smp: worker cpus: 3
 sched: round robin ok
 sync: mutex, semaphore, refcount, once ok
 time: timeout ok
@@ -102,6 +105,6 @@ kernel: halt
 Framebuffer console memakai virtio-gpu 1280x800 dan diuji otomatis dengan
 `screendump` dari monitor QEMU.
 
-Berikutnya: penjadwalan lintas core dan address space per proses.
+Berikutnya: address space per proses.
 
 Roadmap lengkap ada di `docs/ROADMAP.md`.

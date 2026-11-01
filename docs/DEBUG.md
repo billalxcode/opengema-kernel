@@ -84,6 +84,12 @@ Panic sudah mencetak `esr_el1`, `esr_ec`, `esr_iss`, `far_el1`, `elr_el1`,
   IPS 0 (alamat fisik 32 bit), sehingga akses ke BAR di atas 4 GiB memicu
   translation fault level 3. IPS sekarang diturunkan dari PARange di
   `ActivateAddressSpace`.
+- GICv3 `IGROUPR` bersifat baca tulis. Menulis satu bit untuk PPI baru
+  menghapus group bit PPI lain. Akibatnya IPI pindah ke Group 0 dan tidak
+  terlihat oleh `ICC_IAR1_EL1`. Selalu read-modify-write untuk register
+  group.
+- `IrqSpinlock` harus menyimpan DAIF per-CPU. Menyimpannya di objek lock
+  membuat core yang menunggu menimpa state core pemilik.
 - Fault yang terjadi saat print lock dipegang membuat panic menunggu lock
   yang sama. Saat memburu kasus seperti ini, simpan ESR, FAR, dan ELR ke
   variabel global di stub vektor sebelum panic, lalu baca lewat monitor.

@@ -469,7 +469,10 @@ Catatan hasil Fase 9:
       idle thread.
 - [x] SCH-03 Preemption dari tick timer lewat callback dan IRQ exit hook.
 - [x] SCH-04 `ThreadSleep`, `ThreadYield`, `ThreadExit`, dan `WaitQueue`.
-- [ ] SCH-05 Load balancing SMP: menunggu Fase 12.
+- [x] SCH-05 Scheduler per-CPU: setiap core punya ready queue dan idle
+      thread sendiri. Thread baru ditempatkan ke core dengan beban paling
+      ringan. Thread tidak berpindah core setelah dibuat, sehingga context
+      yang sedang berjalan tidak pernah diambil core lain.
 - [x] SCH-06 Uji: dua worker bergantian print, lalu main lanjut dan halt.
 
 **Selesai bila:** `kmain` menjadi thread init dan idle berjalan saat kosong.
@@ -487,6 +490,15 @@ Catatan hasil Fase 10:
    tidak pernah membangunkannya. Ini bug nyata yang ketemu saat uji.
 4. Worker yang selesai belum membebaskan stack. Reklamasi menyusul bersama
    pengelolaan thread lanjutan.
+5. SCH-05 memakai ready queue per-CPU. Thread baru ditempatkan ke core
+   dengan beban paling ringan, lalu tetap di core itu. Invariant pentingnya:
+   thread yang sedang berjalan tidak pernah ada di queue, sehingga core lain
+   tidak mungkin menjalankan context yang sama.
+6. Sleep dihitung dengan `TimeNowNs`, bukan jumlah tick global. Dengan dua
+   core yang sama sama memberi tick, hitungan tick global akan membuat
+   durasi tidur menjadi setengah.
+7. `IrqSpinlock` menyimpan DAIF per-CPU. Versi lama menyimpannya di objek
+   lock, sehingga core yang menunggu bisa menimpa state core pemilik lock.
 
 ### Fase 11 - Syscall dan user mode
 
@@ -543,10 +555,15 @@ Catatan hasil Fase 12:
    punya `CPACR_EL1.FPEN` nol. Kernel sekarang dibangun dengan
    `-mgeneral-regs-only`, yang juga wajib karena context switch belum
    menyimpan state SIMD.
-3. Hook IRQ exit sekarang per-CPU. Scheduler hanya terpasang di CPU 0,
-   jadi core kedua tidak ikut menyentuh state scheduler global.
-4. Secondary hanya menangani IPI lalu park di `wfi`. Penjadwalan lintas
-   core (SCH-05) masih backlog.
+3. Hook IRQ exit terpasang per-CPU. Setiap core punya timer, idle thread,
+   dan ready queue sendiri setelah `SchedulerInitCpu`.
+4. Secondary sekarang menjalankan scheduler, bukan hanya park di `wfi`.
+   Uji boot memeriksa bahwa kedua core benar-benar menjalankan worker
+   (`smp: worker cpus: 3`) dan IPI masih diterima.
+5. GICv3 `IGROUPR` adalah register baca tulis. Menulis satu bit untuk
+   mengaktifkan timer PPI menghapus bit group milik IPI, sehingga SGI
+   masuk Group 0 dan tidak pernah dibaca lewat `ICC_IAR1_EL1`. Semua update
+   group sekarang memakai read-modify-write.
 
 ### Fase 13 - Testing dan tooling
 
@@ -657,7 +674,7 @@ yang belum selesai, supaya tidak ada yang hilang di antara fase.
       SYN-06 nama lock.
 - [x] TIME-01 clocksource nanodetik dan TIME-03 callback timeout.
 - [x] TIME-05 uji tick pada 1000 Hz.
-- [ ] SCH-05 load balancing SMP, menunggu per-CPU scheduler.
+- [x] SCH-05 scheduler per-CPU dan penempatan thread lintas core.
 
 ### 9.1b Selesai di Fase 10
 
@@ -672,7 +689,7 @@ yang belum selesai, supaya tidak ada yang hilang di antara fase.
 
 ### 9.3 Ditunda karena belum ada pemakai nyata
 
-- [ ] SMP penjadwalan lintas core (SCH-05): butuh per-CPU scheduler.
+- [x] SMP penjadwalan lintas core (SCH-05): scheduler per-CPU sudah jalan.
 
 ### 9.4 Selesai
 
@@ -681,9 +698,9 @@ yang belum selesai, supaya tidak ada yang hilang di antara fase.
 ### 9.5 Fase yang belum dimulai
 
 - [x] Fase 9 selesai.
-- [ ] Fase 10 sisa: SCH-05 load balancing SMP (lihat 9.1).
+- [x] Fase 10 selesai.
 - [x] Fase 11 selesai.
-- [ ] Fase 12 sisa: SMP scheduling (lihat 9.3).
+- [x] Fase 12 selesai.
 - [x] Fase 13 selesai.
 - [x] Fase 14 selesai.
 
