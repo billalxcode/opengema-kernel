@@ -75,15 +75,16 @@ virtio-gpu: display width: 1280
 virtio-gpu: display height: 800
 virtio-gpu: scanouts: 1
 virtio-gpu: scanout ok
-fs: mounted devfs and fat32
-fs: ramfs gemabox bytes: 9048
-fs: ramfs ld-gem bytes: 10792
-fs: ramfs libgemapi bytes: 9352
-fs: ramfs libkgema bytes: 5064
-fs: ramfs write ok
-fs: devfs console ok
+fs: gslfs nodes: 30
+fs: gslfs mounted
+fs: libgemapi bytes: 9352
+fs: library probe ok
+proc: uptime 5601 ms
+fs: tmpfs write ok
+fs: efi image bytes: 161280
 fs: fat32 file read ok
-GEMABOX.ELF
+fs: mounted gslfs, devfs, procfs, tmpfs, fat32
+fs: devfs console ok
 event test: irq and workqueue ok
 gic: ready
 psci: version: 65537
@@ -98,7 +99,7 @@ mem: address space switch ok
 sched: round robin ok
 sync: mutex, semaphore, refcount, once ok
 time: timeout ok
-user: program bytes: 2248
+user: program bytes: 9072
 hello from el0
 file ok
 mmap ok
@@ -131,16 +132,16 @@ Framebuffer console memakai virtio-gpu 1280x800 dan diuji otomatis dengan
 `screendump` dari monitor QEMU. Program user ditulis dengan C++20 di atas
 API publik `packages/libgemapi`, yang memakai lapisan ABI
 `packages/libkgema` secara privat. Aplikasi tidak menyentuh `svc` atau
-header kernel. Binary gemabox adalah ELF64 dynamic: kernel memetakan
-executable dan `/ram/ld-gem`, lalu `ld-gem` memuat `libgemapi.so.1` dan
-`libkgema.so.1` dari filesystem sebelum menjalankan `main`. Program berjalan
-di address space sendiri pada 1 TiB, dengan ASID yang dipasang saat context
-switch. Dua proses gemabox berjalan
-bersamaan, masing masing punya tabel file sendiri, lalu setiap proses
-menjalankan child dengan argv dan menunggu. Proses writer menguji `chdir`,
-write ke FD, seek, dan read. Proses shell menerima input UART, menjalankan
-`help`, dan keluar lewat `exit`. Jumlah frame bebas kembali ke angka
-sebelum spawn.
+header kernel. Binary gemabox adalah ELF64 dynamic dan dibaca dari volume
+system GSLFS: kernel memetakan `/applications/gemabox/gemabox` dan
+`/system/boot/ld-gem`, lalu `ld-gem` memuat `libgemapi.so.1` dan
+`libkgema.so.1` dari `/system/libraries`. Program berjalan di address space
+sendiri pada 1 TiB, dengan ASID yang dipasang saat context switch. Dua
+proses gemabox berjalan bersamaan, masing masing punya tabel file sendiri,
+lalu setiap proses menjalankan child dengan argv dan menunggu. Proses
+writer menguji `chdir`, write ke FD, seek, dan read di `/tmp`. Proses shell
+menerima input UART, menjalankan `help`, dan keluar lewat `exit`. Jumlah
+frame bebas kembali ke angka sebelum spawn.
 
 Roadmap inti selesai. Berikutnya: pengembangan lanjutan di atas fondasi ini.
 

@@ -36,6 +36,7 @@ target_link_libraries(og_inc_efi INTERFACE og_inc_cxx)
 # shared form.
 find_program(OG_GEMABOX_LD NAMES aarch64-linux-gnu-ld REQUIRED)
 find_program(OG_KGEMA_AR NAMES aarch64-linux-gnu-ar REQUIRED)
+find_program(OG_PYTHON NAMES python3 REQUIRED)
 
 set(OG_USER_CXX_FLAGS
   --target=aarch64-linux-gnu
@@ -173,7 +174,7 @@ add_custom_command(
   OUTPUT ${OG_GEMABOX_ELF}
   COMMAND ${OG_GEMABOX_LD} -T ${CMAKE_SOURCE_DIR}/packages/libgemapi/link.ld
           -z max-page-size=4096 -s
-          --dynamic-linker=/ram/ld-gem
+          --dynamic-linker=/system/boot/ld-gem
           -u _start
           $<TARGET_OBJECTS:og_gemabox_user>
           $<TARGET_OBJECTS:og_gemapi_start>
@@ -236,6 +237,66 @@ add_custom_command(
 
 add_custom_target(og_ld_gem DEPENDS ${OG_LDGEM_ELF})
 add_dependencies(og_ld_gem og_libkgema)
+
+# System image for GSLFS. The staging tree mirrors the Unix-like layout in
+# docs/gsl/03-filesystem-layout.md.
+set(OG_SYSTEM_ROOT ${CMAKE_BINARY_DIR}/system-root)
+set(OG_SYSTEM_IMAGE ${CMAKE_BINARY_DIR}/gema-system.img)
+
+add_custom_command(
+  OUTPUT ${OG_SYSTEM_IMAGE}
+  COMMAND ${CMAKE_COMMAND} -E rm -rf ${OG_SYSTEM_ROOT}
+  COMMAND ${CMAKE_COMMAND} -E make_directory
+          ${OG_SYSTEM_ROOT}/system/boot
+          ${OG_SYSTEM_ROOT}/system/libraries
+          ${OG_SYSTEM_ROOT}/system/services
+          ${OG_SYSTEM_ROOT}/system/config
+          ${OG_SYSTEM_ROOT}/system/commands
+          ${OG_SYSTEM_ROOT}/applications/gemabox/resources
+          ${OG_SYSTEM_ROOT}/commands
+          ${OG_SYSTEM_ROOT}/etc
+          ${OG_SYSTEM_ROOT}/users
+          ${OG_SYSTEM_ROOT}/tmp
+          ${OG_SYSTEM_ROOT}/var/log
+          ${OG_SYSTEM_ROOT}/var/run
+          ${OG_SYSTEM_ROOT}/var/cache
+          ${OG_SYSTEM_ROOT}/var/spool
+          ${OG_SYSTEM_ROOT}/dev
+          ${OG_SYSTEM_ROOT}/proc
+          ${OG_SYSTEM_ROOT}/volumes/boot
+  COMMAND ${CMAKE_COMMAND} -E copy ${OG_GEMABOX_ELF}
+          ${OG_SYSTEM_ROOT}/applications/gemabox/gemabox
+  COMMAND ${CMAKE_COMMAND} -E copy ${OG_LDGEM_ELF}
+          ${OG_SYSTEM_ROOT}/system/boot/ld-gem
+  COMMAND ${CMAKE_COMMAND} -E copy ${OG_GEMAPI_SO}
+          ${OG_SYSTEM_ROOT}/system/libraries/libgemapi.so.1
+  COMMAND ${CMAKE_COMMAND} -E copy ${OG_KGEMA_SO}
+          ${OG_SYSTEM_ROOT}/system/libraries/libkgema.so.1
+  COMMAND ${CMAKE_COMMAND} -E copy
+          ${CMAKE_SOURCE_DIR}/packages/system-root/system/config/version
+          ${OG_SYSTEM_ROOT}/system/config/version
+  COMMAND ${CMAKE_COMMAND} -E copy
+          ${CMAKE_SOURCE_DIR}/packages/system-root/system/config/gsl.conf
+          ${OG_SYSTEM_ROOT}/system/config/gsl.conf
+  COMMAND ${CMAKE_COMMAND} -E copy
+          ${CMAKE_SOURCE_DIR}/packages/system-root/applications/gemabox/manifest.txt
+          ${OG_SYSTEM_ROOT}/applications/gemabox/manifest.txt
+  COMMAND ${OG_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/mkgslimg.py
+          ${OG_SYSTEM_ROOT} ${OG_SYSTEM_IMAGE}
+  COMMAND ${OG_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/mkgslimg.py
+          --verify ${OG_SYSTEM_IMAGE}
+  DEPENDS
+    ${OG_GEMABOX_ELF}
+    ${OG_LDGEM_ELF}
+    ${OG_GEMAPI_SO}
+    ${OG_KGEMA_SO}
+    ${CMAKE_SOURCE_DIR}/packages/system-root/system/config/version
+    ${CMAKE_SOURCE_DIR}/packages/system-root/system/config/gsl.conf
+    ${CMAKE_SOURCE_DIR}/packages/system-root/applications/gemabox/manifest.txt
+    ${CMAKE_SOURCE_DIR}/scripts/mkgslimg.py
+  COMMENT "build gema system image")
+
+add_custom_target(og_system_image ALL DEPENDS ${OG_SYSTEM_IMAGE})
 
 # One OBJECT library per module. DEPS lists lower layers only, so the
 # link graph mirrors the architecture in docs/ROADMAP.md.
@@ -330,6 +391,7 @@ og_add_module(og_fs
     kernel/fs/procfs.cpp
     kernel/fs/partition.cpp
     kernel/fs/fat32.cpp
+    kernel/fs/gslfs.cpp
   DEPS og_sched og_mem og_core og_inc_kernel)
 
 og_add_module(og_sched

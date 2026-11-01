@@ -2,12 +2,13 @@
 
 Program user mode dasar untuk opengema-kernel. Ditulis dengan C++20 di atas
 API publik `libgemapi`. Binary yang dipasang adalah ELF64 dynamic:
-`PT_INTERP` menunjuk `/ram/ld-gem` dan `DT_NEEDED` menunjuk
+`PT_INTERP` menunjuk `/system/boot/ld-gem` dan `DT_NEEDED` menunjuk
 `libgemapi.so.1`. Kernel memvalidasi ELF, memetakan segmen `PT_LOAD`, lalu
 `ld-gem` memuat dependency dari filesystem sebelum masuk ke `main`.
 
-Saat bring-up, binary disalin ke ESP sebagai `GEMABOX.ELF`, lalu kernel
-memindahkannya ke ramfs sebagai `/ram/gemabox`.
+Saat bring-up, binary berada di volume system GSLFS sebagai
+`/applications/gemabox/gemabox`; kernel memvalidasi ELF dan memetakannya
+sebelum `ld-gem` memuat library.
 
 Aplikasi ini tidak menyertakan header `kgema/` dan tidak menautkan
 `libkgema`. Lapisan ABI itu dipakai `libgemapi` secara privat.
@@ -27,12 +28,12 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
 ## Isi saat ini
 
 1. `write` ke stdout.
-2. `open`, `read`, `stat`, `seek`, dan `close` untuk `/ram/hello`.
+2. `open`, `read`, `stat`, `seek`, dan `close` untuk `/tmp/hello`.
 3. `mmap` satu halaman.
 4. `write` dari halaman hasil pemetaan.
 5. `munmap` halaman tersebut.
 6. `spawn` child dengan argv `{"gemabox", "child"}`, lalu `wait`.
-7. Mode `writer`: `chdir("/ram")`, tulis `write ok` ke file `writer`,
+7. Mode `writer`: `chdir("/tmp")`, tulis `write ok` ke file `writer`,
    seek, read, lalu cetak `write ok`.
 8. Mode `shell`: prompt `gemabox>`, baca input UART, jalankan `help`,
    `echo`, `cat`, dan `exit`.

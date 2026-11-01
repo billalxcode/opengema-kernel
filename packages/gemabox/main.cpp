@@ -102,7 +102,7 @@ int run_shell() {
 }
 
 int run_writer() {
-  if (gemapi::fs::chdir("/ram") != gemapi::Status::ok) {
+  if (gemapi::fs::chdir("/tmp") != gemapi::Status::ok) {
     return 1;
   }
   auto file = gemapi::fs::File::open("writer", gemapi::fs::kOpenWrite);
@@ -143,14 +143,14 @@ int main(int argc, char** argv, char** /*envp*/) {
   }
   gemapi::io::write(kHello);
 
-  auto file = gemapi::fs::File::open("/ram/hello");
+  auto file = gemapi::fs::File::open("/tmp/hello");
   if (!file) {
     return 1;
   }
   char text[32];
   auto count = file.value().read(text, sizeof(text));
   bool file_ok = count && count.value() >= 5U;
-  auto info = gemapi::fs::stat("/ram/hello");
+  auto info = gemapi::fs::stat("/tmp/hello");
   file_ok = file_ok && info && info.value().size >= 5U;
   file_ok = file_ok && file.value().seek(0) == gemapi::Status::ok;
   char first = '\0';
@@ -178,7 +178,7 @@ int main(int argc, char** argv, char** /*envp*/) {
   }
 
   const char* child_argv[] = {"gemabox", "child"};
-  auto child = gemapi::process::spawn("/ram/gemabox", child_argv, 2);
+  auto child = gemapi::process::spawn("/applications/gemabox/gemabox", child_argv, 2);
   if (!child) {
     return 1;
   }

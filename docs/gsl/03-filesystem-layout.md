@@ -1,7 +1,7 @@
 # 03 - Layout Filesystem
 
-Status: keputusan layout sudah dibuat. Implementasi menyusul pada GSL-3
-(GSLFS, `mkgslimg`, mount system volume).
+Status: GSLFS, system image, dan mount root read-only sudah berjalan
+(GSL-3). Volume writable dan init user menyusul.
 
 Layout memakai satu root Unix-like dengan path lowercase. System dan
 aplikasi read-only. Data pengguna, konfigurasi, state, dan temp writable.
@@ -28,7 +28,6 @@ aplikasi read-only. Data pengguna, konfigurasi, state, dan temp writable.
     libraries/
       libkgema.so.1
       libgemapi.so.1
-      libgemrt.so.1
     services/
       service-manager
       device-manager
@@ -176,7 +175,6 @@ version=0.1
 exec=gemabox
 type=executable
 depends=libgemapi>=0.1
-depends=libgemrt>=0.1
 capability=console
 capability=filesystem.read:/system
 capability=filesystem.write:/users/<user>

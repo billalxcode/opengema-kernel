@@ -1,64 +1,58 @@
 #!/bin/bash
+# Build the boot disk: GPT with an EFI System Partition and a GSLFS system
+# partition. The system image is produced by the CMake build.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 IMG="$ROOT/esp.img"
+SYSTEM="$ROOT/build/gema-system.img"
+
+if [ ! -f "$SYSTEM" ]; then
+  echo "missing build/gema-system.img, run ./scripts/build.sh first"
+  exit 1
+fi
+
+SYSTEM_BYTES="$(wc -c < "$SYSTEM" | tr -d ' ')"
+if [ "$SYSTEM_BYTES" -gt $((32 * 1024 * 1024)) ]; then
+  echo "system image is larger than the 32 MiB partition"
+  exit 1
+fi
 
 podman run --rm -v "$ROOT:/work" -w /work opengema-build bash -c "
 set -e
 apt-get update -qq && apt-get install -y -qq dosfstools mtools gdisk parted >/dev/null 2>&1
 rm -f esp.img
-dd if=/dev/zero of=esp.img bs=1M count=64 status=none
-sgdisk -o -n 1:0:+60M -t 1:ef00 -c 1:ESP esp.img >/dev/null
-OFFSET=\$((2048 * 512))
-LOOP=\$(losetup --show -f -o \$OFFSET esp.img || true)
+dd if=/dev/zero of=esp.img bs=1M count=128 status=none
+sgdisk -o \
+  -n 1:0:+64M -t 1:ef00 -c 1:ESP \
+  -n 2:0:+32M -t 2:8300 -c 2:SYSTEM \
+  esp.img >/dev/null
+START1=\$(sgdisk -p esp.img | awk '/^ *1 /{print \$2}')
+START2=\$(sgdisk -p esp.img | awk '/^ *2 /{print \$2}')
+OFFSET1=\$((START1 * 512))
+LOOP=\$(losetup --show -f -o \$OFFSET1 --sizelimit \$((64 * 1024 * 1024)) esp.img || true)
 if [ -n \"\$LOOP\" ]; then
   mkfs.vfat -F 32 -n ESP \"\$LOOP\" >/dev/null
   mkdir -p /mnt/esp
   mount \"\$LOOP\" /mnt/esp
   mkdir -p /mnt/esp/EFI/BOOT
   cp esp/EFI/BOOT/BOOTAA64.EFI /mnt/esp/EFI/BOOT/
-  if [ -f build/gemabox.elf ]; then
-    cp build/gemabox.elf /mnt/esp/GEMABOX.ELF
-  fi
-  if [ -f build/ld-gem.elf ]; then
-    cp build/ld-gem.elf /mnt/esp/LDGEM.ELF
-  fi
-  if [ -f build/libgemapi.so.1 ]; then
-    cp build/libgemapi.so.1 /mnt/esp/GEMAPI.SO
-  fi
-  if [ -f build/libkgema.so.1 ]; then
-    cp build/libkgema.so.1 /mnt/esp/KGEMA.SO
-  fi
   printf '%s\r\n' 'FS0:\EFI\BOOT\BOOTAA64.EFI' > /mnt/esp/startup.nsh
   umount /mnt/esp
   losetup -d \"\$LOOP\" || true
   echo 'loop method ok'
 else
   echo 'no loop device, use mtools fallback'
-  START_SECTOR=\$(sgdisk -p esp.img | awk '/^ *1 /{print \$2}')
-  echo \"start sector: \$START_SECTOR\"
-  mformat -i esp.img@@\$((\$START_SECTOR * 512)) -F -v ESP ::
-  mmd -i esp.img@@\$((\$START_SECTOR * 512)) ::/EFI
-  mmd -i esp.img@@\$((\$START_SECTOR * 512)) ::/EFI/BOOT
-  mcopy -i esp.img@@\$((\$START_SECTOR * 512)) esp/EFI/BOOT/BOOTAA64.EFI ::/EFI/BOOT/BOOTAA64.EFI
-  if [ -f build/gemabox.elf ]; then
-    mcopy -i esp.img@@\$((\$START_SECTOR * 512)) build/gemabox.elf ::/GEMABOX.ELF
-  fi
-  if [ -f build/ld-gem.elf ]; then
-    mcopy -i esp.img@@\$((\$START_SECTOR * 512)) build/ld-gem.elf ::/LDGEM.ELF
-  fi
-  if [ -f build/libgemapi.so.1 ]; then
-    mcopy -i esp.img@@\$((\$START_SECTOR * 512)) build/libgemapi.so.1 ::/GEMAPI.SO
-  fi
-  if [ -f build/libkgema.so.1 ]; then
-    mcopy -i esp.img@@\$((\$START_SECTOR * 512)) build/libkgema.so.1 ::/KGEMA.SO
-  fi
+  mformat -i esp.img@@\$OFFSET1 -F -v ESP -T 131072 -c 1 ::
+  mmd -i esp.img@@\$OFFSET1 ::/EFI
+  mmd -i esp.img@@\$OFFSET1 ::/EFI/BOOT
+  mcopy -i esp.img@@\$OFFSET1 esp/EFI/BOOT/BOOTAA64.EFI ::/EFI/BOOT/BOOTAA64.EFI
   printf '%s\r\n' 'FS0:\EFI\BOOT\BOOTAA64.EFI' > /tmp/startup.nsh
-  mcopy -i esp.img@@\$((\$START_SECTOR * 512)) /tmp/startup.nsh ::/startup.nsh
-  mdir -i esp.img@@\$((\$START_SECTOR * 512)) ::/EFI/BOOT
-  mdir -i esp.img@@\$((\$START_SECTOR * 512)) ::/
+  mcopy -i esp.img@@\$OFFSET1 /tmp/startup.nsh ::/startup.nsh
+  mdir -i esp.img@@\$OFFSET1 ::/EFI/BOOT
+  mdir -i esp.img@@\$OFFSET1 ::/
 fi
+dd if=build/gema-system.img of=esp.img bs=512 seek=\$START2 conv=notrunc status=none
 ls -lh esp.img
 "
 ls -lh "$IMG"

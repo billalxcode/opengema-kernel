@@ -13,4 +13,4 @@ podman run --rm -v "$ROOT:/work" -w /work opengema-build cmake --build build
 # Rewrite to host paths so clangd and VS Code IntelliSense resolve includes.
 python3 "$ROOT/scripts/fix_compile_commands.py" "$ROOT/build/compile_commands.json" "$ROOT"
 
-ls -lh "$ROOT/build/BOOTAA64.EFI" "$ROOT/esp/EFI/BOOT/BOOTAA64.EFI"
+ls -lh "$ROOT/build/BOOTAA64.EFI" "$ROOT/build/gema-system.img" "$ROOT/esp/EFI/BOOT/BOOTAA64.EFI"

@@ -29,21 +29,21 @@ void RunUserSelfTest() noexcept {
   // A text file must not be accepted as an executable. This exercises the
   // negative path of the ELF loader before the frame baseline is recorded.
   const Result<uint32_t> rejected =
-    process::Spawn("/ram/hello", process::kKernelPid);
+    process::Spawn("/system/config/version", process::kKernelPid);
   if (rejected.is_ok()) {
     Panic("user: non-elf spawn accepted");
   }
 
   const uint64_t frames_before = mem::PmmFreeFrames();
   const Result<uint32_t> first =
-    process::Spawn("/ram/gemabox", process::kKernelPid);
+    process::Spawn("/applications/gemabox/gemabox", process::kKernelPid);
   if (first.is_err()) {
     LogDec(LogLevel::kError, "user: first spawn status",
            static_cast<uint64_t>(first.status()));
     Panic("user: first spawn failed");
   }
   const Result<uint32_t> second =
-    process::Spawn("/ram/gemabox", process::kKernelPid);
+    process::Spawn("/applications/gemabox/gemabox", process::kKernelPid);
   if (second.is_err()) {
     LogDec(LogLevel::kError, "user: second spawn status",
            static_cast<uint64_t>(second.status()));
@@ -51,7 +51,7 @@ void RunUserSelfTest() noexcept {
   }
   const char* writer_argv[] = {"gemabox", "writer"};
   const Result<uint32_t> writer =
-    process::SpawnWithArgs("/ram/gemabox", process::kKernelPid, writer_argv, 2);
+    process::SpawnWithArgs("/applications/gemabox/gemabox", process::kKernelPid, writer_argv, 2);
   if (writer.is_err()) {
     LogDec(LogLevel::kError, "user: writer spawn status",
            static_cast<uint64_t>(writer.status()));
@@ -59,7 +59,7 @@ void RunUserSelfTest() noexcept {
   }
   const char* shell_argv[] = {"gemabox", "shell"};
   const Result<uint32_t> shell =
-    process::SpawnWithArgs("/ram/gemabox", process::kKernelPid, shell_argv, 2);
+    process::SpawnWithArgs("/applications/gemabox/gemabox", process::kKernelPid, shell_argv, 2);
   if (shell.is_err()) {
     LogDec(LogLevel::kError, "user: shell spawn status",
            static_cast<uint64_t>(shell.status()));

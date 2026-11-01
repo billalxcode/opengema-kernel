@@ -10,7 +10,7 @@ namespace {
 
 constexpr u64 kMaxPath = 96;
 constexpr u32 kMaxDynamicEntries = 128;
-constexpr char kLibraryDirectory[] = "/ram/";
+constexpr char kLibraryDirectory[] = "/system/libraries/";
 
 [[nodiscard]] u64 Length(const char* text) noexcept {
   if (text == nullptr) {

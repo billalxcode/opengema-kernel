@@ -8,6 +8,7 @@
 #include "og/fs/block_device.h"
 #include "og/fs/devfs.h"
 #include "og/fs/fat32.h"
+#include "og/fs/gslfs.h"
 #include "og/fs/partition.h"
 #include "og/fs/procfs.h"
 #include "og/fs/ramfs.h"
@@ -20,7 +21,7 @@ namespace og::boot {
 
 namespace {
 
-fs::Node* g_ram_root = nullptr;
+fs::Node* g_tmp_root = nullptr;
 fs::FileTable g_boot_files;
 
 Status BlockReadAdapter(void* context, uint64_t sector,
@@ -31,93 +32,29 @@ Status BlockReadAdapter(void* context, uint64_t sector,
   return static_cast<drivers::virtio::Blk*>(context)->read(sector, buffer);
 }
 
-Status CopyBootFile(const char* boot_path, const char* name, uint64_t max_size,
-                    const char* bytes_label, const char* missing_label) noexcept {
-  const Result<fs::Stat> stat = fs::FsStat(boot_path);
-  if (stat.is_err()) {
-    Log(LogLevel::kWarn, missing_label);
-    return stat.status();
-  }
-  const uint64_t size = stat.value().size;
-  if (size == 0U || size > max_size) {
-    return Status::kInvalidArg;
-  }
-
-  const Result<void*> buffer = mem::HeapAlloc(size);
-  if (buffer.is_err()) {
-    return buffer.status();
-  }
-  const Result<uint32_t> file = fs::FsOpen(g_boot_files, boot_path);
-  if (file.is_err()) {
-    (void)mem::HeapFree(buffer.value());
-    return file.status();
-  }
-  uint64_t read = 0;
-  const Status status = fs::FsRead(
-    g_boot_files, file.value(),
-    std::span<uint8_t>(static_cast<uint8_t*>(buffer.value()), size), read);
-  (void)fs::FsClose(g_boot_files, file.value());
-  if (IsErr(status) || read != size) {
-    (void)mem::HeapFree(buffer.value());
-    return Status::kIoError;
-  }
-
-  const Result<fs::Node*> node =
-    fs::ramfs::CreateFile(g_ram_root, name, buffer.value(), size);
-  (void)mem::HeapFree(buffer.value());
-  if (node.is_err()) {
-    return node.status();
-  }
-  LogDec(LogLevel::kInfo, bytes_label, size);
-  return Status::kOk;
-}
-
-Status PopulateRamfs() noexcept {
+Status SetupTmpfs() noexcept {
   Result<fs::Node*> ram = fs::ramfs::Create();
   if (ram.is_err()) {
     return ram.status();
   }
-  g_ram_root = ram.value();
-  Status status = fs::FsMount("/ram", g_ram_root);
+  g_tmp_root = ram.value();
+  Status status = fs::FsMount("/tmp", g_tmp_root);
   if (IsErr(status)) {
     return status;
   }
 
-  status = CopyBootFile("/GEMABOX.ELF", "gemabox", 65536U,
-                        "fs: ramfs gemabox bytes",
-                        "fs: GEMABOX.ELF missing\n");
-  if (IsErr(status)) {
-    return status;
-  }
-  status = CopyBootFile("/LDGEM.ELF", "ld-gem", 65536U,
-                        "fs: ramfs ld-gem bytes",
-                        "fs: LDGEM.ELF missing\n");
-  if (IsErr(status)) {
-    return status;
-  }
-  status = CopyBootFile("/GEMAPI.SO", "libgemapi.so.1", 131072U,
-                        "fs: ramfs libgemapi bytes",
-                        "fs: GEMAPI.SO missing\n");
-  if (IsErr(status)) {
-    return status;
-  }
-  status = CopyBootFile("/KGEMA.SO", "libkgema.so.1", 131072U,
-                        "fs: ramfs libkgema bytes",
-                        "fs: KGEMA.SO missing\n");
-  if (IsErr(status)) {
-    return status;
-  }
-
-  const Result<fs::Node*> hello = fs::ramfs::CreateFile(g_ram_root, "hello", nullptr, 0);
+  const Result<fs::Node*> hello =
+    fs::ramfs::CreateFile(g_tmp_root, "hello", nullptr, 0);
   if (hello.is_err()) {
     return hello.status();
   }
-  const Result<fs::Node*> writer = fs::ramfs::CreateFile(g_ram_root, "writer", nullptr, 0);
+  const Result<fs::Node*> writer =
+    fs::ramfs::CreateFile(g_tmp_root, "writer", nullptr, 0);
   if (writer.is_err()) {
     return writer.status();
   }
 
-  const Result<uint32_t> hello_file = fs::FsOpen(g_boot_files, "/ram/hello");
+  const Result<uint32_t> hello_file = fs::FsOpen(g_boot_files, "/tmp/hello", 1U);
   if (hello_file.is_err()) {
     return hello_file.status();
   }
@@ -125,7 +62,8 @@ Status PopulateRamfs() noexcept {
   uint64_t written = 0;
   status = fs::FsWrite(
     g_boot_files, hello_file.value(),
-    std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(kHello), sizeof(kHello) - 1U),
+    std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(kHello),
+                             sizeof(kHello) - 1U),
     written);
   if (IsErr(status) || written != (sizeof(kHello) - 1U)) {
     (void)fs::FsClose(g_boot_files, hello_file.value());
@@ -146,7 +84,53 @@ Status PopulateRamfs() noexcept {
   if (IsErr(status) || !mem::Equal(readback, kHello, sizeof(kHello) - 1U)) {
     return Status::kIoError;
   }
-  Log(LogLevel::kInfo, "fs: ramfs write ok\n");
+  Log(LogLevel::kInfo, "fs: tmpfs write ok\n");
+  return Status::kOk;
+}
+
+Status MountFat32(const fs::BlockDevice& disk) noexcept {
+  const Result<fs::Partition> partition = fs::FindEspPartition(disk);
+  if (partition.is_err()) {
+    return partition.status();
+  }
+  const fs::BlockDevice device{&BlockReadAdapter, disk.context,
+                               partition.value().sector_count,
+                               partition.value().start_sector};
+  fs::Node* fat_root = nullptr;
+  Status status = fs::fat32::Mount(device, &fat_root);
+  if (IsErr(status)) {
+    return status;
+  }
+  status = fs::FsMount("/volumes/boot", fat_root);
+  if (IsErr(status)) {
+    return status;
+  }
+
+  const Result<uint32_t> program =
+    fs::FsOpen(g_boot_files, "/volumes/boot/EFI/BOOT/BOOTAA64.EFI");
+  if (program.is_err()) {
+    return program.status();
+  }
+  uint8_t header[2] = {0, 0};
+  uint64_t read = 0;
+  status = fs::FsRead(g_boot_files, program.value(),
+                      std::span<uint8_t>(header, sizeof(header)), read);
+  if (IsErr(status) || read != sizeof(header)) {
+    (void)fs::FsClose(g_boot_files, program.value());
+    return Status::kIoError;
+  }
+  if (header[0] != 'M' || header[1] != 'Z') {
+    (void)fs::FsClose(g_boot_files, program.value());
+    return Status::kIoError;
+  }
+
+  const Result<fs::Stat> stat =
+    fs::FsStat("/volumes/boot/EFI/BOOT/BOOTAA64.EFI");
+  if (stat.is_ok()) {
+    LogDec(LogLevel::kInfo, "fs: efi image bytes", stat.value().size);
+  }
+  (void)fs::FsClose(g_boot_files, program.value());
+  Log(LogLevel::kInfo, "fs: fat32 file read ok\n");
   return Status::kOk;
 }
 
@@ -204,6 +188,57 @@ void InitFilesystem() noexcept {
     return;
   }
 
+  const fs::BlockDevice disk{&BlockReadAdapter, block, block->capacity_sectors(), 0};
+
+  const Result<fs::Partition> system_partition =
+    fs::FindPartitionByMagic(disk, fs::gslfs::kMagic,
+                             static_cast<uint32_t>(sizeof(fs::gslfs::kMagic)));
+  if (system_partition.is_err()) {
+    Log(LogLevel::kError, "fs: no gslfs partition found\n");
+    return;
+  }
+  const fs::BlockDevice system_device{
+    &BlockReadAdapter, block, system_partition.value().sector_count,
+    system_partition.value().start_sector};
+  const Result<fs::Node*> system_root = fs::gslfs::Mount(system_device);
+  if (system_root.is_err()) {
+    Log(LogLevel::kError, "fs: gslfs mount failed\n");
+    return;
+  }
+  status = fs::FsMount("/", system_root.value());
+  if (IsErr(status)) {
+    Log(LogLevel::kError, "fs: root mount failed\n");
+    return;
+  }
+  Log(LogLevel::kInfo, "fs: gslfs mounted\n");
+
+  const Result<fs::Stat> library_stat =
+    fs::FsStat("/system/libraries/libgemapi.so.1");
+  if (library_stat.is_ok()) {
+    LogDec(LogLevel::kInfo, "fs: libgemapi bytes", library_stat.value().size);
+  } else {
+    LogDec(LogLevel::kError, "fs: libgemapi stat status",
+           static_cast<uint64_t>(library_stat.status()));
+  }
+  const Result<uint32_t> library_file =
+    fs::FsOpen(g_boot_files, "/system/libraries/libgemapi.so.1");
+  if (library_file.is_ok()) {
+    uint8_t magic[4] = {};
+    uint64_t read = 0;
+    status = fs::FsRead(g_boot_files, library_file.value(),
+                        std::span<uint8_t>(magic, sizeof(magic)), read);
+    if (IsOk(status) && read == sizeof(magic) && magic[0] == 0x7FU &&
+        magic[1] == 'E' && magic[2] == 'L' && magic[3] == 'F') {
+      Log(LogLevel::kInfo, "fs: library probe ok\n");
+    } else {
+      Log(LogLevel::kError, "fs: library probe failed\n");
+    }
+    (void)fs::FsClose(g_boot_files, library_file.value());
+  } else {
+    LogDec(LogLevel::kError, "fs: library open status",
+           static_cast<uint64_t>(library_file.status()));
+  }
+
   Result<fs::Node*> dev_root = fs::devfs::Create();
   if (dev_root.is_err()) {
     Log(LogLevel::kError, "fs: devfs create failed\n");
@@ -215,35 +250,19 @@ void InitFilesystem() noexcept {
     return;
   }
 
-  const fs::BlockDevice disk{&BlockReadAdapter, block, block->capacity_sectors(), 0};
-  const Result<fs::Partition> partition = fs::FindEspPartition(disk);
-  if (partition.is_err()) {
-    Log(LogLevel::kError, "fs: no esp partition found\n");
-    return;
-  }
-  const fs::BlockDevice device{&BlockReadAdapter, block, partition.value().sector_count,
-                               partition.value().start_sector};
-  fs::Node* fat_root = nullptr;
-  status = fs::fat32::Mount(device, &fat_root);
-  if (IsErr(status)) {
-    Log(LogLevel::kError, "fs: fat32 mount failed\n");
-    return;
-  }
-  status = fs::FsMount("/", fat_root);
-  if (IsErr(status)) {
-    Log(LogLevel::kError, "fs: root mount failed\n");
-    return;
-  }
-  Log(LogLevel::kInfo, "fs: mounted devfs and fat32\n");
-
-  const Status ram_status = PopulateRamfs();
-  if (IsErr(ram_status)) {
-    Log(LogLevel::kError, "fs: ramfs setup failed\n");
-  }
   const Status proc_status = MountProcfs();
   if (IsErr(proc_status)) {
     Log(LogLevel::kWarn, "fs: procfs setup failed\n");
   }
+  const Status tmp_status = SetupTmpfs();
+  if (IsErr(tmp_status)) {
+    Log(LogLevel::kWarn, "fs: tmpfs setup failed\n");
+  }
+  const Status fat_status = MountFat32(disk);
+  if (IsErr(fat_status)) {
+    Log(LogLevel::kWarn, "fs: fat32 setup failed\n");
+  }
+  Log(LogLevel::kInfo, "fs: mounted gslfs, devfs, procfs, tmpfs, fat32\n");
 
   Result<uint32_t> console = fs::FsOpen(g_boot_files, "/dev/console");
   if (console.is_ok()) {
@@ -258,36 +277,7 @@ void InitFilesystem() noexcept {
     Log(LogLevel::kError, "fs: open dev console failed\n");
   }
 
-  Result<uint32_t> program = fs::FsOpen(g_boot_files, "/EFI/BOOT/BOOTAA64.EFI");
-  if (program.is_err()) {
-    Log(LogLevel::kError, "fs: open efi image failed\n");
-    return;
-  }
-
-  uint8_t header[2] = {0, 0};
-  uint64_t read = 0;
-  status = fs::FsRead(
-    g_boot_files, program.value(),
-    std::span<uint8_t>(header, sizeof(header)), read);
-  if (IsErr(status) || read != sizeof(header)) {
-    Log(LogLevel::kError, "fs: read efi header failed\n");
-    (void)fs::FsClose(g_boot_files, program.value());
-    return;
-  }
-  if (header[0] != 'M' || header[1] != 'Z') {
-    Log(LogLevel::kError, "fs: efi header mismatch\n");
-    (void)fs::FsClose(g_boot_files, program.value());
-    return;
-  }
-
-  const Result<fs::Stat> stat = fs::FsStat("/EFI/BOOT/BOOTAA64.EFI");
-  if (stat.is_ok()) {
-    LogDec(LogLevel::kInfo, "fs: efi image bytes", stat.value().size);
-  }
-  (void)fs::FsClose(g_boot_files, program.value());
-  Log(LogLevel::kInfo, "fs: fat32 file read ok\n");
-
-  for (uint32_t index = 0; index < 8U; ++index) {
+  for (uint32_t index = 0; index < 16U; ++index) {
     fs::DirEntry entry{};
     bool found_entry = false;
     status = fs::FsList("/", index, entry, found_entry);

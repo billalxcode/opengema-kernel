@@ -1,0 +1,9 @@
+name=gemabox
+version=0.1
+exec=gemabox
+type=executable
+depends=libgemapi>=0.1
+capability=console
+capability=filesystem.read:/system
+capability=filesystem.write:/tmp
+capability=filesystem.write:/users

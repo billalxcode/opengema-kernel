@@ -1,7 +1,7 @@
 #pragma once
 
-// GPT partition lookup. Finds the EFI System Partition so a filesystem can
-// be mounted with the right sector offset.
+// GPT partition lookup. Finds the EFI System Partition or a partition whose
+// first sector starts with a known filesystem magic.
 
 #include <cstdint>
 
@@ -16,5 +16,9 @@ struct Partition {
 };
 
 [[nodiscard]] Result<Partition> FindEspPartition(const BlockDevice& device) noexcept;
+
+[[nodiscard]] Result<Partition> FindPartitionByMagic(const BlockDevice& device,
+                                                     const uint8_t* magic,
+                                                     uint32_t magic_size) noexcept;
 
 }  // namespace og::fs

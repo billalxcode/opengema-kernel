@@ -84,18 +84,27 @@ utama. Binary masih berasal dari ramfs, bukan GSLFS.
 
 Tujuan: system volume read-only dan reproducible.
 
-- [ ] Format GSLFS di `08-gslfs-format.md`.
-- [ ] Tool `mkgslimg`.
-- [ ] Driver GSLFS read-only di kernel.
-- [ ] Image system berisi init, library, dan aplikasi inti.
-- [ ] Mount `/` sebagai volume system read-only, lalu `/etc`, `/users`,
-  `/var`, dan `/tmp` di init.
-- [ ] Mount `/dev` dan `/proc` sebagai filesystem virtual.
-- [ ] Validasi checksum dan offset.
-- [ ] Build image deterministik.
+- [x] Format GSLFS di `08-gslfs-format.md`.
+- [x] Tool `mkgslimg`.
+- [x] Driver GSLFS read-only di kernel.
+- [~] Image system berisi `ld-gem`, library, dan aplikasi inti. `init`
+  menyusul pada GSL-4.
+- [x] Mount `/` sebagai volume system read-only.
+- [~] `/etc`, `/users`, dan `/var` writable belum ada. `/tmp` sementara
+  memakai ramfs.
+- [x] Mount `/dev` dan `/proc` sebagai filesystem virtual.
+- [x] Validasi checksum dan offset.
+- [x] Build image deterministik.
 
 Selesai bila: mengganti isi image system mengubah program yang dijalankan
 tanpa rebuild kernel.
+
+Status: image GSLFS dibuat dari `packages/system-root` dan ditulis ke
+partisi kedua. Kernel memvalidasi checksum, me-mount root read-only,
+memuat `/applications/gemabox/gemabox` dan `/system/boot/ld-gem`, lalu
+`ld-gem` memuat library dari `/system/libraries`. ESP FAT32 di-mount di
+`/volumes/boot`. Volume writable `/etc`, `/users`, dan `/var` serta init
+user belum ada.
 
 ## GSL-4 - Init dan shell
 

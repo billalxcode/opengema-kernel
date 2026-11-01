@@ -51,14 +51,15 @@ Kode sekarang berada di awal GSL:
 - `packages/libkgema` adalah ABI privat di bawah `libgemapi`; hanya
   `libkgema` yang berisi instruksi `svc`.
 - `gemabox` hanya memakai header `gemapi/` dan menautkan `libgemapi.a`.
-- `libkgema.so.1` dan `libgemapi.so.1` dimuat oleh `ld-gem` dari `/ram`
-  sebagai bootstrap menuju `/system/libraries`.
-- Kernel memuat `/ram/gemabox` sebagai ELF64 dynamic, membaca `PT_INTERP`,
-  dan memetakan `/ram/ld-gem`.
+- `libkgema.so.1` dan `libgemapi.so.1` dimuat oleh `ld-gem` dari
+  `/system/libraries` pada volume system GSLFS.
+- Kernel memuat `/applications/gemabox/gemabox` sebagai ELF64 dynamic,
+  membaca `PT_INTERP`, dan memetakan `/system/boot/ld-gem`.
+- Root `/` adalah volume GSLFS read-only. `/dev`, `/proc`, `/tmp`, dan
+  `/volumes/boot` sudah di-mount.
 - `scripts/check-gsl.sh` menolak aplikasi yang menyentuh lapisan bawah.
-- Binary, `ld-gem`, dan library masih dimasukkan kernel ke ramfs, bukan
-  dari GSLFS.
-- Belum ada init user atau system volume.
+- `/etc`, `/users`, dan `/var` writable serta init user belum ada.
+- Binary dan library tidak lagi disalin kernel ke ramfs.
 
 Dokumen GSL ini adalah target arsitektur, bukan deskripsi kode yang sudah
 selesai.

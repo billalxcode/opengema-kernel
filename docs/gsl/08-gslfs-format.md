@@ -1,98 +1,112 @@
 # 08 - Format GSLFS
 
-GSLFS adalah filesystem read-only khusus untuk volume system GSL. Tujuannya
-sederhana, mudah divalidasi, dan tidak membutuhkan journal.
+GSLFS adalah filesystem read-only untuk volume system GSL. Format ini sudah
+dipakai oleh `scripts/mkgslimg.py` dan driver `kernel/fs/gslfs.cpp`.
 
 ## 1. Prinsip
 
 1. Read-only saat runtime.
-2. Semua metadata dan data punya checksum.
+2. Semua metadata dan data punya checksum CRC32.
 3. Ukuran dan offset divalidasi sebelum dipakai.
-4. File disimpan berurutan di image.
+4. File disimpan contiguous.
 5. Tidak ada alokasi atau perubahan saat mount.
-6. Tool pembuat image berjalan di host.
+6. Tool pembuat image berjalan di host dan deterministik.
 
 ## 2. Layout image
 
 ```
-+------------------+
-| Superblock       |
-+------------------+
-| Node table       |
-+------------------+
-| Name table       |
-+------------------+
-| Data blocks      |
++------------------+  offset 0
+| Superblock       |  4096 byte
++------------------+  node_offset (4096)
+| Node table       |  node_count * 56 byte, dipad ke block
++------------------+  name_offset
+| Name table       |  nama NUL, dipad ke block
++------------------+  data_offset
+| Data blocks      |  data file contiguous
 +------------------+
 ```
 
-Semua angka little-endian dan semua offset dihitung dari awal image.
+Semua angka little-endian. Semua offset dihitung dari awal image.
+`block_size` adalah 4096.
 
 ## 3. Superblock
 
-Usulan field:
-
 ```
-magic        8 byte   "GSLFS1\0"
-version      u32
-block_size   u32      default 4096
-block_count  u64
-node_count   u32
-root_node    u32
-node_offset  u64
-name_offset  u64
-data_offset  u64
-checksum     u32      CRC32 isi superblock
+offset  ukuran  field
+0       8       magic = "GSLFS1\0\0"
+8       4       version = 1
+12      4       block_size = 4096
+16      8       block_count
+24      4       node_count
+28      4       root_node
+32      8       node_offset
+40      8       name_offset
+48      8       data_offset
+56      4       checksum
+60      4036    reserved, nol
 ```
 
-Mount gagal jika magic, versi, ukuran, atau checksum tidak cocok.
+`checksum` adalah CRC32 dari byte 0 sampai 55. Sisa superblock sampai 4096
+byte harus nol.
+
+Mount gagal jika magic, versi, block size, ukuran, offset, atau checksum
+tidak cocok.
 
 ## 4. Node
 
-Setiap file atau directory adalah satu node.
+Setiap file atau directory adalah satu node 56 byte.
 
 ```
-type         u32      0 file, 1 directory, 2 symlink nanti
-mode         u32      permission dan executable
-uid          u32
-gid          u32
-parent       u32      index node parent
-name_offset  u32      offset ke name table
-size         u64
-data_block   u64      block awal
-block_count  u64
-checksum     u32      CRC32 metadata
-data_checksum u32     CRC32 isi file
+offset  ukuran  field
+0       4       type        0 file, 1 directory
+4       4       mode        permission Unix
+8       4       uid
+12      4       gid
+16      4       parent      index node parent
+20      4       name_offset offset dari awal name table
+24      8       size        ukuran file
+32      8       data_block  block awal data, absolute
+40      8       block_count jumlah block data
+48      4       checksum    CRC32 byte 0..47
+52      4       data_checksum CRC32 isi file
 ```
 
 Aturan:
 
-- `parent` untuk root adalah dirinya sendiri.
-- Name tidak boleh kosong, tidak boleh mengandung `/`.
-- File harus memiliki range data yang valid.
-- Directory tidak memiliki data.
-- Symlink ditunda sampai ada kebutuhan nyata.
+- `parent` root adalah dirinya sendiri.
+- `parent` node lain harus menunjuk directory.
+- `name_offset` menunjuk NUL-terminated name di name table.
+- Name maksimum 63 byte karena VFS memakai buffer segmen 64 byte.
+- Name tidak boleh kosong (kecuali root) dan tidak boleh mengandung `/`.
+- Directory harus `size = 0` dan `block_count = 0`.
+- File kosong boleh `block_count = 0`.
+- `data_block` adalah index block absolute di image, bukan relatif ke
+  `data_offset`.
+- `block_count` harus sama dengan `ceil(size / block_size)`.
+- `data_checksum` untuk file kosong adalah 0.
+
+`node_count` maksimum 128 untuk implementasi kernel saat ini.
 
 ## 5. Name table
 
-Name disimpan sebagai byte ASCII atau UTF-8 dengan null terminator.
+Name disimpan berurutan sesuai urutan node, masing-masing diakhiri NUL.
+Root memakai name kosong. Name table dipad dengan nol sampai batas block.
 
-- Panjang maksimum 255 byte.
-- Path tidak disimpan penuh; lookup berjalan dari root atau cache.
-- Name table read-only dan tidak pernah diubah.
+`name_offset` pada node adalah offset relatif dari awal name table, bukan
+offset absolute image.
 
 ## 6. Data
 
-- Data file berurutan dan contiguous.
-- Offset dan ukuran divalidasi terhadap `block_count`.
-- File kosong boleh punya `block_count = 0`.
-- Data checksum diverifikasi saat file dibuka atau saat mount jika ukuran
-  image masih kecil.
-- Untuk file besar, verifikasi saat load atau baca bertahap.
+- Data file contiguous, dimulai pada `data_block * block_size`.
+- Offset dan ukuran divalidasi terhadap `block_count` image.
+- Block data dipad dengan nol.
+- Driver memverifikasi checksum setiap file saat mount.
+- File besar nanti bisa diverifikasi bertahap, tetapi untuk image system
+  sekarang verifikasi saat mount masih murah.
 
 ## 7. Permission
 
-Field `mode` memakai bit yang mirip Unix:
+Field `mode` memakai bit Unix:
 
 ```
 0400 read owner
@@ -102,59 +116,75 @@ Field `mode` memakai bit yang mirip Unix:
 0004 read other
 ```
 
-Karena volume read-only, bit write tidak berpengaruh dan operasi tulis
-ditolak. Bit executable dipakai loader untuk menolak binary tanpa izin.
+Volume read-only menolak operasi tulis di VFS. Bit write tetap disimpan
+agar metadata bisa dipakai saat image diperiksa di host atau dipindahkan.
 
 ## 8. Mount
 
 Saat mount, kernel:
 
 1. Membaca superblock dan memvalidasi checksum.
-2. Memvalidasi node table dan name table.
-3. Membangun root node di VFS.
-4. Menolak image jika ada offset atau range yang tidak valid.
+2. Memvalidasi `block_count`, `node_count`, `root_node`, dan offset.
+3. Membaca setiap node dan memvalidasi checksum metadata.
+4. Membaca name table dan memvalidasi nama.
+5. Memvalidasi parent, tipe, dan reachability ke root.
+6. Memverifikasi checksum data setiap file.
+7. Membangun node VFS statis.
 
-Tidak ada alokasi node dinamis. Node VFS menunjuk langsung ke node GSLFS.
+Jika salah satu langkah gagal, mount gagal dan tidak ada node yang dipakai.
 
 ## 9. Tool mkgslimg
 
-Tool host `mkgslimg` membuat image dari direktori:
-
-```
-mkgslimg packages/system-root build/gema-system.img
+```sh
+python3 scripts/mkgslimg.py build/system-root build/gema-system.img
+python3 scripts/mkgslimg.py --verify build/gema-system.img
 ```
 
 Aturan:
 
-- Urutan node deterministik agar image bisa direproduksi.
-- Node directory dan file mengikuti tree.
-- File di luar direktori root ditolak.
-- Permission diambil dari mode file host atau manifest.
-- Tool menolak symlink sampai format mendukungnya.
-- Tool menghitung checksum.
+- Node diurutkan berdasarkan path.
+- Root adalah node 0.
+- Data mengikuti urutan node.
+- Tidak ada timestamp di image, sehingga hasil deterministik.
+- Symlink ditolak.
+- Mode diambil dari file host.
+- Tool menghitung semua checksum.
+- `--verify` membaca ulang image dan memeriksa semua checksum.
 
-## 10. Update system
+## 10. Partisi system
+
+Image GSLFS ditulis ke partisi kedua disk boot:
+
+```
+partisi 1  ESP FAT32     32 MiB
+partisi 2  GSLFS         32 MiB
+```
+
+Kernel mencari partisi dengan membaca awal setiap partisi GPT dan mencocokkan
+magic `GSLFS1\0\0`. Partisi ESP tetap dipakai UEFI dan di-mount kernel di
+`/volumes/boot` setelah root GSLFS aktif.
+
+## 11. Update system
 
 Karena image read-only:
 
 - Update dilakukan dengan membuat image baru.
-- Boot memilih volume A atau B yang valid.
+- Boot dapat memilih partisi A atau B yang valid.
 - Jika image baru gagal validasi, boot kembali ke image lama.
-- Data user tidak ikut diganti.
+- Data user di `/users`, `/etc`, dan `/var` tidak ikut diganti.
 
-## 11. Batas awal
+## 12. Batas awal
 
-- Nama maksimum 255 byte.
-- Node maksimum ditentukan versi, misalnya 4096 untuk image awal.
-- File maksimum mengikuti ukuran image.
+- Name maksimum 63 byte.
+- Node maksimum 128.
 - Tidak ada hard link.
-- Tidak ada symlink sampai disepakati.
+- Tidak ada symlink.
 - Tidak ada compression.
+- Tidak ada journal atau alokasi runtime.
 
-## 12. Yang masih dibahas
+## 13. Yang masih dibahas
 
-- CRC32 atau checksum lain.
-- Checksum per blok atau per file.
-- Apakah mode permission diambil dari host atau manifest.
-- Apakah image mendukung banyak volume dalam satu file.
-- Apakah perlu index directory untuk lookup cepat.
+- Dukungan symlink untuk `/commands`.
+- Checksum per blok untuk file besar.
+- Versi format berikutnya dan aturan kompatibilitas.
+- Update A/B dan rollback.

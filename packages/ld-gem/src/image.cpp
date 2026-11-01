@@ -1,6 +1,7 @@
 #include "ldgem/image.h"
 
 #include "kgema/file.h"
+#include "kgema/io.h"
 #include "kgema/memory.h"
 
 namespace ldgem {
@@ -9,6 +10,24 @@ namespace {
 
 constexpr u64 kHeaderBufferSize = 1024;
 constexpr u64 kPageMask = kPageSize - 1U;
+
+[[nodiscard]] u64 Length(const char* text) noexcept {
+  u64 length = 0;
+  if (text != nullptr) {
+    while (text[length] != '\0') {
+      ++length;
+    }
+  }
+  return length;
+}
+
+void Report(const char* stage, const char* path) noexcept {
+  kgema::write("ld-gem: ", 8);
+  kgema::write(stage, static_cast<kgema::usize>(Length(stage)));
+  kgema::write(": ", 2);
+  kgema::write(path, static_cast<kgema::usize>(Length(path)));
+  kgema::write("\n", 1);
+}
 
 [[nodiscard]] bool ReadExact(kgema::i64 descriptor, void* buffer,
                              u64 size) noexcept {
@@ -119,10 +138,12 @@ bool LoadImage(const char* path, Image& image, u64& base, u64& dynamic) noexcept
   }
   const kgema::i64 descriptor = kgema::open(path);
   if (descriptor < 0) {
+    Report("open failed", path);
     return false;
   }
   kgema::Stat info{};
   if (!kgema::stat(path, info) || info.size < elf::kHeaderSize) {
+    Report("stat failed", path);
     (void)kgema::close(descriptor);
     return false;
   }
@@ -131,10 +152,12 @@ bool LoadImage(const char* path, Image& image, u64& base, u64& dynamic) noexcept
   const u64 header_size =
     info.size < sizeof(header) ? info.size : static_cast<u64>(sizeof(header));
   if (!ReadExact(descriptor, header, header_size)) {
+    Report("header read failed", path);
     (void)kgema::close(descriptor);
     return false;
   }
   if (!ParseImage(header, header_size, info.size, image)) {
+    Report("bad elf", path);
     (void)kgema::close(descriptor);
     return false;
   }
@@ -142,6 +165,7 @@ bool LoadImage(const char* path, Image& image, u64& base, u64& dynamic) noexcept
   const u64 span = image.max_address - image.min_address;
   void* mapping = kgema::mmap_executable(span);
   if (mapping == nullptr) {
+    Report("mmap failed", path);
     (void)kgema::close(descriptor);
     return false;
   }
@@ -153,11 +177,13 @@ bool LoadImage(const char* path, Image& image, u64& base, u64& dynamic) noexcept
       continue;
     }
     if (!kgema::seek(descriptor, segment.file_offset)) {
+      Report("seek failed", path);
       (void)kgema::close(descriptor);
       return false;
     }
     auto* destination = reinterpret_cast<u8*>(base + segment.virtual_address);
     if (!ReadExact(descriptor, destination, segment.file_size)) {
+      Report("segment read failed", path);
       (void)kgema::close(descriptor);
       return false;
     }

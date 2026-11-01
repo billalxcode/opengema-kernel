@@ -281,9 +281,9 @@ Ringkasnya:
 
 Roadmap GSL ada di `docs/gsl/06-roadmap.md`.
 
-GSL-1 sudah berjalan: `packages/libgemapi` menjadi satu-satunya API
-aplikasi, `libgemapi.a` membawa `_start` dan objek `libkgema` privat, dan
-`libgemapi.so.1` sudah bergantung pada `libkgema.so.1`. Kernel memuat ELF64
-dynamic, `ld-gem` memuat dependency dari ramfs, dan gemabox berjalan
-sebagai aplikasi dynamic. GSLFS, `/system/libraries`, dan init user belum
-ada.
+GSL-1 sampai GSL-3 sudah berjalan: `packages/libgemapi` menjadi
+satu-satunya API aplikasi, `libgemapi.a` membawa `_start` dan objek
+`libkgema` privat, kernel memuat ELF64 dynamic, dan `ld-gem` memuat library
+dari `/system/libraries`. Root `/` adalah volume GSLFS read-only dari
+partisi kedua; `/dev`, `/proc`, `/tmp`, dan `/volumes/boot` sudah di-mount.
+Volume writable `/etc`, `/users`, `/var` dan init user belum ada.

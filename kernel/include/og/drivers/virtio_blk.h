@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <span>
 
+#include "og/arch/spinlock.h"
 #include "og/core/status.h"
 #include "og/dma/dma.h"
 #include "og/drivers/pci.h"
@@ -35,6 +36,7 @@ class Blk {
   PciTransport transport_;
   Queue queue_;
   dma::DmaBuffer request_memory_{};
+  arch::aarch64::IrqSpinlock lock_;
   uint64_t capacity_ = 0;
   bool ready_ = false;
 };

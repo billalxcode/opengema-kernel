@@ -11,7 +11,7 @@ sebagai bagian dari layer libraries, bukan `libgemapi`.
 
 1. Kernel memvalidasi executable, memetakan segmen `PT_LOAD`, dan membaca
    `PT_INTERP`.
-2. Kernel memuat `/ram/ld-gem` ke address space yang sama dan menyerahkan
+2. Kernel memuat `/system/boot/ld-gem` ke address space yang sama dan menyerahkan
    `GEM_DYNAMIC` serta `GEM_ENTRY` lewat environment.
 3. `ld-gem` membaca dynamic section executable utama.
 4. Setiap `DT_NEEDED` dimuat dari search path, lalu dependensinya diproses
@@ -38,8 +38,7 @@ sebagai bagian dari layer libraries, bukan `libgemapi`.
 
 ## Batasan saat ini
 
-- Search path hanya `/ram`. Target akhirnya `/system/libraries` setelah
-  GSLFS dan init user ada.
+- Search path `/system/libraries` di volume system GSLFS.
 - Hanya hash SYSV (`DT_HASH`) yang dipakai untuk lookup simbol. Library
   harus dibangun dengan hash SYSV, yang merupakan default `ld` di proyek
   ini.

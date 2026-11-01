@@ -1,6 +1,7 @@
 #include "og/drivers/virtio_blk.h"
 
 #include "memory.h"
+#include "og/arch/spinlock.h"
 #include "og/dma/dma.h"
 
 namespace og::drivers::virtio {
@@ -103,6 +104,11 @@ Status Blk::read(uint64_t sector, std::span<uint8_t> buffer) noexcept {
   if (sectors > (capacity_ - sector)) {
     return Status::kInvalidArg;
   }
+
+  // One queue and one request buffer are shared by all CPUs. Serialize the
+  // whole request so a fork or loader read cannot overwrite an in-flight
+  // descriptor.
+  arch::aarch64::LockGuard<arch::aarch64::IrqSpinlock> guard(lock_);
 
   auto* request_base = static_cast<uint8_t*>(request_memory_.cpu_address);
   auto* header = reinterpret_cast<RequestHeader*>(request_base);
