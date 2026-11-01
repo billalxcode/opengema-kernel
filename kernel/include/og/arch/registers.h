@@ -81,6 +81,16 @@ inline void WriteMairEl1(uint64_t value) noexcept {
   __asm__ volatile("msr mair_el1, %0" ::"r"(value) : "memory");
 }
 
+[[nodiscard]] inline uint64_t ReadDaif() noexcept {
+  uint64_t value = 0;
+  __asm__ volatile("mrs %0, daif" : "=r"(value));
+  return value;
+}
+
+inline void WriteDaif(uint64_t value) noexcept {
+  __asm__ volatile("msr daif, %0" ::"r"(value) : "memory");
+}
+
 inline void DisableInterrupts() noexcept {
   __asm__ volatile("msr daifset, #0xf" ::: "memory");
 }
@@ -89,10 +99,99 @@ inline void EnableInterrupts() noexcept {
   __asm__ volatile("msr daifclr, #0xf" ::: "memory");
 }
 
+inline void DisableIrq() noexcept {
+  __asm__ volatile("msr daifset, #2" ::: "memory");
+}
+
+inline void EnableIrq() noexcept {
+  __asm__ volatile("msr daifclr, #2" ::: "memory");
+}
+
+// Saves DAIF and masks IRQ. Restore with IrqRestore.
+[[nodiscard]] inline uint64_t IrqSave() noexcept {
+  const uint64_t state = ReadDaif();
+  DisableIrq();
+  return state;
+}
+
+inline void IrqRestore(uint64_t state) noexcept {
+  WriteDaif(state);
+}
+
+inline void WaitForInterrupt() noexcept {
+  __asm__ volatile("wfi");
+}
+
 [[noreturn]] inline void HaltForever() noexcept {
   for (;;) {
-    __asm__ volatile("wfi");
+    WaitForInterrupt();
   }
+}
+
+// Generic timer, EL1 physical counter.
+[[nodiscard]] inline uint64_t ReadCntfrqEl0() noexcept {
+  uint64_t value = 0;
+  __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(value));
+  return value;
+}
+
+[[nodiscard]] inline uint64_t ReadCntpctEl0() noexcept {
+  uint64_t value = 0;
+  __asm__ volatile("mrs %0, cntpct_el0" : "=r"(value));
+  return value;
+}
+
+inline void WriteCntpTvalEl0(uint64_t value) noexcept {
+  __asm__ volatile("msr cntp_tval_el0, %0" ::"r"(value) : "memory");
+}
+
+[[nodiscard]] inline uint64_t ReadCntpCtlEl0() noexcept {
+  uint64_t value = 0;
+  __asm__ volatile("mrs %0, cntp_ctl_el0" : "=r"(value));
+  return value;
+}
+
+inline void WriteCntpCtlEl0(uint64_t value) noexcept {
+  __asm__ volatile("msr cntp_ctl_el0, %0" ::"r"(value) : "memory");
+}
+
+// GICv3 system register interface.
+[[nodiscard]] inline uint64_t ReadIccSreEl1() noexcept {
+  uint64_t value = 0;
+  __asm__ volatile("mrs %0, s3_0_c12_c12_5" : "=r"(value));
+  return value;
+}
+
+inline void WriteIccSreEl1(uint64_t value) noexcept {
+  __asm__ volatile("msr s3_0_c12_c12_5, %0" ::"r"(value) : "memory");
+}
+
+[[nodiscard]] inline uint64_t ReadIccCtlrEl1() noexcept {
+  uint64_t value = 0;
+  __asm__ volatile("mrs %0, s3_0_c12_c12_4" : "=r"(value));
+  return value;
+}
+
+inline void WriteIccCtlrEl1(uint64_t value) noexcept {
+  __asm__ volatile("msr s3_0_c12_c12_4, %0" ::"r"(value) : "memory");
+}
+
+inline void WriteIccPmrEl1(uint64_t value) noexcept {
+  __asm__ volatile("msr s3_0_c4_c6_0, %0" ::"r"(value) : "memory");
+}
+
+inline void WriteIccIgrpen1El1(uint64_t value) noexcept {
+  __asm__ volatile("msr s3_0_c12_c12_7, %0" ::"r"(value) : "memory");
+}
+
+[[nodiscard]] inline uint64_t ReadIccIar1El1() noexcept {
+  uint64_t value = 0;
+  __asm__ volatile("mrs %0, s3_0_c12_c12_0" : "=r"(value));
+  return value;
+}
+
+inline void WriteIccEoir1El1(uint64_t value) noexcept {
+  __asm__ volatile("msr s3_0_c12_c12_1, %0" ::"r"(value) : "memory");
 }
 
 }  // namespace og::arch::aarch64
