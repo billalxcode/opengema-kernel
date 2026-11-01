@@ -25,6 +25,8 @@ constexpr uint32_t kMaxThreads = 8;
 constexpr uint32_t kStackPages = 4;
 constexpr uint64_t kNoWake = 0xFFFFFFFFFFFFFFFFULL;
 
+struct WaitQueue;
+
 struct Thread {
   uint64_t saved_sp;
   uint64_t stack_base;
@@ -38,6 +40,7 @@ struct Thread {
   void* argument;
   Thread* next_ready;
   Thread* next_wait;
+  WaitQueue* wait_owner;
 };
 
 // Sleep/wake queue. A thread waits on at most one queue at a time.
@@ -70,5 +73,10 @@ void WaitQueueInit(WaitQueue& queue) noexcept;
 void WaitQueueWait(WaitQueue& queue) noexcept;
 void WaitQueueWakeOne(WaitQueue& queue) noexcept;
 void WaitQueueWakeAll(WaitQueue& queue) noexcept;
+
+// Blocking helpers for sleeping locks. The caller must have IRQ masked.
+void WaitQueueEnqueueCurrent(WaitQueue& queue) noexcept;
+void WakeThread(Thread* thread) noexcept;
+void ScheduleCurrent() noexcept;
 
 }  // namespace og::sched

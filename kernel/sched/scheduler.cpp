@@ -104,6 +104,9 @@ Thread* PickNext(Thread* previous) noexcept {
       EnqueueNoLock(candidate);
       continue;
     }
+    if (candidate->state != ThreadState::kReady) {
+      continue;
+    }
     chosen = candidate;
     break;
   }
@@ -379,6 +382,7 @@ void WaitQueueWait(WaitQueue& queue) noexcept {
   const uint64_t daif = arch::aarch64::IrqSave();
   self->state = ThreadState::kBlocked;
   self->wake_tick = kNoWake;
+  self->wait_owner = &queue;
   self->next_wait = queue.head;
   queue.head = self;
   Schedule();
@@ -391,6 +395,7 @@ void WaitQueueWakeOne(WaitQueue& queue) noexcept {
   if (thread != nullptr) {
     queue.head = thread->next_wait;
     thread->next_wait = nullptr;
+    thread->wait_owner = nullptr;
     thread->wake_tick = kNoWake;
     thread->state = ThreadState::kReady;
     EnqueueNoLock(thread);
@@ -405,12 +410,46 @@ void WaitQueueWakeAll(WaitQueue& queue) noexcept {
   while (thread != nullptr) {
     Thread* next = thread->next_wait;
     thread->next_wait = nullptr;
+    thread->wait_owner = nullptr;
     thread->wake_tick = kNoWake;
     thread->state = ThreadState::kReady;
     EnqueueNoLock(thread);
     thread = next;
   }
   arch::aarch64::IrqRestore(daif);
+}
+
+void WaitQueueEnqueueCurrent(WaitQueue& queue) noexcept {
+  Thread* self = g_current;
+  if (self == nullptr || self == g_idle) {
+    return;
+  }
+  if (self->state == ThreadState::kBlocked && self->wait_owner == &queue) {
+    return;
+  }
+  self->state = ThreadState::kBlocked;
+  self->wake_tick = kNoWake;
+  self->wait_owner = &queue;
+  self->next_wait = queue.head;
+  queue.head = self;
+}
+
+void WakeThread(Thread* thread) noexcept {
+  if (thread == nullptr) {
+    return;
+  }
+  if (thread->state != ThreadState::kBlocked) {
+    return;
+  }
+  thread->next_wait = nullptr;
+  thread->wait_owner = nullptr;
+  thread->wake_tick = kNoWake;
+  thread->state = ThreadState::kReady;
+  EnqueueNoLock(thread);
+}
+
+void ScheduleCurrent() noexcept {
+  Schedule();
 }
 
 }  // namespace og::sched
