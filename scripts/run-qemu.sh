@@ -70,7 +70,7 @@ cp "$VARS" "$VARS_TMP"
 trap 'rm -f "$VARS_TMP"' EXIT
 
 qemu-system-aarch64 \
-  -M virt,gic-version=3 \
+  -M virt,gic-version=3,acpi=off \
   -cpu cortex-a72 \
   -smp 2 \
   -m 512M \
