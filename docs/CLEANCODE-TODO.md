@@ -205,13 +205,16 @@ Commit: `test(dev): add fdt host test`.
 - [x] Tambah host test libgemapi io/process/memory (`read_line`, `spawn`,
   `wait`, `map`, `unmap`, `to_string`).
 - [x] Pisahkan relocation `ld-gem` ke `packages/ld-gem/src/linker_reloc.cpp`.
-- [ ] Pisahkan dynamic parse dari `ld-gem/linker.cpp` jika perlu.
-- [ ] Pisahkan applet gemabox dari shell loop jika perlu.
+- [x] Pisahkan dynamic parse `ld-gem` ke
+  `packages/ld-gem/src/linker_dynamic.cpp`.
+- [x] Pisahkan applet gemabox ke `shell.cpp` dan `writer.cpp`.
+- [x] Tambah command registry di `shell.cpp` (`kCommands`), bukan
+  rantai `if` hardcoded.
 - [x] Tambah host test endian.
-- [ ] Compile-check grup.
+- [x] Compile-check grup.
 
-Status: relocation sudah dipisah dan diverifikasi dengan QEMU. Dynamic
-parse masih di `linker.cpp`; pemisahan lebih lanjut menunggu kebutuhan.
+Status: relocation, dynamic parse, dan applet gemabox sudah dipisah
+serta diverifikasi dengan QEMU. Command shell memakai registry tabel.
 
 Commit: `refactor(core): share endian and linker text helpers`.
 

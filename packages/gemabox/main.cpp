@@ -9,6 +9,7 @@
 #include "gemapi/paths.h"
 #include "gemapi/process.h"
 #include "gemapi/types.h"
+#include "gemabox/applets.h"
 
 namespace {
 
@@ -19,9 +20,6 @@ constexpr char kMmapMessage[] = "mmap ok\n";
 constexpr char kMmapFailed[] = "mmap failed\n";
 constexpr char kChildOk[] = "child ok\n";
 constexpr char kSpawnOk[] = "spawn ok\n";
-constexpr char kWriteMessage[] = "write ok\n";
-constexpr char kPrompt[] = "gemabox> ";
-constexpr char kHelp[] = "commands: help, echo, cat, ls, clear, exit\n";
 // Test file under the fixed /tmp mount.
 constexpr char kHelloPath[] = "/tmp/hello";
 
@@ -36,202 +34,6 @@ bool same(const char* lhs, const char* rhs) {
   return *lhs == *rhs;
 }
 
-bool starts_with(const char* text, const char* prefix) {
-  if (text == nullptr || prefix == nullptr) {
-    return false;
-  }
-  while (*prefix != '\0') {
-    if (*text != *prefix) {
-      return false;
-    }
-    ++text;
-    ++prefix;
-  }
-  return true;
-}
-
-void cat_file(const char* path) {
-  auto file = gemapi::fs::File::open(path);
-  if (!file) {
-    gemapi::io::write("cat: open failed\n");
-    return;
-  }
-  char buffer[64];
-  for (;;) {
-    auto count = file.value().read(buffer, sizeof(buffer));
-    if (!count) {
-      gemapi::io::write("cat: read failed\n");
-      break;
-    }
-    if (count.value() == 0U) {
-      break;
-    }
-    gemapi::io::write(buffer, count.value());
-  }
-}
-
-void list_dir(const char* path) {
-  for (gemapi::u64 index = 0;; ++index) {
-    gemapi::fs::DirEntry entry{};
-    auto found = gemapi::fs::list(path, index, entry);
-    if (!found) {
-      if (found.status() != gemapi::Status::ok) {
-        gemapi::io::write("ls: list failed\n");
-      }
-      return;
-    }
-    if (!found.value()) {
-      return;
-    }
-    gemapi::io::write(entry.name);
-    if (entry.kind == gemapi::fs::Kind::directory) {
-      gemapi::io::write("/");
-    }
-    gemapi::io::write("\n");
-  }
-}
-
-bool run_path(const char* path, const char* name) {
-  const char* argv[] = {name};
-  auto child = gemapi::process::spawn(path, argv, 1);
-  if (!child) {
-    gemapi::io::write("run: spawn failed\n");
-    return true;
-  }
-  int status = 0;
-  if (gemapi::process::wait(child.value(), status) != gemapi::Status::ok) {
-    gemapi::io::write("run: wait failed\n");
-  }
-  return true;
-}
-
-gemapi::usize append_text(char* out, gemapi::usize capacity,
-                          gemapi::usize cursor, const char* text) {
-  for (gemapi::usize index = 0; text[index] != '\0'; ++index) {
-    if (cursor >= capacity) {
-      return capacity;
-    }
-    out[cursor] = text[index];
-    ++cursor;
-  }
-  return cursor;
-}
-
-bool finish_path(char* path, gemapi::usize capacity, gemapi::usize cursor) {
-  if (cursor >= capacity) {
-    return false;
-  }
-  path[cursor] = '\0';
-  return true;
-}
-
-bool run_external(const char* name) {
-  char path[128];
-
-  gemapi::usize cursor = 0;
-  cursor = append_text(path, sizeof(path), cursor, "/commands/");
-  cursor = append_text(path, sizeof(path), cursor, name);
-  if (!finish_path(path, sizeof(path), cursor)) {
-    return false;
-  }
-  if (gemapi::fs::stat(path)) {
-    return run_path(path, name);
-  }
-
-  cursor = 0;
-  cursor = append_text(path, sizeof(path), cursor, "/applications/");
-  cursor = append_text(path, sizeof(path), cursor, name);
-  cursor = append_text(path, sizeof(path), cursor, "/");
-  cursor = append_text(path, sizeof(path), cursor, name);
-  if (!finish_path(path, sizeof(path), cursor)) {
-    return false;
-  }
-  if (!gemapi::fs::stat(path)) {
-    return false;
-  }
-  return run_path(path, name);
-}
-
-int run_shell() {
-  char line[128];
-  for (;;) {
-    gemapi::io::write(kPrompt);
-    auto length = gemapi::io::read_line(line, sizeof(line));
-    if (!length) {
-      return 1;
-    }
-    const gemapi::usize size = length.value();
-    if (size == 0U) {
-      continue;
-    }
-    if (same(line, "exit")) {
-      return 0;
-    }
-    if (same(line, "help")) {
-      gemapi::io::write(kHelp);
-      continue;
-    }
-    if (starts_with(line, "echo ") && size > 5U) {
-      gemapi::io::write(line + 5, size - 5U);
-      gemapi::io::write("\n");
-      continue;
-    }
-    if (starts_with(line, "cat ") && size > 4U) {
-      cat_file(line + 4);
-      continue;
-    }
-    if (same(line, "ls")) {
-      list_dir("/");
-      continue;
-    }
-    if (starts_with(line, "ls ") && size > 3U) {
-      list_dir(line + 3);
-      continue;
-    }
-    if (same(line, "clear")) {
-      gemapi::io::write("\x1b[2J\x1b[H");
-      continue;
-    }
-    bool has_space = false;
-    for (gemapi::usize index = 0; index < size; ++index) {
-      if (line[index] == ' ') {
-        has_space = true;
-        break;
-      }
-    }
-    if (!has_space && run_external(line)) {
-      continue;
-    }
-    gemapi::io::write("unknown: ");
-    gemapi::io::write(line, size);
-    gemapi::io::write("\n");
-  }
-}
-
-int run_writer() {
-  if (gemapi::fs::chdir(gemapi::paths::kTmp) != gemapi::Status::ok) {
-    return 1;
-  }
-  auto file = gemapi::fs::File::open("writer", gemapi::fs::kOpenWrite);
-  if (!file) {
-    return 1;
-  }
-  const gemapi::usize message_size = sizeof(kWriteMessage) - 1U;
-  if (file.value().write(kWriteMessage, message_size) != gemapi::Status::ok) {
-    return 1;
-  }
-  if (file.value().seek(0) != gemapi::Status::ok) {
-    return 1;
-  }
-  char readback[16];
-  auto count = file.value().read(readback, sizeof(readback));
-  if (!count || count.value() < message_size || readback[0] != 'w') {
-    return 1;
-  }
-  gemapi::io::write(kWriteMessage);
-  return 0;
-}
-
 }  // namespace
 
 int main(int argc, char** argv, char** /*envp*/) {
@@ -240,10 +42,10 @@ int main(int argc, char** argv, char** /*envp*/) {
     return 0;
   }
   if (argc > 1 && same(argv[1], "writer")) {
-    return run_writer();
+    return gemabox::run_writer();
   }
   if (argc > 1 && same(argv[1], "shell")) {
-    return run_shell();
+    return gemabox::run_shell();
   }
   if (gemapi::process::id() == 0U) {
     return 1;

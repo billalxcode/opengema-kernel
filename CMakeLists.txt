@@ -167,8 +167,13 @@ add_custom_command(
 add_custom_target(og_shared_libraries ALL
   DEPENDS ${OG_KGEMA_SO} ${OG_GEMAPI_SO})
 
-add_library(og_gemabox_user OBJECT packages/gemabox/main.cpp)
-target_include_directories(og_gemabox_user PRIVATE ${OG_GEMAPI_INCLUDE})
+add_library(og_gemabox_user OBJECT
+  packages/gemabox/main.cpp
+  packages/gemabox/shell.cpp
+  packages/gemabox/writer.cpp)
+target_include_directories(og_gemabox_user PRIVATE
+  ${CMAKE_SOURCE_DIR}/packages/gemabox/include
+  ${OG_GEMAPI_INCLUDE})
 target_compile_options(og_gemabox_user PRIVATE ${OG_USER_CXX_FLAGS})
 
 set(OG_GEMABOX_ELF ${CMAKE_BINARY_DIR}/gemabox.elf)
@@ -220,6 +225,7 @@ add_library(og_ldgem_user OBJECT
   packages/ld-gem/src/elf.cpp
   packages/ld-gem/src/image.cpp
   packages/ld-gem/src/linker.cpp
+  packages/ld-gem/src/linker_dynamic.cpp
   packages/ld-gem/src/linker_reloc.cpp
   packages/ld-gem/src/main.cpp
   packages/ld-gem/src/start.cpp

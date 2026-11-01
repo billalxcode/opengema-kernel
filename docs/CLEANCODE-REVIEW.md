@@ -147,7 +147,11 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 - `ldgem/text.h` dan `text.cpp` menjadi satu sumber helper teks untuk
   `ld-gem`.
 - Relocation `ld-gem` dipisah ke `packages/ld-gem/src/linker_reloc.cpp`;
-  `linker.cpp` tetap menangani dynamic parse dan symbol lookup.
+  dynamic parse dipisah ke `linker_dynamic.cpp`, dan `linker.cpp` menangani
+  object table serta symbol lookup.
+- Applet gemabox dipisah menjadi `shell.cpp` dan `writer.cpp`; `main.cpp`
+  hanya menangani mode proses dan self test EL0. Shell memakai tabel
+  `kCommands` sebagai registry, dan daftar `help` dibangun dari tabel itu.
 - `gemapi::fs` memakai `ConvertKind` untuk `stat` dan `list`.
 - `gslfs::Mount` dipecah menjadi `ReadSuperblock`, `LoadNodes`,
   `ValidateTree`, dan `VerifyNodeData`.
@@ -226,7 +230,7 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 
 Verifikasi branch `dev`:
 
-- `python3 scripts/compile-check.py`: 110 file OK, 1 entri lama dilewati.
+- `python3 scripts/compile-check.py`: 113 file OK, 1 entri lama dilewati.
 - `./scripts/build.sh` lewat podman: kernel build dan link OK,
   `arch-check` dan `gsl-check` OK.
 - `./scripts/test-host.sh`: host tests, ramfs, procfs, devfs, FAT32, gemapi
