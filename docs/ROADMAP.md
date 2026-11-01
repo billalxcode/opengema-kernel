@@ -5,8 +5,10 @@ anti redundansi. Setiap task punya ID supaya bisa dirujuk di commit.
 
 Status sekarang: Fase 0 sampai 14 selesai. Kernel sudah boot di QEMU virt,
 punya MMU sendiri, allocator, interrupt, timer 1000 Hz, sinkronisasi lengkap,
-virtio-blk, FAT32, scheduler round robin, user mode EL0, dua core aktif,
-test otomatis, dan W^X.
+virtio-blk, virtio-gpu, FAT32, scheduler per-CPU, user mode EL0, dua core
+aktif, address space per proses, SDK libkgema, test otomatis, dan W^X.
+
+Rencana lanjutan setelah fase 14 ada di `docs/ROADMAP-NEXT.md`.
 
 ---
 

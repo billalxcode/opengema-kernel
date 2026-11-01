@@ -110,4 +110,5 @@ dengan ASID yang dipasang saat context switch.
 
 Roadmap inti selesai. Berikutnya: pengembangan lanjutan di atas fondasi ini.
 
-Roadmap lengkap ada di `docs/ROADMAP.md`.
+Roadmap lengkap ada di `docs/ROADMAP.md`. Rencana lanjutan dan analisis
+kesenjangan ada di `docs/ROADMAP-NEXT.md`.
