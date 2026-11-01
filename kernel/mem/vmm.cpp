@@ -71,6 +71,43 @@ void TrackUserRegion(uint64_t base, uint64_t size) noexcept {
   return Result<uint64_t*>::Ok(fresh);
 }
 
+// Returns the table below table[index]. If a block descriptor is present it
+// is split into the next level, preserving its attributes.
+[[nodiscard]] Result<uint64_t*> EnsureTable(uint64_t* table, uint64_t index,
+                                            unsigned level) noexcept {
+  const uint64_t descriptor = table[index];
+  if (!DescriptorValid(descriptor)) {
+    return Result<uint64_t*>::Err(Status::kNotFound);
+  }
+  if (DescriptorIsTable(descriptor)) {
+    return Result<uint64_t*>::Ok(reinterpret_cast<uint64_t*>(DescriptorAddress(descriptor)));
+  }
+
+  const Result<uint64_t> frame = PmmAllocPage();
+  if (frame.is_err()) {
+    return Result<uint64_t*>::Err(frame.status());
+  }
+  auto* child = reinterpret_cast<uint64_t*>(frame.value());
+  mem::Zero(child, kPageSize);
+
+  const uint64_t block_size = (level == 1U) ? kBlockSize1G : kBlockSize2M;
+  const uint64_t child_size = block_size / kTableEntries;
+  const uint64_t base_address = DescriptorAddress(descriptor);
+  const uint64_t low_attributes = descriptor & 0xFFFULL;
+  const uint64_t high_attributes = descriptor & (arch::aarch64::kPxn | arch::aarch64::kUxn);
+  const uint64_t child_type =
+    (level == 1U) ? arch::aarch64::kDescriptorBlock : arch::aarch64::kDescriptorPage;
+
+  for (uint64_t entry = 0; entry < kTableEntries; ++entry) {
+    const uint64_t address = base_address + (entry * child_size);
+    child[entry] = address | (low_attributes & ~3ULL) | high_attributes | child_type;
+  }
+
+  table[index] = TableDescriptor(frame.value());
+  arch::aarch64::CleanInvalidateDcacheRange(frame.value(), frame.value() + kPageSize);
+  return Result<uint64_t*>::Ok(child);
+}
+
 [[nodiscard]] Status MapChunk(uint64_t virtual_address, uint64_t physical_address, uint64_t size,
                              MemoryKind kind, bool executable, bool user) noexcept {
   uint64_t* table = g_root;
@@ -224,9 +261,18 @@ Status VmmInit(const BootInfo& info) noexcept {
   if (IsErr(status)) {
     return status;
   }
-  status = MapRange(info.ram_base, info.ram_base, info.ram_size, MemoryKind::kNormal, true, false);
+  status = MapRange(info.ram_base, info.ram_base, info.ram_size, MemoryKind::kNormal, false, false);
   if (IsErr(status)) {
     return status;
+  }
+
+  // W^X: only the executable section of the kernel image stays executable
+  // and read only. Everything else in RAM is no-execute.
+  if (info.text_size != 0 && info.text_base != 0) {
+    status = VmmProtectRange(info.text_base, info.text_size, true, false);
+    if (IsErr(status)) {
+      return status;
+    }
   }
 
   return arch::aarch64::ActivateAddressSpace(root.value());
@@ -274,8 +320,57 @@ Status VmmUnmap(uint64_t virtual_address, uint64_t size) noexcept {
   return UnmapRange(virtual_address, size);
 }
 
-Status VmmMapDevice(uint64_t base, uint64_t size) noexcept {
+Status VmmProtectRange(uint64_t base, uint64_t size, bool executable,
+                       bool writable) noexcept {
   if (g_root == nullptr) {
+    return Status::kNotInit;
+  }
+  if (size == 0) {
+    return Status::kInvalidArg;
+  }
+  if ((base + size) < base) {
+    return Status::kInvalidArg;
+  }
+
+  const uint64_t start = base & ~(kPageSize - 1U);
+  const uint64_t end = (base + size + kPageSize - 1U) & ~(kPageSize - 1U);
+
+  for (uint64_t address = start; address < end; address += kPageSize) {
+    const uint64_t root_entry = g_root[Index(address, 0)];
+    if (!DescriptorValid(root_entry) || !DescriptorIsTable(root_entry)) {
+      return Status::kNotFound;
+    }
+    auto* level1 = reinterpret_cast<uint64_t*>(DescriptorAddress(root_entry));
+
+    const Result<uint64_t*> level2 = EnsureTable(level1, Index(address, 1), 1);
+    if (level2.is_err()) {
+      return level2.status();
+    }
+    const Result<uint64_t*> level3 = EnsureTable(level2.value(), Index(address, 2), 2);
+    if (level3.is_err()) {
+      return level3.status();
+    }
+
+    uint64_t& entry = level3.value()[Index(address, 3)];
+    if (!DescriptorValid(entry)) {
+      return Status::kNotFound;
+    }
+    entry &= ~(arch::aarch64::kPxn | arch::aarch64::kUxn | (3ULL << 6U));
+    entry |= arch::aarch64::kUxn;
+    if (!executable) {
+      entry |= arch::aarch64::kPxn;
+    }
+    if (!writable) {
+      entry |= arch::aarch64::kApEl1Ro;
+    }
+    arch::aarch64::InvalidateTlbVaLocal(address);
+  }
+
+  arch::aarch64::InvalidateTlbSync();
+  return Status::kOk;
+}
+
+Status VmmMapDevice(uint64_t base, uint64_t size) noexcept {  if (g_root == nullptr) {
     return Status::kNotInit;
   }
   if (size == 0) {
@@ -316,6 +411,47 @@ Status VmmMapDevice(uint64_t base, uint64_t size) noexcept {
     }
   }
   return Status::kOk;
+}
+
+namespace {
+
+[[nodiscard]] PageAttributes DecodeAttributes(uint64_t descriptor) noexcept {
+  PageAttributes attributes{};
+  attributes.executable_el1 = (descriptor & arch::aarch64::kPxn) == 0;
+  attributes.executable_el0 = (descriptor & arch::aarch64::kUxn) == 0;
+  const uint64_t access = descriptor & (3ULL << 6U);
+  attributes.writable = access != arch::aarch64::kApEl1Ro;
+  attributes.user = access == arch::aarch64::kApUserRw;
+  return attributes;
+}
+
+}  // namespace
+
+Result<PageAttributes> VmmQueryAttributes(uint64_t virtual_address) noexcept {
+  if (g_root == nullptr) {
+    return Result<PageAttributes>::Err(Status::kNotInit);
+  }
+
+  uint64_t* table = g_root;
+  for (unsigned level = 0; level < 3; ++level) {
+    const uint64_t descriptor = table[Index(virtual_address, level)];
+    if (!DescriptorValid(descriptor)) {
+      return Result<PageAttributes>::Err(Status::kNotFound);
+    }
+    if (level >= 1U && DescriptorIsBlock(descriptor)) {
+      return Result<PageAttributes>::Ok(DecodeAttributes(descriptor));
+    }
+    if (!DescriptorIsTable(descriptor)) {
+      return Result<PageAttributes>::Err(Status::kNotFound);
+    }
+    table = reinterpret_cast<uint64_t*>(DescriptorAddress(descriptor));
+  }
+
+  const uint64_t descriptor = table[Index(virtual_address, 3)];
+  if (!DescriptorValid(descriptor)) {
+    return Result<PageAttributes>::Err(Status::kNotFound);
+  }
+  return Result<PageAttributes>::Ok(DecodeAttributes(descriptor));
 }
 
 Result<uint64_t> VmmTranslate(uint64_t virtual_address) noexcept {  if (g_root == nullptr) {

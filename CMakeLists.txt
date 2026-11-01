@@ -69,6 +69,7 @@ function(og_add_module name)
     $<$<COMPILE_LANGUAGE:CXX>:-fshort-wchar>
     $<$<COMPILE_LANGUAGE:CXX>:-mno-red-zone>
     $<$<COMPILE_LANGUAGE:CXX>:-mgeneral-regs-only>
+    $<$<COMPILE_LANGUAGE:CXX>:-fstack-protector-strong>
     $<$<COMPILE_LANGUAGE:ASM>:--target=aarch64-unknown-windows>)
   target_link_libraries(${name} PUBLIC ${arg_DEPS})
 endfunction()
@@ -89,7 +90,7 @@ og_add_module(og_io
   DEPS og_arch og_inc_kernel)
 
 og_add_module(og_core
-  SOURCES kernel/core/log.cpp kernel/core/panic.cpp
+  SOURCES kernel/core/log.cpp kernel/core/panic.cpp kernel/core/stack_guard.cpp
   DEPS og_io og_inc_kernel)
 
 og_add_module(og_mem
@@ -159,6 +160,7 @@ og_add_module(og_boot
     kernel/boot/uefi/efi_main.cpp
     kernel/boot/uefi/efi_console.cpp
     kernel/boot/uefi/efi_memmap.cpp
+    kernel/boot/uefi/efi_image.cpp
     kernel/boot/uefi/efi_exit.cpp
   DEPS og_kernel og_inc_efi og_inc_kernel)
 

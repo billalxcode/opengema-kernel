@@ -163,7 +163,7 @@ Result<Thread*> CreateThread(const char* name, ThreadEntry entry, void* argument
   for (uint32_t page = 0; page < kStackPages; ++page) {
     const uint64_t offset = static_cast<uint64_t>(page) * kPageSize;
     const Status mapped = mem::VmmMap(virtual_base + kPageSize + offset, physical + offset,
-                                      kPageSize, arch::aarch64::MemoryKind::kNormal, true);
+                                      kPageSize, arch::aarch64::MemoryKind::kNormal, false);
     if (IsErr(mapped)) {
       (void)mem::PmmFreePages(physical, kStackPages);
       return Result<Thread*>::Err(mapped);

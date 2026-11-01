@@ -28,6 +28,21 @@ namespace og::mem {
 // Used for PCIe ECAM and MMIO BARs that firmware placed above RAM.
 [[nodiscard]] Status VmmMapDevice(uint64_t base, uint64_t size) noexcept;
 
+// Rewrites attributes of an existing mapping at 4 KiB granularity, splitting
+// larger blocks when needed. Used for W^X on the kernel image.
+[[nodiscard]] Status VmmProtectRange(uint64_t base, uint64_t size, bool executable,
+                                     bool writable) noexcept;
+
+struct PageAttributes {
+  bool executable_el1;
+  bool executable_el0;
+  bool writable;
+  bool user;
+};
+
+// Reads back the permission bits of the page mapped at virtual_address.
+[[nodiscard]] Result<PageAttributes> VmmQueryAttributes(uint64_t virtual_address) noexcept;
+
 // Allocates and zeroes user accessible pages at virtual_address.
 [[nodiscard]] Status VmmMapUser(uint64_t virtual_address, uint64_t size, bool executable) noexcept;
 

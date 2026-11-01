@@ -38,6 +38,9 @@
 #include "user_program.h"
 #include "og/workqueue.h"
 
+extern "C" uintptr_t __stack_chk_guard;
+extern "C" uintptr_t __security_cookie;
+
 namespace og {
 
 namespace {
@@ -282,6 +285,9 @@ void kmain(BootInfo* info) noexcept {
   // Install vectors first so any fault after this point panics with context.
   events::InstallVectorTable();
 
+  __stack_chk_guard = arch::aarch64::ReadCntpctEl0() ^ 0x9E3779B97F4A7C15ULL;
+  __security_cookie = __stack_chk_guard;
+
   Log(LogLevel::kInfo, "kernel: kmain entered\n");
   LogDec(LogLevel::kInfo, "current el", arch::aarch64::CurrentEl());
   LogDec(LogLevel::kInfo, "cpu id", arch::aarch64::CpuId());
@@ -300,10 +306,36 @@ void kmain(BootInfo* info) noexcept {
   }
   Log(LogLevel::kInfo, "vmm: identity map active\n");
 
+  if (info->text_size != 0) {
+    const Result<mem::PageAttributes> text_attributes =
+      mem::VmmQueryAttributes(info->text_base);
+    if (text_attributes.is_err()) {
+      Panic("hardening: text attributes missing");
+    }
+    if (!text_attributes.value().executable_el1 || text_attributes.value().writable) {
+      Panic("hardening: text is not w^x");
+    }
+  }
+
   status = mem::HeapInit();
   if (IsErr(status)) {
     Panic("mem: heap init failed");
   }
+
+  const Result<void*> probe = mem::HeapAlloc(16);
+  if (probe.is_err()) {
+    Panic("hardening: heap probe failed");
+  }
+  const Result<mem::PageAttributes> heap_attributes =
+    mem::VmmQueryAttributes(reinterpret_cast<uint64_t>(probe.value()));
+  if (heap_attributes.is_err()) {
+    Panic("hardening: heap attributes missing");
+  }
+  if (heap_attributes.value().executable_el1 || !heap_attributes.value().writable) {
+    Panic("hardening: heap is not n^x");
+  }
+  (void)mem::HeapFree(probe.value());
+  Log(LogLevel::kInfo, "hardening: wx attributes ok\n");
 
   status = mem::RunSelfTest();
   if (IsErr(status)) {

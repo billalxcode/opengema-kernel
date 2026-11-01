@@ -23,6 +23,7 @@ constexpr uint64_t kPxn = 1ULL << 53U;
 constexpr uint64_t kUxn = 1ULL << 54U;
 constexpr uint64_t kApShift = 6;
 constexpr uint64_t kApUserRw = 1ULL << kApShift;
+constexpr uint64_t kApEl1Ro = 2ULL << kApShift;
 
 // MAIR attr0 is Normal write back, attr1 is Device nGnRnE.
 constexpr uint64_t kMairNormalWriteBack = 0xFFULL;
@@ -66,13 +67,13 @@ enum class MemoryKind : uint32_t {
     descriptor |= kShareInner;
   }
   if (!executable) {
-    descriptor |= kUxn;
+    descriptor |= kUxn | kPxn;
   }
   if (kind == MemoryKind::kDevice) {
     descriptor |= kPxn | kUxn;
   }
   if (user) {
-    descriptor |= kApUserRw;
+    descriptor |= kApUserRw | kPxn;
   }
   return descriptor;
 }
@@ -85,13 +86,13 @@ enum class MemoryKind : uint32_t {
     descriptor |= kShareInner;
   }
   if (!executable) {
-    descriptor |= kUxn;
+    descriptor |= kUxn | kPxn;
   }
   if (kind == MemoryKind::kDevice) {
     descriptor |= kPxn | kUxn;
   }
   if (user) {
-    descriptor |= kApUserRw;
+    descriptor |= kApUserRw | kPxn;
   }
   return descriptor;
 }

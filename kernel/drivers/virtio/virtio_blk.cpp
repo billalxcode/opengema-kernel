@@ -98,6 +98,9 @@ Status Blk::init(const pci::Info& info) noexcept {
   if (size.value() == 0) {
     return Status::kNoDevice;
   }
+  if (size.value() > 1024U) {
+    return Status::kUnsupported;
+  }
   queue_size_ = size.value();
 
   const uint64_t descriptor_bytes = 16ULL * queue_size_;

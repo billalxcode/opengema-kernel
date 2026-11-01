@@ -26,6 +26,36 @@ struct EfiTableHeader {
   uint32_t reserved;
 };
 
+struct EFI_GUID {
+  uint32_t data1;
+  uint16_t data2;
+  uint16_t data3;
+  uint8_t data4[8];
+};
+
+struct EFI_SYSTEM_TABLE;
+
+struct EFI_LOADED_IMAGE_PROTOCOL {
+  uint32_t revision;
+  uint32_t reserved_align;
+  EFI_HANDLE parent_handle;
+  EFI_SYSTEM_TABLE* system_table;
+  EFI_HANDLE device_handle;
+  void* file_path;
+  void* reserved;
+  uint32_t load_options_size;
+  uint32_t reserved_align2;
+  void* load_options;
+  void* image_base;
+  uint64_t image_size;
+  uint32_t image_code_type;
+  uint32_t image_data_type;
+  void* unload;
+};
+
+static_assert(offsetof(EFI_LOADED_IMAGE_PROTOCOL, image_base) == 64);
+static_assert(offsetof(EFI_LOADED_IMAGE_PROTOCOL, image_size) == 72);
+
 static_assert(sizeof(EfiTableHeader) == 24);
 
 // EFI_MEMORY_DESCRIPTOR, 40 bytes on 64-bit firmware.
@@ -92,7 +122,7 @@ struct EFI_BOOT_SERVICES {
   void* install_protocol_interface;   // 0x80
   void* reinstall_protocol_interface; // 0x88
   void* uninstall_protocol_interface; // 0x90
-  void* handle_protocol;              // 0x98
+  EFI_STATUS (*handle_protocol)(EFI_HANDLE handle, EFI_GUID* protocol, void** interface);  // 0x98
   void* reserved;                     // 0xa0
   void* register_protocol_notify;     // 0xa8
   void* locate_handle;                // 0xb0
@@ -128,4 +158,5 @@ struct EFI_SYSTEM_TABLE {
 static_assert(offsetof(EFI_SYSTEM_TABLE, con_out) == 0x40);
 static_assert(offsetof(EFI_SYSTEM_TABLE, boot_services) == 0x60);
 static_assert(offsetof(EFI_BOOT_SERVICES, get_memory_map) == 0x38);
+static_assert(offsetof(EFI_BOOT_SERVICES, handle_protocol) == 0x98);
 static_assert(offsetof(EFI_BOOT_SERVICES, exit_boot_services) == 0xe8);

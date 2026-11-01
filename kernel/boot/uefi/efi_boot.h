@@ -25,6 +25,11 @@ struct MemoryMapSnapshot {
   EFI_SYSTEM_TABLE* system_table,
   BootInfo* out) noexcept;
 
+// Reads the loaded image protocol and the PE section table, then stores the
+// image range and the executable section range for W^X.
+[[nodiscard]] Status QueryImageSections(EFI_HANDLE image, EFI_SYSTEM_TABLE* system_table,
+                                        BootInfo* out) noexcept;
+
 // Captures the memory map and leaves boot services, retrying on stale keys.
 [[nodiscard]] Status TakeOver(
   EFI_HANDLE image,

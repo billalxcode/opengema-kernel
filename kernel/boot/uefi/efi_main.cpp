@@ -41,6 +41,12 @@ extern "C" EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* system_table)
 
   g_boot_info.uart_base = uart.base();
 
+  const og::Status image_status =
+    og::boot::uefi::QueryImageSections(image, system_table, &g_boot_info);
+  if (og::IsErr(image_status)) {
+    og::Log(og::LogLevel::kWarn, "uefi: image sections unavailable\n");
+  }
+
   const og::Status takeover = og::boot::uefi::TakeOver(image, system_table, &g_boot_info);
   if (og::IsErr(takeover)) {
     og::Panic("uefi: ExitBootServices failed");

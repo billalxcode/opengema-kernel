@@ -1,5 +1,6 @@
 #include "og/panic.h"
 
+#include "og/arch/cpu.h"
 #include "og/arch/registers.h"
 #include "og/log.h"
 
@@ -20,6 +21,9 @@ namespace og {
   LogHex(LogLevel::kError, "elr_el1", arch::aarch64::ReadElrEl1());
   LogHex(LogLevel::kError, "spsr_el1", arch::aarch64::ReadSpsrEl1());
   LogHex(LogLevel::kError, "vbar_el1", arch::aarch64::ReadVbarEl1());
+  LogHex(LogLevel::kError, "mpidr_el1", arch::aarch64::ReadMpidrEl1());
+  LogHex(LogLevel::kError, "sp", arch::aarch64::ReadSp());
+  LogDec(LogLevel::kError, "current el", arch::aarch64::CurrentEl());
 
   arch::aarch64::HaltForever();
 }

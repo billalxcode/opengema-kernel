@@ -394,6 +394,9 @@ Status FileRead(Node* node, uint64_t offset, std::span<uint8_t> buffer,
   const auto* fat_node = reinterpret_cast<const FatNode*>(node);
   uint32_t cluster = fat_node->first_cluster;
   const uint64_t cluster_index = offset / g_volume.cluster_bytes;
+  if (cluster_index > g_volume.total_clusters) {
+    return Status::kInvalidArg;
+  }
   for (uint64_t step = 0; step < cluster_index; ++step) {
     const Result<uint32_t> next = NextCluster(cluster);
     if (next.is_err()) {
