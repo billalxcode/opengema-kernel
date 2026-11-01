@@ -60,6 +60,7 @@ rank_of_header() {
     og/process/*) echo 12 ;;
     og/syscall/*) echo 13 ;;
     og/platform/*) echo 14 ;;
+    og/boot/*) echo 15 ;;
     *) echo -1 ;;
   esac
 }

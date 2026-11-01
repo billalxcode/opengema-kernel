@@ -138,7 +138,12 @@ Tujuan: batas tanggung jawab yang jelas.
 - [x] Pisahkan alokasi dan pengisian process slot menjadi `CreateProcess`.
 - [x] Pisahkan handler I/O (`DoRead`, `DoWrite`, `TtyReadLine`) ke
   `kernel/syscall/io.cpp`.
-- [ ] Pisahkan handler fs dan process dari `syscall.cpp`.
+- [x] Pisahkan handler fs ke `kernel/syscall/fs.cpp` dan helper path ke
+  `kernel/syscall/helpers.cpp`.
+- [x] Pisahkan handler process (`DoGetPid`, `DoWait`, `DoSpawn`) ke
+  `kernel/syscall/process.cpp`.
+- [x] Pisahkan handler memory (`DoMmap`, `DoMunmap`) ke
+  `kernel/syscall/memory.cpp`.
 - [x] Tambah test error `list` dan `spawn` (siap, menunggu QEMU).
 - [x] Compile-check `process.cpp` dan `loader.cpp`.
 
@@ -146,7 +151,8 @@ Catatan: `loader.cpp` menangani baca image, map segment, dan interpreter
 path. Deklarasinya ada di `og/process/loader.h`. `LoadProgram` menghasilkan
 `LoadedProgram`, lalu `CreateProcess` mengisi slot process. Deklarasi
 handler syscall kategori ada di `og/syscall/syscall_internal.h`.
-Pemisahan handler fs dan process ditunda sampai QEMU tersedia.
+Semua handler syscall sudah dipisah per kategori; `syscall.cpp` hanya
+berisi dispatch dan inisialisasi.
 
 Commit: `refactor(process): extract interpreter environment`.
 
@@ -219,6 +225,8 @@ Commit: `refactor(core): share endian and linker text helpers`.
   nested directory, iterate, long name, error path dan validasi boot sector).
 - [x] Tambah test host ELF parser valid dan invalid.
 - [x] Tambah test negative `ls /missing` di test QEMU (menunggu QEMU).
+- [x] Tambah test negative `run missing` di test QEMU (menunggu QEMU).
+- [x] Kernel build dan link lewat podman.
 - [ ] Update `docs/CLEANCODE-REVIEW.md`.
 - [ ] Jalankan `test.sh` di environment build.
 - [ ] Merge checklist.
@@ -231,27 +239,35 @@ Commit: `test(dev): add gslfs endian and list error tests`.
 |---|---|---|
 | 0 Baseline | selesai | `4400e7a` |
 | 1 Shared primitives | selesai | `54ae45b` |
-| 2 Filesystem | selesai | `9122747` |
-| 3 Process | sebagian | `7250ab5` |
+| 2 Filesystem | selesai | `df4329a` |
+| 3 Process | sebagian | `df4329a` |
 | 4 VMM/scheduler | sebagian | `2f87675` |
 | 5 Driver/platform | sebagian | `e6a9bfa` |
-| 6 Userland | sebagian | `54ae45b` |
-| 7 Test/dokumentasi | sebagian | `679dcb3` |
+| 6 Userland | sebagian | `df4329a` |
+| 7 Test/dokumentasi | sebagian | `df4329a` |
 
 Verifikasi yang berjalan di sesi ini:
 
 ```
 python3 scripts/compile-check.py
+compile-check: 98 files OK (1 skipped)
 host tests: all passed
 ramfs probe: OK
 procfs probe: OK
 devfs probe: OK
 fat32 probe: OK
+gemapi fs probe: OK
+kgema probe: OK
+gemapi api probe: OK
 gslfs probe: OK
 gslfs test: OK
+kernel build via podman: OK
+arch-check: OK
+gsl-check: OK
 ```
 
-Full `test.sh` belum berjalan karena podman dan QEMU tidak tersedia.
+Full `test.sh` belum berjalan karena `qemu-system-aarch64` tidak tersedia
+di host. Kernel build dan link sudah diverifikasi lewat podman.
 
 ## Aturan commit
 

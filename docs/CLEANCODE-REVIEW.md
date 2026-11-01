@@ -162,6 +162,13 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   `CreateProcess`.
 - `kernel/syscall/io.cpp` memisahkan `DoRead`, `DoWrite`, dan `TtyReadLine`;
   deklarasi bersama ada di `og/syscall/syscall_internal.h`.
+- `kernel/syscall/fs.cpp` memisahkan handler filesystem, dan
+  `kernel/syscall/helpers.cpp` menyimpan `CurrentProcess`, `CopyUserString`,
+  serta `CopyUserPath`.
+- `kernel/syscall/process.cpp` memisahkan `DoGetPid`, `DoWait`, dan
+  `DoSpawn`.
+- `kernel/syscall/memory.cpp` memisahkan `DoMmap` dan `DoMunmap`;
+  `syscall.cpp` tinggal berisi dispatch dan inisialisasi.
 - `vfs.cpp` memisahkan `FindBestMount` dan `ResolveSegments`.
 - `partition.cpp` memisahkan `ReadGptHeader`, `ParsePartition`, dan
   `CheckMagic` dari loop pencarian.
@@ -193,15 +200,18 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 - Test host baru: endian reader, image GSLFS valid/rusak/siklus/deterministik,
   driver GSLFS, ramfs, procfs, devfs, FAT32, gemapi fs, gemapi api, kgema,
   GPT/partition, VFS, VFS FD, ELF parser, dan FDT parser.
-- Test QEMU baru: `ls /missing` diharapkan menghasilkan
-  `ls: list failed`.
+- Test QEMU baru: `ls /missing` diharapkan menghasilkan `ls: list failed`,
+  dan `run missing` menghasilkan `run: spawn failed`.
 
 Verifikasi branch `dev`:
 
-- `python3 scripts/compile-check.py`: 90 file OK, 1 entri lama dilewati.
+- `python3 scripts/compile-check.py`: 98 file OK, 1 entri lama dilewati.
+- `./scripts/build.sh` lewat podman: kernel build dan link OK,
+  `arch-check` dan `gsl-check` OK.
 - `./scripts/test-host.sh`: host tests, ramfs, procfs, devfs, FAT32, gemapi
   fs, gemapi api, kgema, GPT, FDT, VFS, ELF, dan GSLFS probe OK.
-- `test.sh` penuh belum dijalankan karena podman/QEMU tidak tersedia.
+- `test.sh` penuh belum dijalankan karena `qemu-system-aarch64` tidak
+  tersedia di host.
 
 ## Kesimpulan
 

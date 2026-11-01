@@ -480,6 +480,8 @@ og_add_module(og_process
 
 og_add_module(og_syscall
   SOURCES kernel/syscall/syscall.cpp kernel/syscall/io.cpp
+          kernel/syscall/fs.cpp kernel/syscall/process.cpp
+          kernel/syscall/memory.cpp kernel/syscall/helpers.cpp
   DEPS og_process og_sched og_events og_mem og_core og_inc_kernel)
 
 og_add_module(og_sync

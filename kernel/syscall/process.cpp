@@ -1,0 +1,95 @@
+#include "og/syscall/syscall_internal.h"
+
+#include "og/fs/vfs.h"
+#include "og/mem/vmm.h"
+
+namespace og::syscall {
+
+using namespace detail;
+
+Status DoGetPid(uint64_t& result) noexcept {
+  process::Process* process = CurrentProcess();
+  if (process == nullptr) {
+    return Status::kNotInit;
+  }
+  result = process->pid;
+  return Status::kOk;
+}
+
+Status DoWait(uint64_t pid, uint64_t user_status, uint64_t& result) noexcept {
+  process::Process* process = CurrentProcess();
+  if (process == nullptr) {
+    return Status::kNotInit;
+  }
+  if (user_status != 0U &&
+      !mem::VmmUserContains(process->space, user_status, sizeof(int32_t))) {
+    return Status::kInvalidArg;
+  }
+  int32_t status = 0;
+  const Result<uint32_t> child =
+    process::WaitChild(process->pid, static_cast<uint32_t>(pid), status);
+  if (child.is_err()) {
+    return child.status();
+  }
+  if (user_status != 0U) {
+    const Status copied =
+      mem::VmmCopyOut(process->space, user_status, &status, sizeof(status));
+    if (IsErr(copied)) {
+      return copied;
+    }
+  }
+  result = child.value();
+  return Status::kOk;
+}
+
+Status DoSpawn(uint64_t user_path, uint64_t user_argv, uint64_t argc,
+               uint64_t& result) noexcept {
+  process::Process* process = CurrentProcess();
+  if (process == nullptr) {
+    return Status::kNotInit;
+  }
+  char path[fs::kMaxPath];
+  Status status = CopyUserPath(*process, user_path, path);
+  if (IsErr(status)) {
+    return status;
+  }
+  if (argc == 0U) {
+    const Result<uint32_t> child = process::Spawn(path, process->pid);
+    if (child.is_err()) {
+      return child.status();
+    }
+    result = child.value();
+    return Status::kOk;
+  }
+  if (argc > process::kMaxArgs || user_argv == 0U) {
+    return Status::kInvalidArg;
+  }
+
+  char storage[process::kMaxArgs][process::kMaxArgLength];
+  const char* values[process::kMaxArgs];
+  for (uint32_t index = 0; index < argc; ++index) {
+    uint64_t user_string = 0;
+    status = mem::VmmCopyIn(process->space,
+                            user_argv + (index * sizeof(uint64_t)),
+                            &user_string, sizeof(user_string));
+    if (IsErr(status)) {
+      return status;
+    }
+    status = CopyUserString(process->space, user_string, storage[index],
+                            process::kMaxArgLength);
+    if (IsErr(status)) {
+      return status;
+    }
+    values[index] = storage[index];
+  }
+
+  const Result<uint32_t> child = process::SpawnWithArgs(
+    path, process->pid, values, static_cast<uint32_t>(argc));
+  if (child.is_err()) {
+    return child.status();
+  }
+  result = child.value();
+  return Status::kOk;
+}
+
+}  // namespace og::syscall
