@@ -68,6 +68,7 @@ check() {
 }
 
 check "fs: fat32 file read ok"
+check "hardening: wx attributes ok"
 check "smp: cpus online: 2"
 check "sched: round robin ok"
 check "hello from el0"
