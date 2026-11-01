@@ -55,7 +55,30 @@ QEMU_PID=$!
 CLIENT_STATUS=0
 python3 "$ROOT/scripts/hmp_key.py" "$MONITOR" 15 "hello" >/dev/null 2>&1 &
 KEY_PID=$!
-python3 "$ROOT/scripts/uart_test_client.py" "$SOCKET" "$LOG" 120 || CLIENT_STATUS=$?
+python3 "$ROOT/scripts/uart_test_client.py" "$SOCKET" "$LOG" 120 "$SERIAL_DIR" &
+CLIENT_PID=$!
+
+# The serial client pauses after the clear command so the scanout can be
+# checked while the display is empty.
+CLEAR_STATUS=0
+CLEAR_READY=0
+for _ in $(seq 1 240); do
+  if [ -f "$SERIAL_DIR/clear-ready" ]; then
+    CLEAR_READY=1
+    break
+  fi
+  sleep 0.25
+done
+if [ "$CLEAR_READY" -eq 1 ]; then
+  sleep 1
+  python3 "$ROOT/scripts/check-screen.py" "$MONITOR" \
+    "$SERIAL_DIR/clear.ppm" --cleared || CLEAR_STATUS=$?
+else
+  echo "qemu test: clear marker missing"
+  CLEAR_STATUS=1
+fi
+touch "$SERIAL_DIR/clear-continue"
+wait "$CLIENT_PID" || CLIENT_STATUS=$?
 wait "$KEY_PID" 2>/dev/null || true
 
 # Give the last framebuffer flush time to land, then capture the scanout.
@@ -117,6 +140,11 @@ count_check "user: exit status: 0" 4
 
 if [ "$SCREEN_STATUS" -ne 0 ]; then
   echo "qemu test: FAIL framebuffer screen"
+  FAILED=1
+fi
+
+if [ "$CLEAR_STATUS" -ne 0 ]; then
+  echo "qemu test: FAIL framebuffer clear"
   FAILED=1
 fi
 

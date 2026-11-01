@@ -56,6 +56,50 @@ Status FramebufferConsole::write(std::span<const uint8_t> bytes) noexcept {
   }
 
   for (const uint8_t raw : bytes) {
+    if (ansi_state_ != 0U) {
+      if (ansi_state_ == 1U) {
+        ansi_state_ = raw == '[' ? 2U : 0U;
+        continue;
+      }
+      if (ansi_state_ == 2U) {
+        if (raw >= '0' && raw <= '9') {
+          ansi_param_ = static_cast<uint32_t>(raw - '0');
+          ansi_state_ = 3U;
+        } else if (raw == 'J') {
+          (void)clear(background_);
+          ansi_state_ = 0U;
+        } else if (raw == 'H') {
+          cursor_x_ = 0;
+          cursor_y_ = 0;
+          ansi_state_ = 0U;
+        } else {
+          ansi_state_ = 0U;
+        }
+        continue;
+      }
+      if (ansi_state_ == 3U) {
+        if (raw >= '0' && raw <= '9') {
+          ansi_param_ = (ansi_param_ * 10U) + static_cast<uint32_t>(raw - '0');
+          continue;
+        }
+        if (raw == 'J') {
+          if (ansi_param_ == 2U || ansi_param_ == 3U) {
+            (void)clear(background_);
+          }
+        } else if (raw == 'H' && (ansi_param_ == 0U || ansi_param_ == 1U)) {
+          cursor_x_ = 0;
+          cursor_y_ = 0;
+        }
+        ansi_state_ = 0U;
+        ansi_param_ = 0U;
+        continue;
+      }
+    }
+    if (raw == 0x1BU) {
+      ansi_state_ = 1U;
+      ansi_param_ = 0U;
+      continue;
+    }
     const char value = static_cast<char>(raw);
     if (value == '\r') {
       cursor_x_ = 0;

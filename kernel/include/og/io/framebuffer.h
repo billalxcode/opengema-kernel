@@ -74,6 +74,8 @@ class FramebufferConsole {
   uint32_t dirty_min_y_ = 0;
   uint32_t dirty_max_x_ = 0;
   uint32_t dirty_max_y_ = 0;
+  uint8_t ansi_state_ = 0;
+  uint32_t ansi_param_ = 0;
   PresentFn present_ = nullptr;
   void* present_context_ = nullptr;
   bool ready_ = false;

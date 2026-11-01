@@ -49,6 +49,13 @@ CXX="${CXX:-clang++}"
 
 "$CXX" -std=c++20 -O1 -Wall -Wextra -Werror \
   -I libs/core -I kernel/include \
+  tests/host/framebuffer_probe.cpp kernel/io/framebuffer_console.cpp \
+  kernel/io/framebuffer_draw.cpp kernel/io/font.cpp libs/core/memory.cpp \
+  -o "$BUILD_DIR/framebuffer_probe"
+"$BUILD_DIR/framebuffer_probe"
+
+"$CXX" -std=c++20 -O1 -Wall -Wextra -Werror \
+  -I libs/core -I kernel/include \
   tests/host/fat32_probe.cpp kernel/fs/fat32.cpp libs/core/memory.cpp \
   -o "$BUILD_DIR/fat32_probe"
 "$BUILD_DIR/fat32_probe"

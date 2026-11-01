@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Capture the QEMU console and verify the framebuffer console drew text.
 
-Usage: check-screen.py <monitor-socket> <ppm-path>
-Exit nonzero if the capture is missing, too small, or has no text pixels.
+Usage: check-screen.py <monitor-socket> <ppm-path> [--cleared]
+Exit nonzero if the capture is missing, too small, or has the wrong amount
+of text. --cleared expects an almost empty screen after the clear command.
 """
 
 import os
@@ -86,8 +87,12 @@ def load_ppm(path):
 
 
 def main(argv):
-    if len(argv) != 3:
-        print("usage: check-screen.py <monitor-socket> <ppm-path>")
+    if len(argv) not in (3, 4):
+        print("usage: check-screen.py <monitor-socket> <ppm-path> [--cleared]")
+        return 2
+    cleared = len(argv) == 4 and argv[3] == "--cleared"
+    if len(argv) == 4 and not cleared:
+        print("usage: check-screen.py <monitor-socket> <ppm-path> [--cleared]")
         return 2
 
     if not request_dump(argv[1], argv[2]):
@@ -111,6 +116,17 @@ def main(argv):
             foreground += 1
         elif pixel == BACKGROUND:
             background += 1
+
+    if cleared:
+        if foreground > 1000:
+            print("screen check: clear left %d text pixels" % foreground)
+            return 1
+        if background == 0:
+            print("screen check: background missing")
+            return 1
+        print("screen check: %dx%d, cleared to %d text pixels" %
+              (width, height, foreground))
+        return 0
 
     if foreground < MIN_FOREGROUND:
         print("screen check: only %d text pixels" % foreground)
