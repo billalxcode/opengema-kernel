@@ -16,6 +16,7 @@ Isi yang disalin dari build:
 
 ```
 applications/gemabox/gemabox
+system/boot/init
 system/boot/ld-gem
 system/libraries/libgemapi.so.1
 system/libraries/libkgema.so.1

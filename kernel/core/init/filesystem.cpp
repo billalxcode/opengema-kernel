@@ -1,6 +1,6 @@
 #include "boot.h"
 
-#include "layout.h"
+#include "gsl/layout.h"
 #include "memory.h"
 #include "og/core/log.h"
 #include "og/core/status.h"
@@ -22,7 +22,6 @@ namespace og::boot {
 
 namespace {
 
-fs::Node* g_tmp_root = nullptr;
 fs::FileTable g_boot_files;
 
 // Test file under the fixed /tmp mount.
@@ -36,26 +35,81 @@ Status BlockReadAdapter(void* context, uint64_t sector,
   return static_cast<drivers::virtio::Blk*>(context)->read(sector, buffer);
 }
 
-Status SetupTmpfs() noexcept {
-  Result<fs::Node*> ram = fs::ramfs::Create();
+Status SetupWritableFs() noexcept {
+  const Result<fs::Node*> ram = fs::ramfs::Create();
   if (ram.is_err()) {
     return ram.status();
   }
-  g_tmp_root = ram.value();
-  Status status = fs::FsMount(gsl::layout::kTmp, g_tmp_root);
+  const Result<fs::Node*> etc = fs::ramfs::CreateDir(ram.value(), "etc");
+  if (etc.is_err()) {
+    return etc.status();
+  }
+  const Result<fs::Node*> users = fs::ramfs::CreateDir(ram.value(), "users");
+  if (users.is_err()) {
+    return users.status();
+  }
+  const Result<fs::Node*> var = fs::ramfs::CreateDir(ram.value(), "var");
+  if (var.is_err()) {
+    return var.status();
+  }
+  const Result<fs::Node*> tmp = fs::ramfs::CreateDir(ram.value(), "tmp");
+  if (tmp.is_err()) {
+    return tmp.status();
+  }
+
+  const Result<fs::Node*> demo = fs::ramfs::CreateDir(users.value(), "demo");
+  if (demo.is_err()) {
+    return demo.status();
+  }
+  if (fs::ramfs::CreateDir(var.value(), "log").is_err() ||
+      fs::ramfs::CreateDir(var.value(), "run").is_err() ||
+      fs::ramfs::CreateDir(var.value(), "cache").is_err() ||
+      fs::ramfs::CreateDir(var.value(), "spool").is_err()) {
+    return Status::kNoMem;
+  }
+  if (fs::ramfs::CreateFile(tmp.value(), "hello", nullptr, 0).is_err() ||
+      fs::ramfs::CreateFile(tmp.value(), "writer", nullptr, 0).is_err()) {
+    return Status::kNoMem;
+  }
+
+  Status status = fs::FsMount(gsl::layout::kEtc, etc.value());
+  if (IsErr(status)) {
+    return status;
+  }
+  status = fs::FsMount(gsl::layout::kUsers, users.value());
+  if (IsErr(status)) {
+    return status;
+  }
+  status = fs::FsMount(gsl::layout::kVar, var.value());
+  if (IsErr(status)) {
+    return status;
+  }
+  status = fs::FsMount(gsl::layout::kTmp, tmp.value());
   if (IsErr(status)) {
     return status;
   }
 
-  const Result<fs::Node*> hello =
-    fs::ramfs::CreateFile(g_tmp_root, "hello", nullptr, 0);
-  if (hello.is_err()) {
-    return hello.status();
-  }
-  const Result<fs::Node*> writer =
-    fs::ramfs::CreateFile(g_tmp_root, "writer", nullptr, 0);
-  if (writer.is_err()) {
-    return writer.status();
+  const Result<uint32_t> source =
+    fs::FsOpen(g_boot_files, gsl::layout::kConfigGsl);
+  if (source.is_ok()) {
+    char content[256];
+    uint64_t read = 0;
+    status = fs::FsRead(
+      g_boot_files, source.value(),
+      std::span<uint8_t>(reinterpret_cast<uint8_t*>(content), sizeof(content)),
+      read);
+    (void)fs::FsClose(g_boot_files, source.value());
+    if (IsErr(status)) {
+      return status;
+    }
+    const Result<fs::Node*> copy =
+      fs::ramfs::CreateFile(etc.value(), "gsl.conf", content, read);
+    if (copy.is_err()) {
+      return copy.status();
+    }
+    Log(LogLevel::kInfo, "fs: etc defaults copied\n");
+  } else {
+    Log(LogLevel::kWarn, "fs: gsl.conf default missing\n");
   }
 
   const Result<uint32_t> hello_file = fs::FsOpen(g_boot_files, kHelloPath, 1U);
@@ -89,6 +143,7 @@ Status SetupTmpfs() noexcept {
     return Status::kIoError;
   }
   Log(LogLevel::kInfo, "fs: tmpfs write ok\n");
+  Log(LogLevel::kInfo, "fs: writable mounts ok\n");
   return Status::kOk;
 }
 
@@ -258,15 +313,15 @@ void InitFilesystem() noexcept {
   if (IsErr(proc_status)) {
     Log(LogLevel::kWarn, "fs: procfs setup failed\n");
   }
-  const Status tmp_status = SetupTmpfs();
-  if (IsErr(tmp_status)) {
-    Log(LogLevel::kWarn, "fs: tmpfs setup failed\n");
+  const Status writable_status = SetupWritableFs();
+  if (IsErr(writable_status)) {
+    Log(LogLevel::kWarn, "fs: writable mounts failed\n");
   }
   const Status fat_status = MountFat32(disk);
   if (IsErr(fat_status)) {
     Log(LogLevel::kWarn, "fs: fat32 setup failed\n");
   }
-  Log(LogLevel::kInfo, "fs: mounted gslfs, devfs, procfs, tmpfs, fat32\n");
+  Log(LogLevel::kInfo, "fs: mounted gslfs, devfs, procfs, writable, fat32\n");
 
   Result<uint32_t> console = fs::FsOpen(g_boot_files, "/dev/console");
   if (console.is_ok()) {

@@ -110,16 +110,22 @@ user belum ada.
 
 Tujuan: kernel menyerahkan kebijakan ke user space.
 
-- [ ] `/system/boot/init` sebagai PID 1.
-- [ ] Init memasang layout tetap; user tidak dapat mengubah mount point.
-- [ ] Init memasang `/etc`, `/users`, `/var`, dan `/tmp`.
-- [ ] Service manager minimal.
-- [ ] Shell dijalankan oleh init.
+- [x] `/system/boot/init` sebagai PID 1.
+- [x] Init memasang layout tetap; user tidak dapat mengubah mount point.
+- [~] `/etc`, `/users`, `/var`, dan `/tmp` writable memakai ramfs yang
+  dipasang kernel. Syscall mount user space menyusul.
+- [x] Shell dijalankan oleh init.
+- [~] Service manager minimal belum ada; init langsung menjalankan shell.
 - [ ] Recovery shell jika init gagal.
 - [ ] Shutdown dan reboot lewat service manager.
 
 Selesai bila: kernel hanya memuat init, lalu init memasang volume dan
 menjalankan shell.
+
+Status: kernel memuat `/system/boot/init`, lalu init men-spawn
+`/applications/gemabox/gemabox shell` dan menunggu. `/etc`, `/users`,
+`/var`, dan `/tmp` sudah writable lewat ramfs pada path tetap. Volume
+persisten, service manager, dan recovery belum ada.
 
 ## GSL-5 - Package dan command
 

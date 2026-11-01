@@ -21,12 +21,16 @@ Firmware UEFI
   -> driver block dan VFS read-only
   -> mount volume system GSLFS read-only di /
   -> mount devfs di /dev dan procfs di /proc
+  -> mount writable ramfs di /etc, /users, /var, /tmp
+  -> mount ESP FAT32 di /volumes/boot
   -> load /system/boot/init
   -> PID 1 user mode
-       -> mount /etc, /users, /var, dan /tmp
-       -> start service manager
-       -> start shell atau user interface
+       -> start shell dari /applications/gemabox/gemabox
 ```
+
+Saat syscall mount untuk user space tersedia, init yang memasang volume
+writable. Untuk sekarang kernel menyiapkan tabel mount tetap yang sama.
+User tidak dapat mengubah daftar mount point.
 
 Kernel hanya perlu filesystem yang cukup untuk membaca init. Setelah init
 berjalan, mounting tambahan dilakukan user space melalui API mount.

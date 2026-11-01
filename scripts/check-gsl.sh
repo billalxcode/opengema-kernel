@@ -85,6 +85,19 @@ if [ -n "$MOUNT_HITS" ]; then
   fail "gsl.conf defines a mount point; the layout is fixed"
 fi
 
+# 9. The fixed layout lives in libgsl, not in libs/core.
+if [ -f libs/core/layout.h ]; then
+  fail "filesystem layout must live in packages/libgsl"
+fi
+if [ ! -f packages/libgsl/include/gsl/layout.h ]; then
+  fail "packages/libgsl/include/gsl/layout.h is missing"
+fi
+OLD_LAYOUT="$(grep -RIn '#include "layout.h"' kernel packages libs 2>/dev/null)"
+if [ -n "$OLD_LAYOUT" ]; then
+  echo "$OLD_LAYOUT"
+  fail "old layout include; use gsl/layout.h"
+fi
+
 if [ "$FAILED" -ne 0 ]; then
   echo "gsl-check: FAILED"
   exit 1

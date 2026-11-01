@@ -1,6 +1,6 @@
 #include "boot.h"
 
-#include "layout.h"
+#include "gsl/layout.h"
 #include "og/core/log.h"
 #include "og/core/panic.h"
 #include "og/mem/heap.h"
@@ -58,13 +58,12 @@ void RunUserSelfTest() noexcept {
            static_cast<uint64_t>(writer.status()));
     Panic("user: writer spawn failed");
   }
-  const char* shell_argv[] = {"gemabox", "shell"};
-  const Result<uint32_t> shell =
-    process::SpawnWithArgs(gsl::layout::kGemabox, process::kKernelPid, shell_argv, 2);
-  if (shell.is_err()) {
-    LogDec(LogLevel::kError, "user: shell spawn status",
-           static_cast<uint64_t>(shell.status()));
-    Panic("user: shell spawn failed");
+  const Result<uint32_t> init =
+    process::Spawn(gsl::layout::kInit, process::kKernelPid);
+  if (init.is_err()) {
+    LogDec(LogLevel::kError, "user: init spawn status",
+           static_cast<uint64_t>(init.status()));
+    Panic("user: init spawn failed");
   }
 
   int32_t exit_code = 0;
@@ -92,9 +91,9 @@ void RunUserSelfTest() noexcept {
   LogDec(LogLevel::kInfo, "user: exit status", static_cast<uint64_t>(exit_code));
 
   exit_code = 0;
-  waited = process::WaitFor(shell.value(), exit_code);
+  waited = process::WaitFor(init.value(), exit_code);
   if (waited.is_err()) {
-    Panic("user: shell wait failed");
+    Panic("user: init wait failed");
   }
   LogDec(LogLevel::kInfo, "user: exit pid", waited.value());
   LogDec(LogLevel::kInfo, "user: exit status", static_cast<uint64_t>(exit_code));

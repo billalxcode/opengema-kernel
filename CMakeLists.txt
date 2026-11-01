@@ -17,10 +17,15 @@ target_include_directories(og_inc_core INTERFACE
   ${CMAKE_SOURCE_DIR}/libs/core)
 target_link_libraries(og_inc_core INTERFACE og_inc_cxx)
 
+# libgsl owns the fixed filesystem mapping shared by kernel and user space.
+add_library(og_inc_gsl INTERFACE)
+target_include_directories(og_inc_gsl INTERFACE
+  ${CMAKE_SOURCE_DIR}/packages/libgsl/include)
+
 add_library(og_inc_kernel INTERFACE)
 target_include_directories(og_inc_kernel INTERFACE
   ${CMAKE_SOURCE_DIR}/kernel/include)
-target_link_libraries(og_inc_kernel INTERFACE og_inc_cxx)
+target_link_libraries(og_inc_kernel INTERFACE og_inc_cxx og_inc_gsl)
 
 add_library(og_inc_efi INTERFACE)
 target_include_directories(og_inc_efi INTERFACE
@@ -45,7 +50,7 @@ set(OG_USER_CXX_FLAGS
   -ffreestanding
   -nostdlib
   -nostdinc
-  -I${CMAKE_SOURCE_DIR}/libs/core
+  -I${CMAKE_SOURCE_DIR}/packages/libgsl/include
   -mgeneral-regs-only
   -fno-exceptions
   -fno-rtti
@@ -239,6 +244,34 @@ add_custom_command(
 add_custom_target(og_ld_gem DEPENDS ${OG_LDGEM_ELF})
 add_dependencies(og_ld_gem og_libkgema)
 
+# init is the PID 1 user program. It is dynamic like other applications but
+# lives in /system/boot because the kernel starts it directly.
+add_library(og_init_user OBJECT packages/init/main.cpp)
+target_include_directories(og_init_user PRIVATE ${OG_GEMAPI_INCLUDE})
+target_compile_options(og_init_user PRIVATE ${OG_USER_CXX_FLAGS})
+
+set(OG_INIT_ELF ${CMAKE_BINARY_DIR}/init.elf)
+add_custom_command(
+  OUTPUT ${OG_INIT_ELF}
+  COMMAND ${OG_GEMABOX_LD} -T ${CMAKE_SOURCE_DIR}/packages/libgemapi/link.ld
+          -z max-page-size=4096 -s
+          --dynamic-linker=/system/boot/ld-gem
+          -u _start
+          $<TARGET_OBJECTS:og_init_user>
+          $<TARGET_OBJECTS:og_gemapi_start>
+          -L${CMAKE_BINARY_DIR} -rpath-link=${CMAKE_BINARY_DIR} -lgemapi
+          -o ${OG_INIT_ELF}
+  DEPENDS
+    og_init_user
+    og_gemapi_start
+    ${OG_GEMAPI_SO}
+    ${CMAKE_SOURCE_DIR}/packages/libgemapi/link.ld
+  COMMAND_EXPAND_LISTS
+  COMMENT "link init")
+
+add_custom_target(og_init DEPENDS ${OG_INIT_ELF})
+add_dependencies(og_init og_libgemapi)
+
 # System image for GSLFS. The staging tree mirrors the Unix-like layout in
 # docs/gsl/03-filesystem-layout.md.
 set(OG_SYSTEM_ROOT ${CMAKE_BINARY_DIR}/system-root)
@@ -269,6 +302,8 @@ add_custom_command(
           ${OG_SYSTEM_ROOT}/applications/gemabox/gemabox
   COMMAND ${CMAKE_COMMAND} -E copy ${OG_LDGEM_ELF}
           ${OG_SYSTEM_ROOT}/system/boot/ld-gem
+  COMMAND ${CMAKE_COMMAND} -E copy ${OG_INIT_ELF}
+          ${OG_SYSTEM_ROOT}/system/boot/init
   COMMAND ${CMAKE_COMMAND} -E copy ${OG_GEMAPI_SO}
           ${OG_SYSTEM_ROOT}/system/libraries/libgemapi.so.1
   COMMAND ${CMAKE_COMMAND} -E copy ${OG_KGEMA_SO}
@@ -289,6 +324,7 @@ add_custom_command(
   DEPENDS
     ${OG_GEMABOX_ELF}
     ${OG_LDGEM_ELF}
+    ${OG_INIT_ELF}
     ${OG_GEMAPI_SO}
     ${OG_KGEMA_SO}
     ${CMAKE_SOURCE_DIR}/packages/system-root/system/config/version
@@ -438,7 +474,7 @@ og_add_module(og_boot
     kernel/boot/uefi/efi_exit.cpp
   DEPS og_kernel og_inc_efi og_inc_kernel)
 
-add_dependencies(og_kernel og_gemabox og_ld_gem)
+add_dependencies(og_kernel og_gemabox og_ld_gem og_init)
 
 # Direct PE/COFF link. lld-link emits proper headers and .reloc.
 set(OG_IMAGE_OBJECTS

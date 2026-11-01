@@ -23,6 +23,7 @@ constexpr char kLibKgema[] = "/system/libraries/libkgema.so.1";
 constexpr char kServices[] = "/system/services";
 constexpr char kConfig[] = "/system/config";
 constexpr char kConfigVersion[] = "/system/config/version";
+constexpr char kConfigGsl[] = "/system/config/gsl.conf";
 constexpr char kSystemCommands[] = "/system/commands";
 
 constexpr char kApplications[] = "/applications";

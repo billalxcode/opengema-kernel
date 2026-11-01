@@ -1,7 +1,7 @@
 #include "ldgem/linker.h"
 
 #include "kgema/io.h"
-#include "layout.h"
+#include "gsl/layout.h"
 #include "ldgem/elf.h"
 #include "ldgem/image.h"
 

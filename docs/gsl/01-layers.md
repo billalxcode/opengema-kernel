@@ -55,6 +55,7 @@ package manager, dan shell adalah proses user.
 Isi:
 
 - `libkgema`: pembungkus syscall dan ABI user.
+- `libgsl`: pemetaan filesystem tetap, header-only, dipakai kernel dan user.
 - Runtime C++ minimal: startup, `init_array`, helper string, allocator.
 - Loader library dan dynamic linker.
 - Library pendukung yang tidak punya kebijakan aplikasi.

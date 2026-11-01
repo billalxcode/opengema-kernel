@@ -37,6 +37,8 @@ packages/
   libkgema/       ABI kernel, privat, hanya untuk libgemapi
     include/kgema/
     src/
+  libgsl/         pemetaan filesystem tetap, header-only
+    include/gsl/
   libgemapi/      API publik GSL
     include/gemapi/
     src/
@@ -49,7 +51,9 @@ Aturan build:
 
 - `gemabox` hanya menambahkan include `packages/libgemapi/include`.
 - `libgemapi` menambahkan include `packages/libkgema/include` secara privat.
+- `libgemapi` memakai `packages/libgsl/include` untuk path tetap.
 - `libkgema` tidak menambahkan include `packages/libgemapi`.
+- Kernel memakai `packages/libgsl/include` untuk layout yang sama.
 
 ## 2. libgemapi
 

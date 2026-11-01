@@ -20,6 +20,7 @@
         "${workspaceFolder}/kernel/include",
         "${workspaceFolder}/packages/libkgema/include",
         "${workspaceFolder}/packages/libgemapi/include",
+        "${workspaceFolder}/packages/libgsl/include",
         "${workspaceFolder}/packages/ld-gem/include"
       ],
       "defines": [],
@@ -33,6 +34,7 @@
           "${workspaceFolder}/kernel",
           "${workspaceFolder}/packages/libkgema",
           "${workspaceFolder}/packages/libgemapi",
+          "${workspaceFolder}/packages/libgsl",
           "${workspaceFolder}/packages/ld-gem"
         ],
         "limitSymbolsToIncludedHeaders": true

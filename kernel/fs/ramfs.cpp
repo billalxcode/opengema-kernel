@@ -7,24 +7,27 @@ namespace og::fs::ramfs {
 
 namespace {
 
-constexpr uint32_t kMaxFiles = 8;
+constexpr uint32_t kMaxNodes = 64;
 constexpr uint32_t kMaxName = 32;
+constexpr uint32_t kMaxChildren = 8;
 
-struct RamFile {
+struct RamNode {
   Node node;
   char name[kMaxName];
+  RamNode* parent;
+  RamNode* children[kMaxChildren];
+  uint32_t child_count;
   uint8_t* data;
   uint64_t size;
   uint64_t capacity;
 };
 
-struct RamDir {
-  Node node;
-  RamFile files[kMaxFiles];
-  uint32_t count;
-};
+RamNode g_nodes[kMaxNodes];
+uint32_t g_count = 0;
 
-RamDir g_root;
+[[nodiscard]] RamNode* NodeOf(Node* node) noexcept {
+  return node == nullptr ? nullptr : static_cast<RamNode*>(node->fs_data);
+}
 
 Status FileRead(Node* node, uint64_t offset, std::span<uint8_t> buffer,
                 uint64_t& out_read) noexcept {
@@ -35,7 +38,7 @@ Status FileRead(Node* node, uint64_t offset, std::span<uint8_t> buffer,
   if (buffer.empty()) {
     return Status::kInvalidArg;
   }
-  auto* file = static_cast<RamFile*>(node->fs_data);
+  RamNode* file = NodeOf(node);
   if (file == nullptr) {
     return Status::kNotInit;
   }
@@ -61,7 +64,7 @@ Status FileWrite(Node* node, uint64_t offset, std::span<const uint8_t> buffer,
   if (buffer.empty()) {
     return Status::kInvalidArg;
   }
-  auto* file = static_cast<RamFile*>(node->fs_data);
+  RamNode* file = NodeOf(node);
   if (file == nullptr) {
     return Status::kNotInit;
   }
@@ -91,44 +94,56 @@ Status FileWrite(Node* node, uint64_t offset, std::span<const uint8_t> buffer,
   mem::Copy(file->data + offset, buffer.data(), buffer.size());
   if (end > file->size) {
     file->size = end;
-    node->size = end;
+    file->node.size = end;
   }
   out_written = buffer.size();
   return Status::kOk;
 }
 
-Status DirLookup(Node* /*directory*/, const char* name, Node** out) noexcept {
+Status DirLookup(Node* directory, const char* name, Node** out) noexcept {
   if (out == nullptr) {
     return Status::kInvalidArg;
   }
   *out = nullptr;
-  if (name == nullptr) {
+  if (directory == nullptr || name == nullptr) {
     return Status::kInvalidArg;
   }
-  for (uint32_t index = 0; index < g_root.count; ++index) {
-    if (mem::Same(g_root.files[index].name, name)) {
-      *out = &g_root.files[index].node;
+  RamNode* dir = NodeOf(directory);
+  if (dir == nullptr) {
+    return Status::kNotInit;
+  }
+  for (uint32_t index = 0; index < dir->child_count; ++index) {
+    RamNode* child = dir->children[index];
+    if (mem::Same(child->name, name)) {
+      *out = &child->node;
       return Status::kOk;
     }
   }
   return Status::kNotFound;
 }
 
-Status DirIterate(Node* /*directory*/, uint32_t index, DirEntry& entry,
+Status DirIterate(Node* directory, uint32_t index, DirEntry& entry,
                   bool& found) noexcept {
   found = false;
-  if (index >= g_root.count) {
+  if (directory == nullptr) {
+    return Status::kInvalidArg;
+  }
+  RamNode* dir = NodeOf(directory);
+  if (dir == nullptr) {
+    return Status::kNotInit;
+  }
+  if (index >= dir->child_count) {
     return Status::kOk;
   }
-  const RamFile& file = g_root.files[index];
+  const RamNode* child = dir->children[index];
   mem::Zero(&entry, sizeof(entry));
-  const std::size_t length = mem::Length(file.name);
+  const std::size_t length = mem::Length(child->name);
   if (length >= sizeof(entry.name)) {
     return Status::kInvalidArg;
   }
-  mem::Copy(entry.name, file.name, length + 1U);
-  entry.type = NodeType::kFile;
-  entry.size = file.size;
+  mem::Copy(entry.name, child->name, length + 1U);
+  entry.type = child->node.type;
+  entry.size = child->node.size;
   found = true;
   return Status::kOk;
 }
@@ -136,61 +151,101 @@ Status DirIterate(Node* /*directory*/, uint32_t index, DirEntry& entry,
 const NodeOps kFileOps{nullptr, &FileRead, &FileWrite, nullptr};
 const NodeOps kDirOps{&DirLookup, nullptr, nullptr, &DirIterate};
 
+[[nodiscard]] RamNode* AllocateNode(NodeType type, const char* name,
+                                    RamNode* parent) noexcept {
+  if (name == nullptr || name[0] == '\0' || g_count >= kMaxNodes) {
+    return nullptr;
+  }
+  const std::size_t length = mem::Length(name);
+  if (length >= kMaxName) {
+    return nullptr;
+  }
+  RamNode* node = &g_nodes[g_count];
+  mem::Zero(node, sizeof(*node));
+  node->node.type = type;
+  node->node.ops = type == NodeType::kFile ? &kFileOps : &kDirOps;
+  node->node.fs_data = node;
+  node->parent = parent;
+  node->node.name = node->name;
+  mem::Copy(node->name, name, length + 1U);
+  ++g_count;
+  return node;
+}
+
 }  // namespace
 
 Result<Node*> Create() noexcept {
-  mem::Zero(&g_root, sizeof(g_root));
-  g_root.node.name = "/";
-  g_root.node.type = NodeType::kDirectory;
-  g_root.node.size = 0;
-  g_root.node.ops = &kDirOps;
-  g_root.node.fs_data = &g_root;
-  g_root.count = 0;
-  return Result<Node*>::Ok(&g_root.node);
+  mem::Zero(g_nodes, sizeof(g_nodes));
+  g_count = 0;
+
+  RamNode* root = &g_nodes[g_count];
+  mem::Zero(root, sizeof(*root));
+  root->node.name = "/";
+  root->node.type = NodeType::kDirectory;
+  root->node.ops = &kDirOps;
+  root->node.fs_data = root;
+  root->parent = root;
+  ++g_count;
+  return Result<Node*>::Ok(&root->node);
 }
 
-Result<Node*> CreateFile(Node* root, const char* name, const void* data,
+Result<Node*> CreateDir(Node* parent, const char* name) noexcept {
+  if (parent == nullptr || parent->type != NodeType::kDirectory) {
+    return Result<Node*>::Err(Status::kInvalidArg);
+  }
+  RamNode* dir = NodeOf(parent);
+  if (dir == nullptr) {
+    return Result<Node*>::Err(Status::kNotInit);
+  }
+  if (dir->child_count >= kMaxChildren) {
+    return Result<Node*>::Err(Status::kNoMem);
+  }
+  RamNode* child = AllocateNode(NodeType::kDirectory, name, dir);
+  if (child == nullptr) {
+    return Result<Node*>::Err(Status::kNoMem);
+  }
+  dir->children[dir->child_count] = child;
+  ++dir->child_count;
+  return Result<Node*>::Ok(&child->node);
+}
+
+Result<Node*> CreateFile(Node* parent, const char* name, const void* data,
                          uint64_t size) noexcept {
-  if (root == nullptr) {
+  if (parent == nullptr || parent->type != NodeType::kDirectory) {
     return Result<Node*>::Err(Status::kInvalidArg);
   }
-  if (name == nullptr) {
+  if (size != 0U && data == nullptr) {
     return Result<Node*>::Err(Status::kInvalidArg);
   }
-  if (size != 0 && data == nullptr) {
-    return Result<Node*>::Err(Status::kInvalidArg);
+  RamNode* dir = NodeOf(parent);
+  if (dir == nullptr) {
+    return Result<Node*>::Err(Status::kNotInit);
   }
-  if (g_root.count >= kMaxFiles) {
+  if (dir->child_count >= kMaxChildren) {
     return Result<Node*>::Err(Status::kNoMem);
   }
 
-  const std::size_t length = mem::Length(name);
-  if (length >= kMaxName) {
-    return Result<Node*>::Err(Status::kInvalidArg);
+  RamNode* child = AllocateNode(NodeType::kFile, name, dir);
+  if (child == nullptr) {
+    return Result<Node*>::Err(Status::kNoMem);
   }
 
-  RamFile* file = &g_root.files[g_root.count];
-  mem::Zero(file, sizeof(*file));
-  mem::Copy(file->name, name, length + 1U);
-  file->node.name = file->name;
-  file->node.type = NodeType::kFile;
-  file->node.size = size;
-  file->node.ops = &kFileOps;
-  file->node.fs_data = file;
-
-  if (size != 0) {
+  if (size != 0U) {
     const Result<void*> buffer = mem::HeapAlloc(size);
     if (buffer.is_err()) {
+      --g_count;
       return Result<Node*>::Err(buffer.status());
     }
     mem::Copy(buffer.value(), data, size);
-    file->data = static_cast<uint8_t*>(buffer.value());
-    file->capacity = size;
-    file->size = size;
+    child->data = static_cast<uint8_t*>(buffer.value());
+    child->capacity = size;
+    child->size = size;
+    child->node.size = size;
   }
 
-  ++g_root.count;
-  return Result<Node*>::Ok(&file->node);
+  dir->children[dir->child_count] = child;
+  ++dir->child_count;
+  return Result<Node*>::Ok(&child->node);
 }
 
 }  // namespace og::fs::ramfs

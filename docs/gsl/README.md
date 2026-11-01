@@ -55,10 +55,12 @@ Kode sekarang berada di awal GSL:
   `/system/libraries` pada volume system GSLFS.
 - Kernel memuat `/applications/gemabox/gemabox` sebagai ELF64 dynamic,
   membaca `PT_INTERP`, dan memetakan `/system/boot/ld-gem`.
-- Root `/` adalah volume GSLFS read-only. `/dev`, `/proc`, `/tmp`, dan
-  `/volumes/boot` sudah di-mount.
+- Root `/` adalah volume GSLFS read-only. `/dev`, `/proc`, `/tmp`,
+  `/etc`, `/users`, `/var`, dan `/volumes/boot` sudah di-mount.
+- `/system/boot/init` berjalan sebagai PID 1 dan menjalankan shell.
+- `/etc`, `/users`, dan `/var` memakai ramfs writable sementara.
 - `scripts/check-gsl.sh` menolak aplikasi yang menyentuh lapisan bawah.
-- `/etc`, `/users`, dan `/var` writable serta init user belum ada.
+- Service manager, volume persisten, dan recovery belum ada.
 - Binary dan library tidak lagi disalin kernel ke ramfs.
 
 Dokumen GSL ini adalah target arsitektur, bukan deskripsi kode yang sudah
@@ -75,6 +77,7 @@ selesai.
 | Mount | Satu volume system, bukan satu mount per library |
 | System volume | Filesystem GSL khusus, read-only |
 | Layout | Unix-like lowercase, satu root, system read-only |
+| Layout library | `libgsl`, header-only, sumber tunggal path tetap |
 | Sifat layout | Mutlak, bagian ABI; user tidak dapat mengubah mount point |
 | Home | `/users/<user>` writable |
 | Aplikasi | `/applications/<package>`, command di `/commands` |

@@ -3,7 +3,7 @@
 // Fixed GSL paths exposed to applications. The underlying constants come
 // from the shared layout header and are part of the system ABI.
 
-#include "layout.h"
+#include "gsl/layout.h"
 
 namespace gemapi::paths {
 

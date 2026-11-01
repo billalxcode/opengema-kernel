@@ -1,7 +1,8 @@
 # 03 - Layout Filesystem
 
-Status: GSLFS, system image, dan mount root read-only sudah berjalan
-(GSL-3). Volume writable dan init user menyusul.
+Status: GSLFS, system image, root read-only, writable ramfs di `/etc`,
+`/users`, `/var`, `/tmp`, dan init PID 1 sudah berjalan (GSL-3 dan awal
+GSL-4). Volume persisten, service manager, dan recovery menyusul.
 
 Layout memakai satu root Unix-like dengan path lowercase. System dan
 aplikasi read-only. Data pengguna, konfigurasi, state, dan temp writable.
@@ -19,7 +20,8 @@ aplikasi read-only. Data pengguna, konfigurasi, state, dan temp writable.
 
 ### 1.1 Sifat mutlak
 
-Layout ini adalah bagian dari ABI GSL, bukan konfigurasi pengguna.
+Layout ini adalah bagian dari ABI GSL, bukan konfigurasi pengguna. Sumber
+tunggal konstanta adalah `packages/libgsl/include/gsl/layout.h`.
 
 - Layout ditentukan saat system image dibuat dan tidak berubah saat runtime.
 - User, aplikasi, dan service tidak boleh menambah, menghapus, memindahkan,
@@ -218,52 +220,62 @@ secara langsung.
 ```
 kernel
   -> mount volume system GSLFS read-only di /
-  -> mount devfs di /dev
-  -> mount procfs di /proc
+  -> mount devfs di /dev dan procfs di /proc
+  -> mount writable ramfs di /etc, /users, /var, /tmp
+  -> mount ESP FAT32 di /volumes/boot
   -> load /system/boot/init
   -> PID 1 user space
-       -> mount volume config di /etc
-       -> mount volume home di /users
-       -> mount volume state di /var
-       -> mount tmpfs di /tmp
-       -> mount volume tambahan di /volumes
-       -> jalankan service-manager
+       -> jalankan service-manager (nanti)
        -> jalankan shell
 ```
 
-Jika volume writable belum ada atau rusak:
+Untuk sementara kernel memasang ramfs writable di path tetap. Setelah
+syscall mount user space tersedia, init yang memasang volume writable
+dengan tabel tetap yang sama. User tidak dapat mengubah urutan atau path.
+
+Jika volume writable persisten belum ada atau rusak:
 
 - `/etc` memakai default dari `/system/config`.
-- `/users` dan `/var` bisa memakai ramfs sementara.
+- `/users` dan `/var` memakai ramfs sementara.
 - Shell recovery tetap bisa dijalankan.
 
-## 9. Bootstrap saat ini
+## 9. Status implementasi
 
-Kode sekarang masih memakai layout sementara:
+Layout yang sudah berjalan:
 
 ```
-/                 FAT32 ESP
-  GEMABOX.ELF
-  LDGEM.ELF
-  GEMAPI.SO
-  KGEMA.SO
-/ram/             ramfs
-  gemabox
-  ld-gem
-  libgemapi.so.1
-  libkgema.so.1
-/dev              devfs
-/proc             procfs
+/                       GSLFS read-only, partisi kedua
+  system/boot/init
+  system/boot/ld-gem
+  system/libraries/libkgema.so.1
+  system/libraries/libgemapi.so.1
+  system/config/version
+  system/config/gsl.conf
+  applications/gemabox/gemabox
+  applications/gemabox/manifest.txt
+  commands/
+  etc/                  direktori kosong read-only di image
+  users/
+  tmp/
+  var/
+  dev/
+  proc/
+  volumes/boot/
+/etc                    ramfs writable sementara
+/users                  ramfs writable sementara
+/var                    ramfs writable sementara
+/tmp                    ramfs writable sementara
+/dev                    devfs
+/proc                   procfs
+/volumes/boot           FAT32 ESP
 ```
 
-Target setelah GSL-3:
+Yang belum:
 
-- `/` menjadi volume system GSLFS read-only.
-- `gemabox` pindah ke `/applications/gemabox/gemabox`.
-- `ld-gem` pindah ke `/system/boot/ld-gem`.
-- Library pindah ke `/system/libraries`.
-- `ld-gem` mencari library di `/system/libraries`, bukan `/ram`.
-- Kernel tidak lagi menyalin binary ke ramfs.
+- Volume writable persisten untuk `/etc`, `/users`, dan `/var`.
+- Service manager dan recovery.
+- PATH, package manager, dan command lookup.
+- Penegakan mode, UID, dan GID.
 
 ## 10. Keputusan
 

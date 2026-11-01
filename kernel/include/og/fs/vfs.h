@@ -55,7 +55,7 @@ struct FileEntry {
   bool in_use;
 };
 
-constexpr uint32_t kMaxMounts = 8;
+constexpr uint32_t kMaxMounts = 16;
 constexpr uint32_t kMaxFiles = 16;
 constexpr uint32_t kMaxPath = 256;
 // 0 stdin, 1 stdout, 2 stderr are reserved. Files start at 3.

@@ -75,15 +75,17 @@ virtio-gpu: display width: 1280
 virtio-gpu: display height: 800
 virtio-gpu: scanouts: 1
 virtio-gpu: scanout ok
-fs: gslfs nodes: 30
+fs: gslfs nodes: 31
 fs: gslfs mounted
 fs: libgemapi bytes: 9352
 fs: library probe ok
 proc: uptime 5601 ms
+fs: etc defaults copied
 fs: tmpfs write ok
-fs: efi image bytes: 161280
+fs: writable mounts ok
+fs: efi image bytes: 163328
 fs: fat32 file read ok
-fs: mounted gslfs, devfs, procfs, tmpfs, fat32
+fs: mounted gslfs, devfs, procfs, writable, fat32
 fs: devfs console ok
 event test: irq and workqueue ok
 gic: ready
@@ -99,7 +101,7 @@ mem: address space switch ok
 sched: round robin ok
 sync: mutex, semaphore, refcount, once ok
 time: timeout ok
-user: program bytes: 9072
+user: program bytes: 9080
 hello from el0
 file ok
 mmap ok
@@ -135,13 +137,15 @@ API publik `packages/libgemapi`, yang memakai lapisan ABI
 header kernel. Binary gemabox adalah ELF64 dynamic dan dibaca dari volume
 system GSLFS: kernel memetakan `/applications/gemabox/gemabox` dan
 `/system/boot/ld-gem`, lalu `ld-gem` memuat `libgemapi.so.1` dan
-`libkgema.so.1` dari `/system/libraries`. Program berjalan di address space
-sendiri pada 1 TiB, dengan ASID yang dipasang saat context switch. Dua
-proses gemabox berjalan bersamaan, masing masing punya tabel file sendiri,
-lalu setiap proses menjalankan child dengan argv dan menunggu. Proses
-writer menguji `chdir`, write ke FD, seek, dan read di `/tmp`. Proses shell
-menerima input UART, menjalankan `help`, dan keluar lewat `exit`. Jumlah
-frame bebas kembali ke angka sebelum spawn.
+`libkgema.so.1` dari `/system/libraries`. Kernel menjalankan
+`/system/boot/init` sebagai PID 1; init menjalankan shell gemabox.
+`/etc`, `/users`, `/var`, dan `/tmp` adalah mount writable pada path tetap.
+Program berjalan di address space sendiri pada 1 TiB, dengan ASID yang
+dipasang saat context switch. Dua proses gemabox berjalan bersamaan, masing
+masing punya tabel file sendiri, lalu setiap proses menjalankan child dengan
+argv dan menunggu. Proses writer menguji `chdir`, write ke FD, seek, dan
+read di `/tmp`. Proses shell menerima input UART, menjalankan `help`, dan
+keluar lewat `exit`. Jumlah frame bebas kembali ke angka sebelum spawn.
 
 Roadmap inti selesai. Berikutnya: pengembangan lanjutan di atas fondasi ini.
 
