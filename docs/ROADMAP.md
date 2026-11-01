@@ -181,22 +181,33 @@ Catatan hasil Fase 0:
 
 ### Fase 1 - IO dan console
 
-- [ ] IO-01 `io/mmio.h`: `MmioRegion` dengan base, size, dan bounds check.
-      Akses `Read32`, `Write32`, `Read64`, `Write64`, versi 8 dan 16 bit.
-- [ ] IO-02 `arch/aarch64/barriers.h`: `Dmb`, `Dsb`, `Isb` dengan opsi
-      `sy`, `ish`, `ishst`, `nsh`.
-- [ ] IO-03 `io/register.h`: `Field<kPos, kWidth>` dengan `Encode`, `Decode`,
-      dan `static_assert` batas.
-- [ ] IO-04 `io/console.h`: interface `Console` dengan `Write(span)`,
-      implementasi `ConsoleUart` dan `ConsoleEfi`.
-- [ ] IO-05 `io/print.h`: `Print`, `PrintHex`, `PrintDec`, `PrintLn` tanpa
-      alokasi dan tanpa variadic berat.
-- [ ] IO-06 Ganti semua `uart.puts` langsung di boot dan driver dengan
-      `Log` atau `Print` dari IO-05.
-- [ ] IO-07 Uji: `og/print` dipakai dari `kmain`, output identik.
+- [x] IO-01 `og/mmio.h`: `MmioRegion` dengan base, size, bounds check,
+      alignment check. Akses 8, 16, 32, 64 bit lewat satu template internal.
+- [x] IO-02 `og/arch/barriers.h`: `DmbSy`, `DsbSy`, `DmbIsh`, `DsbIsh`,
+      `DsbIshSt`, `DmbNsh`, `InstructionSync`.
+- [x] IO-03 `og/register.h`: `Field<T, kPos, kWidth>` dengan `Decode`,
+      `Encode`, `Insert`, `Mask`, dan `static_assert` batas.
+- [x] IO-04 `og/console.h`: `Console` sebagai pasangan fungsi dan konteks,
+      bukan virtual, supaya tidak butuh vtable atau runtime support.
+- [x] IO-05 `og/print.h`: `Print`, `PrintText`, `PrintLn`, `PrintDec`,
+      `PrintHex`. Formatting ada di `libs/core/format.h`.
+- [x] IO-06 Tidak ada lagi `puts` atau akses MMIO langsung di driver.
+      `Pl011` sekarang hanya byte device.
+- [x] IO-07 `kmain` memakai `PrintHex` dan `PrintLn`, output sama.
 
 **Selesai bila:** tidak ada akses MMIO di luar `io/`, dan console bisa
 diganti tanpa ubah pemanggil.
+
+Catatan hasil Fase 1:
+
+1. `ConsoleUart` tidak masuk `io/` karena `io` berada di bawah `drivers`.
+   Bentuknya `MakeConsole(Pl011&)` di `drivers/uart`.
+2. `ConsoleEfi` jadi `MakeFirmwareConsole` di `boot/uefi`, karena tipe UEFI
+   hanya boleh dipakai lapisan boot.
+3. Formatting angka dipindah ke `libs/core/format.h`. `og/print` dan
+   `og/log` sama sama memakainya, jadi tidak ada dua loop digit.
+4. `og/log` sekarang mendelegasikan ke `og/print`, bukan menyimpan sink
+   sendiri. Satu jalur output untuk seluruh kernel.
 
 ### Fase 2 - Arch dasar
 
