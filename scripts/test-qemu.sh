@@ -9,6 +9,18 @@ CODE="$ROOT/firmware/AAVMF_CODE.fd"
 VARS="$ROOT/firmware/AAVMF_VARS.fd"
 ESP="$ROOT/esp.img"
 
+RESOLUTION="${RESOLUTION:-1280x800}"
+if [[ ! "$RESOLUTION" =~ ^([0-9]+)x([0-9]+)$ ]]; then
+  echo "qemu test: invalid RESOLUTION '$RESOLUTION' (expected WxH)"
+  exit 1
+fi
+DISPLAY_WIDTH="${BASH_REMATCH[1]}"
+DISPLAY_HEIGHT="${BASH_REMATCH[2]}"
+if [ "$DISPLAY_WIDTH" -gt 1920 ] || [ "$DISPLAY_HEIGHT" -gt 1200 ]; then
+  echo "qemu test: RESOLUTION $RESOLUTION exceeds the kernel limit of 1920x1200"
+  exit 1
+fi
+
 if [ ! -f "$CODE" ] || [ ! -f "$VARS" ]; then
   echo "missing firmware, run ./scripts/get-firmware.sh"
   exit 1
@@ -44,7 +56,7 @@ qemu-system-aarch64 \
   -drive if=pflash,format=raw,file="$CODE",readonly=on \
   -drive if=pflash,format=raw,file="$VARS_TMP" \
   -drive file="$ESP",format=raw,if=virtio \
-  -device virtio-gpu-pci \
+  -device virtio-gpu-pci,xres=$DISPLAY_WIDTH,yres=$DISPLAY_HEIGHT \
   -device virtio-keyboard-pci \
   -serial "unix:$SOCKET,server=on,wait=off" \
   -display none \

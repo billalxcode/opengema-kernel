@@ -7,33 +7,68 @@ VARS="$ROOT/firmware/AAVMF_VARS.fd"
 ESP="$ROOT/esp"
 
 usage() {
-  echo "usage: $0 [--gui=on|off]"
+  echo "usage: $0 [--gui=on|off] [--resolution=WxH]"
   echo "  --gui=off  headless, serial only (default)"
   echo "  --gui=on   window QEMU dengan virtio-gpu, serial tetap di terminal"
   echo "  --gui      sama dengan --gui=on"
   echo "  --no-gui   sama dengan --gui=off"
+  echo "  --resolution=WxH  resolusi scanout, contoh 1920x1080"
+  echo "                    batas kernel saat ini 1920x1200 (default QEMU 1280x800)"
 }
 
 GUI=0
-for arg in "$@"; do
-  case "$arg" in
+RESOLUTION=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
     --gui | --gui=on | --gui=yes | --gui=1)
       GUI=1
       ;;
     --gui=off | --gui=no | --gui=0 | --no-gui)
       GUI=0
       ;;
+    --resolution=*)
+      RESOLUTION="${1#*=}"
+      ;;
+    --resolution)
+      if [ "$#" -lt 2 ]; then
+        echo "missing value for --resolution"
+        usage
+        exit 1
+      fi
+      RESOLUTION="$2"
+      shift
+      ;;
     -h | --help)
       usage
       exit 0
       ;;
     *)
-      echo "unknown arg: $arg"
+      echo "unknown arg: $1"
       usage
       exit 1
       ;;
   esac
+  shift
 done
+
+GPU_ARGS="-device virtio-gpu-pci"
+if [ -n "$RESOLUTION" ]; then
+  if [[ ! "$RESOLUTION" =~ ^([0-9]+)x([0-9]+)$ ]]; then
+    echo "invalid resolution: $RESOLUTION (expected WxH, for example 1920x1080)"
+    exit 1
+  fi
+  WIDTH="${BASH_REMATCH[1]}"
+  HEIGHT="${BASH_REMATCH[2]}"
+  if [ "$WIDTH" -eq 0 ] || [ "$HEIGHT" -eq 0 ]; then
+    echo "invalid resolution: $RESOLUTION (width and height must be positive)"
+    exit 1
+  fi
+  if [ "$WIDTH" -gt 1920 ] || [ "$HEIGHT" -gt 1200 ]; then
+    echo "resolution $RESOLUTION exceeds the kernel limit of 1920x1200"
+    exit 1
+  fi
+  GPU_ARGS="-device virtio-gpu-pci,xres=$WIDTH,yres=$HEIGHT"
+fi
 
 if [ ! -f "$CODE" ] || [ ! -f "$VARS" ]; then
   echo "missing firmware in $ROOT/firmware"
@@ -66,7 +101,7 @@ if [ "$GUI" -eq 1 ]; then
 else
   DISPLAY_ARGS="-display none"
 fi
-DISPLAY_ARGS="$DISPLAY_ARGS -device virtio-gpu-pci $INPUT_ARGS"
+DISPLAY_ARGS="$DISPLAY_ARGS $GPU_ARGS $INPUT_ARGS"
 
 # Copy VARS to a writable temp file so boot does not dirty the repo file.
 VARS_TMP="$(mktemp /tmp/AAVMF_VARS.XXXXXX)"
