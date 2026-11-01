@@ -17,6 +17,7 @@ struct Platform {
   Range uart0;
   Range gic_distributor;
   Range gic_redistributor;
+  Range rtc;
   Range pci_ecam;
   uint64_t ram_base;
   uint32_t cpu_count;

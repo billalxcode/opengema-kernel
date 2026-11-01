@@ -11,6 +11,7 @@ constexpr Platform kQemuVirt{
   {memmap::kUart0Base, memmap::kUart0Size},
   {memmap::kGicDistBase, memmap::kGicDistSize},
   {memmap::kGicRedistBase, memmap::kGicRedistSize},
+  {memmap::kRtcBase, memmap::kRtcSize},
   {memmap::kPciEcamBase, memmap::kPciEcamSize},
   memmap::kRamBase,
   2,
