@@ -2,7 +2,7 @@
 """Serial test client for QEMU.
 
 Connects to the QEMU unix serial socket, mirrors output to a log, drives the
-gemabox shell through help, clear, and exit, and stops at halt.
+gemabox shell through help, acpi, clear, and halt, and stops at halt.
 
 Usage: uart_test_client.py <socket> <log> [timeout_seconds] [gate_dir]
 Exit nonzero on connect timeout or missing halt marker. When gate_dir is set,
@@ -14,6 +14,13 @@ import os
 import socket
 import sys
 import time
+
+
+def send_line(client, text):
+    """Send a command slowly so the PL011 RX FIFO is always drained."""
+    for value in text:
+        client.sendall(bytes((value,)))
+        time.sleep(0.01)
 
 
 def main(argv):
@@ -43,6 +50,8 @@ def main(argv):
     help_sent = False
     help_seen = False
     last_data = time.time()
+    acpi_sent = False
+    acpi_seen = False
     clear_sent = False
     clear_ready = False
     clear_released = False
@@ -50,7 +59,7 @@ def main(argv):
     ls_error_sent = False
     spawn_error_sent = False
     hello_sent = False
-    exit_sent = False
+    halt_sent = False
     halted = False
 
     with open(log_path, "wb") as log:
@@ -68,18 +77,28 @@ def main(argv):
                 last_data = time.time()
 
             if not help_sent and b"hello from applications" in buffer:
-                client.sendall(b"help\n")
+                send_line(client, b"help\n")
                 help_sent = True
                 buffer.clear()
 
             if (help_sent and not help_seen and
-                    b"commands: help, echo, cat, ls, clear, exit" in buffer):
+                    b"commands: help, echo, cat, ls, clear, acpi, halt" in buffer):
                 help_seen = True
 
-            if (help_seen and not clear_sent and
+            if (help_seen and not acpi_sent and
                     time.time() - last_data > 0.5 and
                     b"gemabox> " in buffer):
-                client.sendall(b"clear\n")
+                send_line(client, b"acpi\n")
+                acpi_sent = True
+                buffer.clear()
+
+            if acpi_sent and not acpi_seen and b"ACPI" in buffer:
+                acpi_seen = True
+
+            if (acpi_seen and not clear_sent and
+                    time.time() - last_data > 0.5 and
+                    b"gemabox> " in buffer):
+                send_line(client, b"clear\n")
                 clear_sent = True
                 buffer.clear()
 
@@ -94,24 +113,24 @@ def main(argv):
                     clear_released = True
 
             if clear_released and not ls_sent:
-                client.sendall(b"ls /\n")
+                send_line(client, b"ls /\n")
                 ls_sent = True
 
             if ls_sent and not ls_error_sent and b"system/" in buffer:
-                client.sendall(b"ls /missing\n")
+                send_line(client, b"ls /missing\n")
                 ls_error_sent = True
 
             if ls_error_sent and not spawn_error_sent and b"ls: list failed" in buffer:
-                client.sendall(b".\n")
+                send_line(client, b".\n")
                 spawn_error_sent = True
 
             if spawn_error_sent and not hello_sent and b"run: spawn failed" in buffer:
-                client.sendall(b"hello\n")
+                send_line(client, b"hello\n")
                 hello_sent = True
 
-            if hello_sent and not exit_sent and b"hello from applications" in buffer:
-                client.sendall(b"exit\n")
-                exit_sent = True
+            if hello_sent and not halt_sent and b"hello from applications" in buffer:
+                send_line(client, b"halt\n")
+                halt_sent = True
 
             if b"kernel: halt" in buffer:
                 halted = True

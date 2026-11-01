@@ -14,10 +14,12 @@ usage() {
   echo "  --no-gui   sama dengan --gui=off"
   echo "  --resolution=WxH  resolusi scanout, contoh 1920x1080"
   echo "                    batas kernel saat ini 1920x1200 (default QEMU 1280x800)"
+  echo "  --acpi=on|off     tabel firmware, default off (memakai DTB)"
 }
 
 GUI=0
 RESOLUTION=""
+ACPI="off"
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --gui | --gui=on | --gui=yes | --gui=1)
@@ -36,6 +38,18 @@ while [ "$#" -gt 0 ]; do
         exit 1
       fi
       RESOLUTION="$2"
+      shift
+      ;;
+    --acpi=*)
+      ACPI="${1#*=}"
+      ;;
+    --acpi)
+      if [ "$#" -lt 2 ]; then
+        echo "missing value for --acpi"
+        usage
+        exit 1
+      fi
+      ACPI="$2"
       shift
       ;;
     -h | --help)
@@ -69,6 +83,14 @@ if [ -n "$RESOLUTION" ]; then
   fi
   GPU_ARGS="-device virtio-gpu-pci,xres=$WIDTH,yres=$HEIGHT"
 fi
+
+case "$ACPI" in
+  on | off) ;;
+  *)
+    echo "invalid ACPI value: $ACPI (expected on or off)"
+    exit 1
+    ;;
+esac
 
 if [ ! -f "$CODE" ] || [ ! -f "$VARS" ]; then
   echo "missing firmware in $ROOT/firmware"
@@ -109,7 +131,7 @@ cp "$VARS" "$VARS_TMP"
 trap 'rm -f "$VARS_TMP"' EXIT
 
 qemu-system-aarch64 \
-  -M virt,gic-version=3,acpi=off \
+  -M virt,gic-version=3,acpi=$ACPI \
   -cpu cortex-a72 \
   -smp 2 \
   -m 512M \

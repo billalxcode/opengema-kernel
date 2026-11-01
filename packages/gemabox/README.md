@@ -35,11 +35,12 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
 6. `spawn` child dengan argv `{"gemabox", "child"}`, lalu `wait`.
 7. Mode `writer`: `chdir("/tmp")`, tulis `write ok` ke file `writer`,
    seek, read, lalu cetak `write ok`.
-8. Mode `shell`: prompt `gemabox>`, baca input UART, jalankan `help`,
-   `echo`, `cat`, `ls`, `clear`, dan `exit`.
+8. Mode `shell`: prompt `gemabox>`, baca input UART dan keyboard,
+   jalankan `help`, `echo`, `cat`, `ls`, `clear`, `acpi`, dan `halt`.
 9. Command di luar applet dicari di `/commands/<name>`, lalu
    `/applications/<name>/<name>`.
-10. `exit`.
+10. `acpi` membaca ringkasan tabel dari `/proc/acpi`. `halt` menghentikan
+    shell dan init sehingga kernel menyelesaikan self test lalu berhenti.
 
 Child mendeteksi argv kedua dan hanya mencetak `child ok`.
 
@@ -53,10 +54,13 @@ child ok
 spawn ok
 write ok
 gemabox> help
-commands: help, echo, cat, ls, clear, exit
+commands: help, echo, cat, ls, clear, acpi, halt
+gemabox> acpi
+ACPI revision 2
+...
 gemabox> hello
 hello from applications
-gemabox> exit
+gemabox> halt
 user: exit pid: 1
 user: exit status: 0
 ```

@@ -2,6 +2,7 @@
 
 #include "format.h"
 #include "memory.h"
+#include "og/acpi/acpi.h"
 #include "og/time/timer.h"
 
 namespace og::fs::procfs {
@@ -11,6 +12,7 @@ namespace {
 enum class ProcKind : uint32_t {
   kUptime = 0,
   kThreads = 1,
+  kAcpi = 2,
 };
 
 struct ProcFile {
@@ -21,12 +23,47 @@ struct ProcFile {
 
 struct ProcDir {
   Node node;
-  ProcFile files[2];
+  ProcFile files[3];
   uint32_t count;
 };
 
 ProcDir g_root;
 ThreadCountFn g_thread_count = nullptr;
+
+void GenerateAcpi(og::fmt::LineBuilder& line) noexcept {
+  const acpi::Info& info = acpi::GetInfo();
+  if (!info.ready) {
+    line.Text("ACPI unavailable\n");
+    return;
+  }
+  line.Text("ACPI revision ").Dec(info.revision).Char('\n');
+  line.Text("rsdp ").Hex(info.rsdp_address).Char('\n');
+  line.Text("root ").Hex(info.root_table_address).Char('\n');
+  line.Text("tables ").Dec(info.table_count).Char('\n');
+  for (uint32_t index = 0; index < info.table_count; ++index) {
+    const Result<acpi::Table> table = acpi::TableAt(index);
+    if (table.is_err()) {
+      continue;
+    }
+    line.Text("  ").Text(table.value().signature).Text(" len ")
+      .Dec(table.value().length).Char('\n');
+  }
+  line.Text("MADT cpus ").Dec(info.cpu_count).Char('\n');
+  if (info.gic_distributor != 0U) {
+    line.Text("GICD ").Hex(info.gic_distributor).Char('\n');
+  }
+  if (info.gic_redistributor != 0U) {
+    line.Text("GICR ").Hex(info.gic_redistributor).Char('\n');
+  }
+  if (info.uart_base != 0U) {
+    line.Text("SPCR uart ").Hex(info.uart_base).Char('\n');
+  }
+  if (info.pci_ecam != 0U) {
+    line.Text("MCFG ecam ").Hex(info.pci_ecam).Text(" size ")
+      .Hex(info.pci_ecam_size).Char('\n');
+  }
+  line.Text("GTDT ").Dec(info.has_gtdt ? 1U : 0U).Char('\n');
+}
 
 Status Generate(const ProcFile& file, char* buffer, std::size_t capacity,
                 std::size_t& length) noexcept {
@@ -39,6 +76,9 @@ Status Generate(const ProcFile& file, char* buffer, std::size_t capacity,
     case ProcKind::kThreads:
       line.Dec(g_thread_count == nullptr ? 0U : g_thread_count());
       line.Text("\n");
+      break;
+    case ProcKind::kAcpi:
+      GenerateAcpi(line);
       break;
     default:
       return Status::kInvalidArg;
@@ -61,7 +101,7 @@ Status FileRead(Node* node, uint64_t offset, std::span<uint8_t> buffer,
     return Status::kNotInit;
   }
 
-  char text[64];
+  char text[1024];
   std::size_t length = 0;
   const Status status = Generate(*file, text, sizeof(text), length);
   if (IsErr(status)) {
@@ -145,7 +185,8 @@ Result<Node*> Create(ThreadCountFn thread_count) noexcept {
 
   AddFile(0, "uptime", ProcKind::kUptime);
   AddFile(1, "threads", ProcKind::kThreads);
-  g_root.count = 2;
+  AddFile(2, "acpi", ProcKind::kAcpi);
+  g_root.count = 3;
   return Result<Node*>::Ok(&g_root.node);
 }
 

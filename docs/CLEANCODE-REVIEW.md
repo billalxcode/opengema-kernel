@@ -229,17 +229,17 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 - Thread creation dipindah ke `kernel/sched/thread.cpp`; alokasi slot dan
   ID tetap di `scheduler.cpp` lewat helper internal.
 - Test host baru: endian reader, image GSLFS valid/rusak/siklus/deterministik,
-  driver GSLFS, ramfs, procfs, devfs, HID, FAT32, gemapi fs, gemapi api,
+  driver GSLFS, ramfs, procfs, devfs, HID, ACPI, FAT32, gemapi fs, gemapi api,
   kgema, GPT/partition, VFS, VFS FD, ELF parser, dan FDT parser.
 - Test QEMU baru: `ls /missing` menghasilkan `ls: list failed`, dan
   perintah `.` yang menunjuk directory menghasilkan `run: spawn failed`.
 
 Verifikasi branch `dev`:
 
-- `python3 scripts/compile-check.py`: 116 file OK, 1 entri lama dilewati.
+- `python3 scripts/compile-check.py`: 117 file OK, 1 entri lama dilewati.
 - `./scripts/build.sh` lewat podman: kernel build dan link OK,
   `arch-check` dan `gsl-check` OK.
-- `./scripts/test-host.sh`: host tests, ramfs, procfs, devfs, HID, FAT32,
+- `./scripts/test-host.sh`: host tests, ramfs, procfs, devfs, HID, ACPI, FAT32,
   gemapi fs, gemapi api, kgema, GPT, FDT, VFS, ELF, dan GSLFS probe OK.
 - `./scripts/test-qemu.sh` lewat container arm64: OK.
 - `test.sh` penuh belum dijalankan sebagai satu perintah.

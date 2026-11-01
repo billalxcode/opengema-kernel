@@ -1,6 +1,6 @@
 #!/bin/bash
-# QEMU smoke test. Boots the kernel, waits for known markers, injects four
-# bytes into the UART to exercise RX, and fails on missing markers or panic.
+# QEMU smoke test. Boots the kernel, types through the keyboard, drives the
+# shell over UART, and fails on missing markers, a bad scanout, or panic.
 
 set -euo pipefail
 
@@ -20,6 +20,15 @@ if [ "$DISPLAY_WIDTH" -gt 1920 ] || [ "$DISPLAY_HEIGHT" -gt 1200 ]; then
   echo "qemu test: RESOLUTION $RESOLUTION exceeds the kernel limit of 1920x1200"
   exit 1
 fi
+
+ACPI="${ACPI:-off}"
+case "$ACPI" in
+  on | off) ;;
+  *)
+    echo "qemu test: ACPI must be on or off"
+    exit 1
+    ;;
+esac
 
 if [ ! -f "$CODE" ] || [ ! -f "$VARS" ]; then
   echo "missing firmware, run ./scripts/get-firmware.sh"
@@ -48,7 +57,7 @@ trap cleanup EXIT
 cp "$VARS" "$VARS_TMP"
 
 qemu-system-aarch64 \
-  -M virt,gic-version=3,acpi=off \
+  -M virt,gic-version=3,acpi=$ACPI \
   -cpu cortex-a72 \
   -smp 2 \
   -m 512M \
@@ -125,13 +134,25 @@ check "mem: address space switch ok"
 check "sched: round robin ok"
 check "user: spawn pid"
 check "gemabox> "
-check "commands: help, echo, cat, ls, clear, exit"
+check "commands: help, echo, cat, ls, clear, acpi, halt"
 check "system/"
 check "ls: list failed"
 check "run: spawn failed"
 check "hello from applications"
 check "process: remaining: 0"
 check "kernel: halt"
+
+if [ "$ACPI" = "on" ]; then
+  check "platform: acpi parsed"
+  check "acpi: tables"
+  check "ACPI revision"
+  check "MADT cpus"
+  check "GICD"
+  check "SPCR uart"
+  check "MCFG ecam"
+else
+  check "ACPI unavailable"
+fi
 
 count_check() {
   local found

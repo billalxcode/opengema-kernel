@@ -12,7 +12,7 @@ constexpr gemapi::usize kMaxName = 128;
 
 enum class CommandResult {
   kContinue,
-  kExit,
+  kHalt,
 };
 
 using CommandFn = CommandResult (*)(const char* args,
@@ -23,17 +23,19 @@ struct Command {
   CommandFn run;
 };
 
-void cat_file(const char* path) {
+void cat_file(const char* path, const char* label) {
   auto file = gemapi::fs::File::open(path);
   if (!file) {
-    gemapi::io::write("cat: open failed\n");
+    gemapi::io::print(label);
+    gemapi::io::write(": open failed\n");
     return;
   }
   char buffer[64];
   for (;;) {
     auto count = file.value().read(buffer, sizeof(buffer));
     if (!count) {
-      gemapi::io::write("cat: read failed\n");
+      gemapi::io::print(label);
+      gemapi::io::write(": read failed\n");
       break;
     }
     if (count.value() == 0U) {
@@ -158,8 +160,8 @@ gemapi::usize BuildArgv(char* text, gemapi::usize length,
   return argc;
 }
 
-CommandResult RunExit(const char* /*args*/, gemapi::usize /*args_length*/) {
-  return CommandResult::kExit;
+CommandResult RunHalt(const char* /*args*/, gemapi::usize /*args_length*/) {
+  return CommandResult::kHalt;
 }
 
 CommandResult RunHelp(const char* /*args*/, gemapi::usize /*args_length*/);
@@ -175,7 +177,7 @@ CommandResult RunCat(const char* args, gemapi::usize args_length) {
     gemapi::io::write("cat: missing path\n");
     return CommandResult::kContinue;
   }
-  cat_file(args);
+  cat_file(args, "cat");
   return CommandResult::kContinue;
 }
 
@@ -193,13 +195,19 @@ CommandResult RunClear(const char* /*args*/, gemapi::usize /*args_length*/) {
   return CommandResult::kContinue;
 }
 
+CommandResult RunAcpi(const char* /*args*/, gemapi::usize /*args_length*/) {
+  cat_file("/proc/acpi", "acpi");
+  return CommandResult::kContinue;
+}
+
 constexpr Command kCommands[] = {
   {"help", &RunHelp},
   {"echo", &RunEcho},
   {"cat", &RunCat},
   {"ls", &RunList},
   {"clear", &RunClear},
-  {"exit", &RunExit},
+  {"acpi", &RunAcpi},
+  {"halt", &RunHalt},
 };
 
 constexpr gemapi::usize kCommandCount =
@@ -265,7 +273,7 @@ int run_shell() {
 
     const Command* command = FindCommand(line, name_length);
     if (command != nullptr) {
-      if (command->run(args, args_length) == CommandResult::kExit) {
+      if (command->run(args, args_length) == CommandResult::kHalt) {
         return 0;
       }
       continue;

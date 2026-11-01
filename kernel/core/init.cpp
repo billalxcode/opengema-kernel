@@ -1,6 +1,7 @@
 #include "og/boot/init.h"
 
 #include "memory.h"
+#include "og/acpi/acpi.h"
 #include "og/arch/cpu.h"
 #include "og/arch/registers.h"
 #include "og/core/bootinfo.h"
@@ -99,9 +100,23 @@ void kmain(BootInfo* info) noexcept {
     Panic("kmain: unsupported boot info version");
   }
 
+  if (info->acpi_rsdp != 0U) {
+    const Status acpi_status = acpi::Init(info->acpi_rsdp);
+    if (IsErr(acpi_status)) {
+      LogHex(LogLevel::kWarn, "acpi: init status",
+             static_cast<uint64_t>(acpi_status));
+    } else {
+      const acpi::Info& acpi_info = acpi::GetInfo();
+      LogDec(LogLevel::kInfo, "acpi: tables", acpi_info.table_count);
+      LogDec(LogLevel::kInfo, "acpi: cpus", acpi_info.cpu_count);
+    }
+  }
+
   const Status platform_status = platform::PlatformInit(*info);
   if (IsErr(platform_status)) {
-    Log(LogLevel::kWarn, "platform: dtb unavailable\n");
+    Log(LogLevel::kWarn, "platform: no firmware tables\n");
+  } else if (acpi::Ready()) {
+    Log(LogLevel::kInfo, "platform: acpi parsed\n");
   } else {
     Log(LogLevel::kInfo, "platform: dtb parsed\n");
   }

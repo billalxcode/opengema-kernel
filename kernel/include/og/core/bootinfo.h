@@ -28,7 +28,7 @@ struct MemoryRange {
 static_assert(sizeof(MemoryRange) == 24, "MemoryRange layout changed");
 
 constexpr uint32_t kBootInfoMagic = 0x4F474249U;  // "OGBI"
-constexpr uint32_t kBootInfoVersion = 1U;
+constexpr uint32_t kBootInfoVersion = 2U;
 constexpr uint64_t kMaxMemoryRanges = 64U;
 
 struct BootInfo {
@@ -45,9 +45,10 @@ struct BootInfo {
   uint64_t text_size;
   uint64_t dtb_address;
   uint64_t dtb_size;
+  uint64_t acpi_rsdp;
   MemoryRange memory[kMaxMemoryRanges];
 };
 
-static_assert(sizeof(BootInfo) == 1632, "BootInfo layout changed");
+static_assert(sizeof(BootInfo) == 1640, "BootInfo layout changed");
 
 }  // namespace og

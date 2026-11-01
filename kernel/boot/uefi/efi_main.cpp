@@ -15,6 +15,29 @@ namespace {
 
 og::BootInfo g_boot_info{};
 
+constexpr EFI_GUID kDtbGuid{
+  0xB1B621D5U, 0xF19CU, 0x41A5U,
+  {0x83, 0x0B, 0xD9, 0x15, 0x2C, 0x69, 0xAA, 0xE0}};
+constexpr EFI_GUID kAcpi20Guid{
+  0x8868E871U, 0xE4F1U, 0x11D3U,
+  {0xBC, 0x22, 0x00, 0x80, 0xC7, 0x3C, 0x88, 0x81}};
+constexpr EFI_GUID kAcpi10Guid{
+  0xEB9D2D30U, 0x2D88U, 0x11D3U,
+  {0x9A, 0x16, 0x00, 0x90, 0x27, 0x3F, 0xC1, 0x4D}};
+
+[[nodiscard]] bool GuidMatches(const EFI_GUID& value,
+                               const EFI_GUID& expected) noexcept {
+  return value.data1 == expected.data1 && value.data2 == expected.data2 &&
+         value.data3 == expected.data3 && value.data4[0] == expected.data4[0] &&
+         value.data4[1] == expected.data4[1] &&
+         value.data4[2] == expected.data4[2] &&
+         value.data4[3] == expected.data4[3] &&
+         value.data4[4] == expected.data4[4] &&
+         value.data4[5] == expected.data4[5] &&
+         value.data4[6] == expected.data4[6] &&
+         value.data4[7] == expected.data4[7];
+}
+
 }  // namespace
 
 extern "C" EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* system_table) {
@@ -32,25 +55,31 @@ extern "C" EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* system_table)
   og::drivers::uart::SetActive(&uart);
   og::Log(og::LogLevel::kInfo, "opengema-kernel: uefi entry\n");
 
-  // QEMU with acpi=off passes the device tree through a config table.
+  // QEMU passes either a device tree or ACPI tables through the UEFI
+  // configuration table, depending on the machine acpi property.
   for (UINTN index = 0; index < system_table->number_of_table_entries; ++index) {
     const auto* table =
       static_cast<const EFI_CONFIGURATION_TABLE*>(system_table->configuration_table) + index;
-    const EFI_GUID& guid = table->vendor_guid;
-    if (guid.data1 != 0xB1B621D5U || guid.data2 != 0xF19CU || guid.data3 != 0x41A5U) {
-      continue;
-    }
     if (table->vendor_table == nullptr) {
       continue;
     }
-    const auto* header = static_cast<const uint8_t*>(table->vendor_table);
-    const uint32_t total = (static_cast<uint32_t>(header[4]) << 24U) |
-                           (static_cast<uint32_t>(header[5]) << 16U) |
-                           (static_cast<uint32_t>(header[6]) << 8U) |
-                           static_cast<uint32_t>(header[7]);
-    g_boot_info.dtb_address = reinterpret_cast<uint64_t>(table->vendor_table);
-    g_boot_info.dtb_size = total;
-    break;
+    if (GuidMatches(table->vendor_guid, kDtbGuid) &&
+        g_boot_info.dtb_address == 0) {
+      const auto* header = static_cast<const uint8_t*>(table->vendor_table);
+      const uint32_t total = (static_cast<uint32_t>(header[4]) << 24U) |
+                             (static_cast<uint32_t>(header[5]) << 16U) |
+                             (static_cast<uint32_t>(header[6]) << 8U) |
+                             static_cast<uint32_t>(header[7]);
+      g_boot_info.dtb_address = reinterpret_cast<uint64_t>(table->vendor_table);
+      g_boot_info.dtb_size = total;
+      continue;
+    }
+    if ((GuidMatches(table->vendor_guid, kAcpi20Guid) ||
+         GuidMatches(table->vendor_guid, kAcpi10Guid)) &&
+        g_boot_info.acpi_rsdp == 0) {
+      g_boot_info.acpi_rsdp =
+        reinterpret_cast<uint64_t>(table->vendor_table);
+    }
   }
 
   // The firmware console dies with ExitBootServices, so use it only here.

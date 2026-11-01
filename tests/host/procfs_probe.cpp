@@ -76,6 +76,19 @@ int main() {
     return 1;
   }
 
+  og::fs::Node* acpi = nullptr;
+  if (og::IsErr(root.value()->ops->lookup(root.value(), "acpi", &acpi)) ||
+      acpi == nullptr) {
+    std::printf("procfs probe: acpi lookup failed\n");
+    return 1;
+  }
+  if (!ReadAll(acpi, 0, text, sizeof(text), read) || read != 17U ||
+      text[0] != 'A' || text[4] != ' ' || text[5] != 'u' || text[15] != 'e' ||
+      text[16] != '\n') {
+    std::printf("procfs probe: acpi content mismatch\n");
+    return 1;
+  }
+
   if (root.value()->ops->lookup(root.value(), "missing", &threads) !=
       og::Status::kNotFound) {
     std::printf("procfs probe: missing lookup was not rejected\n");
@@ -95,6 +108,11 @@ int main() {
     return 1;
   }
   if (og::IsErr(root.value()->ops->iterate(root.value(), 2, entry, found)) ||
+      !found || entry.name[0] != 'a') {
+    std::printf("procfs probe: iterate third entry failed\n");
+    return 1;
+  }
+  if (og::IsErr(root.value()->ops->iterate(root.value(), 3, entry, found)) ||
       found) {
     std::printf("procfs probe: iterate past end failed\n");
     return 1;

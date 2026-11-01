@@ -30,8 +30,14 @@ CXX="${CXX:-clang++}"
 
 "$CXX" -std=c++20 -O1 -Wall -Wextra -Werror \
   -I libs/core -I kernel/include \
-  tests/host/procfs_probe.cpp kernel/fs/procfs.cpp libs/core/memory.cpp \
-  libs/core/format.cpp \
+  tests/host/acpi_probe.cpp kernel/acpi/acpi.cpp libs/core/memory.cpp \
+  -o "$BUILD_DIR/acpi_probe"
+"$BUILD_DIR/acpi_probe"
+
+"$CXX" -std=c++20 -O1 -Wall -Wextra -Werror \
+  -I libs/core -I kernel/include \
+  tests/host/procfs_probe.cpp kernel/fs/procfs.cpp kernel/acpi/acpi.cpp \
+  libs/core/memory.cpp libs/core/format.cpp \
   -o "$BUILD_DIR/procfs_probe"
 "$BUILD_DIR/procfs_probe"
 
