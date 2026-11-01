@@ -21,26 +21,37 @@ constexpr uint64_t kMaxWriteChunk = 256;
 constexpr uint64_t kStdout = 1;
 constexpr uint64_t kResultError = static_cast<uint64_t>(-1);
 constexpr uint64_t kPageSize = 4096;
-constexpr uint64_t kUserMmapBase = 0x101000000ULL;
-constexpr uint64_t kUserMmapLimit = 0x102000000ULL;
+constexpr uint64_t kUserMmapLimit = mem::kUserSpaceBase + mem::kUserSpaceSize;
 
 bool g_user_exited = false;
-uint64_t g_mmap_next = kUserMmapBase;
+
+[[nodiscard]] mem::AddressSpace* CurrentSpace() noexcept {
+  sched::Thread* thread = sched::CurrentThread();
+  return thread == nullptr ? nullptr : thread->address_space;
+}
 
 [[nodiscard]] Status DoMmap(uint64_t size, uint64_t& result) noexcept {
   if (size == 0) {
     return Status::kInvalidArg;
   }
+  mem::AddressSpace* space = CurrentSpace();
+  if (space == nullptr) {
+    return Status::kNotInit;
+  }
+  if (size > mem::kUserSpaceSize) {
+    return Status::kInvalidArg;
+  }
   const uint64_t aligned = (size + kPageSize - 1U) & ~(kPageSize - 1U);
-  if (aligned > (kUserMmapLimit - g_mmap_next)) {
+  if (space->mmap_next >= kUserMmapLimit ||
+      aligned > (kUserMmapLimit - space->mmap_next)) {
     return Status::kNoMem;
   }
-  const uint64_t address = g_mmap_next;
-  const Status status = mem::VmmMapUser(address, aligned, false);
+  const uint64_t address = space->mmap_next;
+  const Status status = mem::VmmMapUser(*space, address, aligned, false);
   if (IsErr(status)) {
     return status;
   }
-  g_mmap_next += aligned;
+  space->mmap_next += aligned;
   result = address;
   return Status::kOk;
 }
@@ -49,8 +60,15 @@ uint64_t g_mmap_next = kUserMmapBase;
   if (size == 0) {
     return Status::kInvalidArg;
   }
+  mem::AddressSpace* space = CurrentSpace();
+  if (space == nullptr) {
+    return Status::kNotInit;
+  }
+  if (size > mem::kUserSpaceSize) {
+    return Status::kInvalidArg;
+  }
   const uint64_t aligned = (size + kPageSize - 1U) & ~(kPageSize - 1U);
-  const Status status = mem::VmmUnmapUser(address, aligned);
+  const Status status = mem::VmmUnmapUser(*space, address, aligned);
   if (IsErr(status)) {
     return status;
   }
@@ -69,8 +87,12 @@ uint64_t g_mmap_next = kUserMmapBase;
   }
   const uint64_t chunk = length > kMaxWriteChunk ? kMaxWriteChunk : length;
 
+  mem::AddressSpace* space = CurrentSpace();
+  if (space == nullptr) {
+    return Status::kNotInit;
+  }
   char text[kMaxWriteChunk + 1U];
-  const Status copy = mem::VmmCopyIn(user_buffer, text, chunk);
+  const Status copy = mem::VmmCopyIn(*space, user_buffer, text, chunk);
   if (IsErr(copy)) {
     LogHex(LogLevel::kError, "syscall: copy failed", static_cast<uint64_t>(copy));
     return copy;

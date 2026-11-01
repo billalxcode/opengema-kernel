@@ -13,6 +13,37 @@
 
 namespace og::mem {
 
+// User mappings live above the kernel identity map, in the level 0 slot
+// after the device and RAM slots. Each process gets its own level 0 table
+// there while the kernel entries stay shared.
+constexpr uint64_t kUserSpaceBase = 1ULL << 40U;   // 1 TiB
+constexpr uint64_t kUserSpaceSize = 1ULL << 39U;   // 512 GiB
+constexpr uint32_t kMaxUserRegions = 8;
+
+struct UserRegion {
+  uint64_t base;
+  uint64_t size;
+};
+
+struct AddressSpace {
+  uint64_t root;
+  uint64_t mmap_next;
+  uint16_t asid;
+  uint32_t region_count;
+  UserRegion regions[kMaxUserRegions];
+};
+
+// Builds a level 0 table that shares every kernel entry with the boot
+// address space and owns the user slot. The caller keeps the object alive.
+[[nodiscard]] Status AddressSpaceInit(AddressSpace& space) noexcept;
+
+// Frees user pages, user page tables, and the level 0 table. Kernel entries
+// are shared and stay untouched. The space must not be active.
+[[nodiscard]] Status AddressSpaceDestroy(AddressSpace& space) noexcept;
+
+// Installs the space on the current CPU. Null selects the kernel space.
+void AddressSpaceActivate(const AddressSpace* space) noexcept;
+
 // Builds the kernel identity map: everything below ram_base is device,
 // RAM is normal and executable. Activates the tables before returning.
 [[nodiscard]] Status VmmInit(const BootInfo& info) noexcept;
@@ -43,17 +74,27 @@ struct PageAttributes {
 // Reads back the permission bits of the page mapped at virtual_address.
 [[nodiscard]] Result<PageAttributes> VmmQueryAttributes(uint64_t virtual_address) noexcept;
 
-// Allocates and zeroes user accessible pages at virtual_address.
-[[nodiscard]] Status VmmMapUser(uint64_t virtual_address, uint64_t size, bool executable) noexcept;
+// Allocates and zeroes user accessible pages in the given address space.
+[[nodiscard]] Status VmmMapUser(AddressSpace& space, uint64_t virtual_address,
+                                uint64_t size, bool executable) noexcept;
 
 // Unmaps a user region and frees its physical frames. The range must match
 // a region created by VmmMapUser exactly.
-[[nodiscard]] Status VmmUnmapUser(uint64_t virtual_address, uint64_t size) noexcept;
+[[nodiscard]] Status VmmUnmapUser(AddressSpace& space, uint64_t virtual_address,
+                                  uint64_t size) noexcept;
 
-// Validated copies between kernel buffers and user mappings.
-[[nodiscard]] Status VmmCopyIn(uint64_t user_address, void* destination, uint64_t size) noexcept;
-[[nodiscard]] Status VmmCopyOut(uint64_t user_address, const void* source, uint64_t size) noexcept;
-[[nodiscard]] bool VmmUserContains(uint64_t user_address, uint64_t size) noexcept;
+// Validated copies between kernel buffers and user mappings. The copy walks
+// the page tables, so it does not depend on which space is active.
+[[nodiscard]] Status VmmCopyIn(const AddressSpace& space, uint64_t user_address,
+                               void* destination, uint64_t size) noexcept;
+[[nodiscard]] Status VmmCopyOut(const AddressSpace& space, uint64_t user_address,
+                                const void* source, uint64_t size) noexcept;
+[[nodiscard]] bool VmmUserContains(const AddressSpace& space, uint64_t user_address,
+                                   uint64_t size) noexcept;
+
+// Translation inside an explicit address space.
+[[nodiscard]] Result<uint64_t> VmmTranslateIn(const AddressSpace& space,
+                                              uint64_t virtual_address) noexcept;
 
 // Address of the level 0 table, used when bringing up secondary cores.
 [[nodiscard]] uint64_t VmmRootAddress() noexcept;

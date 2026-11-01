@@ -17,6 +17,8 @@ constexpr uint64_t kTcrT0Sz48 = 16;
 constexpr uint64_t kTcrIpsShift = 32;
 constexpr uint64_t kTcrIpsMask = 0x7ULL << kTcrIpsShift;
 constexpr uint64_t kTcrMaxIps = 5;
+constexpr uint64_t kTcrA1 = 1ULL << 22U;
+constexpr unsigned kTtbrAsidShift = 48U;
 constexpr uint64_t kTcrIrgn0Shift = 8;
 constexpr uint64_t kTcrOrgn0Shift = 10;
 constexpr uint64_t kTcrSh0Shift = 12;
@@ -49,6 +51,7 @@ Status ActivateAddressSpace(uint64_t ttbr0) noexcept {
   uint64_t tcr = ReadTcrEl1();
   tcr &= ~kTcrAttributeMask;
   tcr &= ~kTcrIpsMask;
+  tcr &= ~kTcrA1;
   tcr |= ips << kTcrIpsShift;
   tcr |= kTcrT0Sz48;
   tcr |= 1ULL << kTcrIrgn0Shift;
@@ -74,6 +77,14 @@ Status ActivateAddressSpace(uint64_t ttbr0) noexcept {
 
 bool IsMmuEnabled() noexcept {
   return (ReadSctlrEl1() & kSctlrMmuEnable) != 0;
+}
+
+void SwitchAddressSpace(uint64_t ttbr0, uint16_t asid) noexcept {
+  const uint64_t value = ttbr0 | (static_cast<uint64_t>(asid) << kTtbrAsidShift);
+  DsbSy();
+  WriteTtbr0El1(value);
+  DsbSy();
+  InstructionSync();
 }
 
 }  // namespace og::arch::aarch64

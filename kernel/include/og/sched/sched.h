@@ -9,6 +9,10 @@
 
 #include "og/core/status.h"
 
+namespace og::mem {
+struct AddressSpace;
+}
+
 namespace og::sched {
 
 enum class ThreadState : uint32_t {
@@ -47,6 +51,7 @@ struct Thread {
   Thread* next_ready;
   Thread* next_wait;
   WaitQueue* wait_owner;
+  mem::AddressSpace* address_space;
 };
 
 // Sleep/wake queue. A thread waits on at most one queue at a time.
@@ -64,6 +69,11 @@ struct WaitQueue {
 [[nodiscard]] Result<Thread*> ThreadCreate(const char* name, ThreadEntry entry,
                                            void* argument) noexcept;
 
+// Creates a thread that runs with a specific user address space installed.
+[[nodiscard]] Result<Thread*> ThreadCreateIn(const char* name, ThreadEntry entry,
+                                             void* argument,
+                                             mem::AddressSpace* space) noexcept;
+
 // Becomes a thread and switches to the first ready thread. Returns when
 // this thread is scheduled again.
 void SchedulerStart() noexcept;
@@ -79,6 +89,7 @@ void ThreadYield() noexcept;
 [[noreturn]] void ThreadExit() noexcept;
 
 [[nodiscard]] Thread* CurrentThread() noexcept;
+[[nodiscard]] bool ThreadFinished(const Thread* thread) noexcept;
 [[nodiscard]] uint32_t ThreadCount() noexcept;
 
 void WaitQueueInit(WaitQueue& queue) noexcept;

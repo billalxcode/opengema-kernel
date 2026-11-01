@@ -198,13 +198,15 @@ void Schedule() noexcept {
   }
 
   g_lock.unlock();
+  mem::AddressSpaceActivate(next->address_space);
   SwitchContext(&previous->saved_sp, next->saved_sp);
   arch::aarch64::IrqRestore(daif);
 }
 
 Result<Thread*> CreateThread(const char* name, ThreadEntry entry, void* argument,
                              bool enqueue, uint32_t requested_cpu,
-                             bool allocate_stack) noexcept {
+                             bool allocate_stack,
+                             mem::AddressSpace* address_space) noexcept {
   if (name == nullptr || entry == nullptr) {
     return Result<Thread*>::Err(Status::kInvalidArg);
   }
@@ -276,6 +278,7 @@ Result<Thread*> CreateThread(const char* name, ThreadEntry entry, void* argument
   slot->next_ready = nullptr;
   slot->next_wait = nullptr;
   slot->wait_owner = nullptr;
+  slot->address_space = address_space;
   slot->in_ready_queue = 0;
 
   const std::size_t length = mem::Length(name);
@@ -341,7 +344,7 @@ Status SchedulerInit() noexcept {
   g_cpu[0].initialized = 1;
 
   const Result<Thread*> idle =
-    CreateThread("idle", &IdleEntry, nullptr, false, 0, true);
+    CreateThread("idle", &IdleEntry, nullptr, false, 0, true, nullptr);
   if (idle.is_err()) {
     return idle.status();
   }
@@ -367,7 +370,7 @@ Status SchedulerInitCpu() noexcept {
   g_lock.unlock();
 
   const Result<Thread*> idle =
-    CreateThread("idle", &IdleEntry, nullptr, false, index, false);
+    CreateThread("idle", &IdleEntry, nullptr, false, index, false, nullptr);
   if (idle.is_err()) {
     return idle.status();
   }
@@ -389,7 +392,15 @@ Result<Thread*> ThreadCreate(const char* name, ThreadEntry entry,
   if (!g_initialized) {
     return Result<Thread*>::Err(Status::kNotInit);
   }
-  return CreateThread(name, entry, argument, true, kAnyCpu, true);
+  return CreateThread(name, entry, argument, true, kAnyCpu, true, nullptr);
+}
+
+Result<Thread*> ThreadCreateIn(const char* name, ThreadEntry entry, void* argument,
+                               mem::AddressSpace* space) noexcept {
+  if (!g_initialized) {
+    return Result<Thread*>::Err(Status::kNotInit);
+  }
+  return CreateThread(name, entry, argument, true, kAnyCpu, true, space);
 }
 
 void SchedulerStart() noexcept {
@@ -487,6 +498,16 @@ void ThreadExit() noexcept {
 
 Thread* CurrentThread() noexcept {
   return g_cpu[CpuIndex()].current;
+}
+
+bool ThreadFinished(const Thread* thread) noexcept {
+  if (thread == nullptr) {
+    return false;
+  }
+  g_lock.lock();
+  const bool finished = thread->state == ThreadState::kFinished;
+  g_lock.unlock();
+  return finished;
 }
 
 uint32_t ThreadCount() noexcept {

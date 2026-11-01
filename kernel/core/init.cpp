@@ -56,8 +56,8 @@ namespace {
 constexpr uint64_t kTargetTicks = 10;
 constexpr uint64_t kTimeoutSeconds = 20;
 constexpr uint64_t kSectorSize = 512;
-constexpr uint64_t kUserCodeVa = 0x100000000ULL;
-constexpr uint64_t kUserStackVa = 0x100100000ULL;
+constexpr uint64_t kUserCodeVa = mem::kUserSpaceBase;
+constexpr uint64_t kUserStackVa = mem::kUserSpaceBase + 0x100000ULL;
 constexpr uint64_t kUserStackSize = 16384;
 uint64_t g_work_runs = 0;
 uint64_t g_workers_done = 0;
@@ -75,6 +75,7 @@ drivers::virtio::Blk g_block_device;
 drivers::virtio::Gpu g_gpu;
 drivers::rtc::Pl031 g_rtc;
 io::Tee g_console_tee;
+mem::AddressSpace g_user_space;
 
 void InitRtc() noexcept {
   const platform::Platform& board = platform::Current();
@@ -168,6 +169,97 @@ void WorkerB(void* /*argument*/) noexcept {
   ++g_workers_done;
 }
 
+constexpr uint64_t kAddressSpaceTestVa = mem::kUserSpaceBase + 0x3000000ULL;
+
+struct AddressSpaceTestState {
+  uint64_t expected;
+  uint64_t observed;
+  uint32_t done;
+};
+
+mem::AddressSpace g_as_a;
+mem::AddressSpace g_as_b;
+AddressSpaceTestState g_as_state_a{};
+AddressSpaceTestState g_as_state_b{};
+
+void AddressSpaceWorker(void* argument) noexcept {
+  auto* state = static_cast<AddressSpaceTestState*>(argument);
+  uint64_t observed = 0;
+  mem::Copy(&observed, reinterpret_cast<const void*>(kAddressSpaceTestVa),
+            sizeof(observed));
+  state->observed = observed;
+  __atomic_store_n(&state->done, 1U, __ATOMIC_RELEASE);
+}
+
+void RunAddressSpaceTest() noexcept {
+  Status status = mem::AddressSpaceInit(g_as_a);
+  if (IsErr(status)) {
+    Panic("mem: address space a init failed");
+  }
+  status = mem::AddressSpaceInit(g_as_b);
+  if (IsErr(status)) {
+    Panic("mem: address space b init failed");
+  }
+
+  constexpr uint64_t kValueA = 0x1122334455667788ULL;
+  constexpr uint64_t kValueB = 0x99AABBCCDDEEFF00ULL;
+  status = mem::VmmMapUser(g_as_a, kAddressSpaceTestVa, 4096, false);
+  if (IsErr(status)) {
+    Panic("mem: address space a map failed");
+  }
+  status = mem::VmmMapUser(g_as_b, kAddressSpaceTestVa, 4096, false);
+  if (IsErr(status)) {
+    Panic("mem: address space b map failed");
+  }
+  status = mem::VmmCopyOut(g_as_a, kAddressSpaceTestVa, &kValueA, sizeof(kValueA));
+  if (IsErr(status)) {
+    Panic("mem: address space a copy failed");
+  }
+  status = mem::VmmCopyOut(g_as_b, kAddressSpaceTestVa, &kValueB, sizeof(kValueB));
+  if (IsErr(status)) {
+    Panic("mem: address space b copy failed");
+  }
+
+  g_as_state_a.expected = kValueA;
+  g_as_state_a.done = 0;
+  g_as_state_b.expected = kValueB;
+  g_as_state_b.done = 0;
+
+  const Result<sched::Thread*> thread_a =
+    sched::ThreadCreateIn("as-a", &AddressSpaceWorker, &g_as_state_a, &g_as_a);
+  const Result<sched::Thread*> thread_b =
+    sched::ThreadCreateIn("as-b", &AddressSpaceWorker, &g_as_state_b, &g_as_b);
+  if (thread_a.is_err() || thread_b.is_err()) {
+    Panic("mem: address space thread create failed");
+  }
+
+  uint32_t waits = 0;
+  while ((__atomic_load_n(&g_as_state_a.done, __ATOMIC_ACQUIRE) == 0U ||
+          __atomic_load_n(&g_as_state_b.done, __ATOMIC_ACQUIRE) == 0U) &&
+         waits < 1000U) {
+    (void)sched::ThreadSleep(1);
+    ++waits;
+  }
+  if (__atomic_load_n(&g_as_state_a.done, __ATOMIC_ACQUIRE) == 0U ||
+      __atomic_load_n(&g_as_state_b.done, __ATOMIC_ACQUIRE) == 0U) {
+    Panic("mem: address space workers did not finish");
+  }
+  if (g_as_state_a.observed != kValueA || g_as_state_b.observed != kValueB) {
+    Panic("mem: address spaces overlap");
+  }
+
+  waits = 0;
+  while ((!sched::ThreadFinished(thread_a.value()) ||
+          !sched::ThreadFinished(thread_b.value())) &&
+         waits < 1000U) {
+    (void)sched::ThreadSleep(1);
+    ++waits;
+  }
+  (void)mem::AddressSpaceDestroy(g_as_a);
+  (void)mem::AddressSpaceDestroy(g_as_b);
+  Log(LogLevel::kInfo, "mem: address space switch ok\n");
+}
+
 void UserThreadEntry(void* /*argument*/) noexcept {
   arch::aarch64::EnterUserMode(kUserCodeVa, kUserStackVa + kUserStackSize);
 }
@@ -202,17 +294,24 @@ Status LoadUserProgram() noexcept {
   }
 
   const uint64_t code_size = (size + 4095U) & ~4095U;
-  status = mem::VmmMapUser(kUserCodeVa, code_size, true);
+  if (g_user_space.root == 0) {
+    status = mem::AddressSpaceInit(g_user_space);
+    if (IsErr(status)) {
+      (void)mem::HeapFree(buffer.value());
+      return status;
+    }
+  }
+  status = mem::VmmMapUser(g_user_space, kUserCodeVa, code_size, true);
   if (IsErr(status)) {
     (void)mem::HeapFree(buffer.value());
     return status;
   }
-  status = mem::VmmCopyOut(kUserCodeVa, buffer.value(), size);
+  status = mem::VmmCopyOut(g_user_space, kUserCodeVa, buffer.value(), size);
   (void)mem::HeapFree(buffer.value());
   if (IsErr(status)) {
     return status;
   }
-  status = mem::VmmMapUser(kUserStackVa, kUserStackSize, false);
+  status = mem::VmmMapUser(g_user_space, kUserStackVa, kUserStackSize, false);
   if (IsErr(status)) {
     return status;
   }
@@ -797,6 +896,8 @@ void kmain(BootInfo* info) noexcept {
   }
   Log(LogLevel::kInfo, "sched: round robin ok\n");
 
+  RunAddressSpaceTest();
+
   g_test_mutex.set_name("self-test");
   g_test_semaphore.init(0);
   if (sched::ThreadCreate("mutex-a", &MutexWorker, nullptr).is_err() ||
@@ -876,7 +977,7 @@ void kmain(BootInfo* info) noexcept {
   }
   syscall::SyscallInit();
   const Result<sched::Thread*> user_thread =
-    sched::ThreadCreate("user", &UserThreadEntry, nullptr);
+    sched::ThreadCreateIn("user", &UserThreadEntry, nullptr, &g_user_space);
   if (user_thread.is_err()) {
     Panic("user: thread create failed");
   }
@@ -894,6 +995,12 @@ void kmain(BootInfo* info) noexcept {
     Panic("user: exit not reached");
   }
   Log(LogLevel::kInfo, "user: exit ok\n");
+  uint32_t exit_waits = 0;
+  while (!sched::ThreadFinished(user_thread.value()) && exit_waits < 1000U) {
+    (void)sched::ThreadSleep(1);
+    ++exit_waits;
+  }
+  (void)mem::AddressSpaceDestroy(g_user_space);
 
   (void)PrintLn("kernel: halt");
   arch::aarch64::HaltForever();

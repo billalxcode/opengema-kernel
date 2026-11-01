@@ -13,6 +13,10 @@ namespace og::arch::aarch64 {
 // data cache, and instruction cache. ttbr0 must be page aligned.
 [[nodiscard]] Status ActivateAddressSpace(uint64_t ttbr0) noexcept;
 
+// Switches the active user table with an ASID tag. Kernel entries are shared
+// by every table, so this is safe to call with interrupts disabled.
+void SwitchAddressSpace(uint64_t ttbr0, uint16_t asid) noexcept;
+
 [[nodiscard]] bool IsMmuEnabled() noexcept;
 
 }  // namespace og::arch::aarch64

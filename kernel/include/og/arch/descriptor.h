@@ -18,6 +18,7 @@ constexpr uint64_t kDescriptorBlock = 1ULL << 0U;
 constexpr uint64_t kDescriptorPage = 3ULL << 0U;
 constexpr uint64_t kAttrIndexShift = 2;
 constexpr uint64_t kAccessFlag = 1ULL << 10U;
+constexpr uint64_t kNonGlobal = 1ULL << 11U;
 constexpr uint64_t kShareInner = 3ULL << 8U;
 constexpr uint64_t kPxn = 1ULL << 53U;
 constexpr uint64_t kUxn = 1ULL << 54U;
@@ -73,7 +74,7 @@ enum class MemoryKind : uint32_t {
     descriptor |= kPxn | kUxn;
   }
   if (user) {
-    descriptor |= kApUserRw | kPxn;
+    descriptor |= kApUserRw | kPxn | kNonGlobal;
   }
   return descriptor;
 }
@@ -92,7 +93,7 @@ enum class MemoryKind : uint32_t {
     descriptor |= kPxn | kUxn;
   }
   if (user) {
-    descriptor |= kApUserRw | kPxn;
+    descriptor |= kApUserRw | kPxn | kNonGlobal;
   }
   return descriptor;
 }

@@ -39,7 +39,7 @@ add_custom_command(
   OUTPUT ${OG_GEMABOX_BIN}
   COMMAND ${CMAKE_C_COMPILER} --target=aarch64-linux-gnu -ffreestanding -nostdlib
           -c ${CMAKE_SOURCE_DIR}/pubs/gemabox/main.S -o ${OG_GEMABOX_OBJECT}
-  COMMAND ${OG_GEMABOX_LD} -Ttext=0x100000000 -e _start ${OG_GEMABOX_OBJECT}
+  COMMAND ${OG_GEMABOX_LD} -Ttext=0x10000000000 -e _start ${OG_GEMABOX_OBJECT}
           -o ${OG_GEMABOX_ELF}
   COMMAND ${OG_GEMABOX_OBJCOPY} -O binary ${OG_GEMABOX_ELF} ${OG_GEMABOX_BIN}
   DEPENDS ${CMAKE_SOURCE_DIR}/pubs/gemabox/main.S
