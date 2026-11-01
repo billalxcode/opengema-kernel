@@ -100,6 +100,8 @@ count_check() {
 count_check "hello from el0" 2
 count_check "file ok" 2
 count_check "mmap ok" 2
+count_check "child ok" 2
+count_check "spawn ok" 2
 count_check "user: exit status: 0" 2
 
 if [ "$SCREEN_STATUS" -ne 0 ]; then
