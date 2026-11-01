@@ -16,11 +16,14 @@ fail() {
 }
 
 # Layer rank per source path. Higher may include lower only.
+# kernel/core/init.cpp is the composition root: it is the one place allowed
+# to pull every module together.
 rank_of_path() {
   case "$1" in
     libs/*) echo 0 ;;
     kernel/arch/*) echo 1 ;;
     kernel/io/*) echo 2 ;;
+    kernel/core/init.cpp) echo 14 ;;
     kernel/core/*) echo 3 ;;
     kernel/mem/*) echo 4 ;;
     kernel/events/*) echo 5 ;;
@@ -45,6 +48,7 @@ rank_of_header() {
     og/arch/*) echo 1 ;;
     og/mmu.h) echo 1 ;;
     og/mmio.h | og/console.h | og/print.h | og/register.h) echo 2 ;;
+    og/pmm.h | og/vmm.h | og/heap.h | og/mem_selftest.h) echo 4 ;;
     og/memory_map.h) echo 13 ;;
     og/uart.h) echo 8 ;;
     *) echo -1 ;;

@@ -1,0 +1,292 @@
+#include "og/vmm.h"
+
+#include "memory.h"
+#include "og/arch/cache.h"
+#include "og/arch/descriptor.h"
+#include "og/arch/tlb.h"
+#include "og/mmu.h"
+#include "og/pmm.h"
+
+namespace og::mem {
+
+namespace {
+
+using arch::aarch64::BlockDescriptor;
+using arch::aarch64::DescriptorAddress;
+using arch::aarch64::DescriptorIsBlock;
+using arch::aarch64::DescriptorIsTable;
+using arch::aarch64::DescriptorValid;
+using arch::aarch64::kBlockSize1G;
+using arch::aarch64::kBlockSize2M;
+using arch::aarch64::MemoryKind;
+using arch::aarch64::PageDescriptor;
+using arch::aarch64::TableDescriptor;
+
+constexpr uint64_t kTableEntries = 512;
+
+uint64_t* g_root = nullptr;
+
+[[nodiscard]] uint64_t Index(uint64_t virtual_address, unsigned level) noexcept {
+  const unsigned shift = 39U - (level * 9U);
+  return (virtual_address >> shift) & (kTableEntries - 1U);
+}
+
+[[nodiscard]] Result<uint64_t*> NextTable(uint64_t* table, uint64_t index) noexcept {
+  const uint64_t descriptor = table[index];
+  if (DescriptorValid(descriptor)) {
+    if (!DescriptorIsTable(descriptor)) {
+      return Result<uint64_t*>::Err(Status::kExists);
+    }
+    return Result<uint64_t*>::Ok(reinterpret_cast<uint64_t*>(DescriptorAddress(descriptor)));
+  }
+
+  const Result<uint64_t> frame = PmmAllocPage();
+  if (frame.is_err()) {
+    return Result<uint64_t*>::Err(frame.status());
+  }
+  const uint64_t address = frame.value();
+  auto* fresh = reinterpret_cast<uint64_t*>(address);
+  mem::Zero(fresh, kPageSize);
+  table[index] = TableDescriptor(address);
+  arch::aarch64::CleanInvalidateDcacheRange(address, address + kPageSize);
+  return Result<uint64_t*>::Ok(fresh);
+}
+
+[[nodiscard]] Status MapChunk(uint64_t virtual_address, uint64_t physical_address, uint64_t size,
+                             MemoryKind kind, bool executable) noexcept {
+  uint64_t* table = g_root;
+  for (unsigned level = 0; level < 3; ++level) {
+    const uint64_t index = Index(virtual_address, level);
+    if (level == 1 && size == kBlockSize1G) {
+      if (DescriptorValid(table[index])) {
+        return Status::kExists;
+      }
+      table[index] = BlockDescriptor(physical_address, kind, executable);
+      return Status::kOk;
+    }
+    if (level == 2 && size == kBlockSize2M) {
+      if (DescriptorValid(table[index])) {
+        return Status::kExists;
+      }
+      table[index] = BlockDescriptor(physical_address, kind, executable);
+      return Status::kOk;
+    }
+    const Result<uint64_t*> next = NextTable(table, index);
+    if (next.is_err()) {
+      return next.status();
+    }
+    table = next.value();
+  }
+
+  const uint64_t index = Index(virtual_address, 3);
+  if (DescriptorValid(table[index])) {
+    return Status::kExists;
+  }
+  table[index] = PageDescriptor(physical_address, kind, executable);
+  return Status::kOk;
+}
+
+[[nodiscard]] Status UnmapChunk(uint64_t virtual_address, uint64_t size) noexcept {
+  uint64_t* table = g_root;
+  for (unsigned level = 0; level < 3; ++level) {
+    const uint64_t index = Index(virtual_address, level);
+    if (level == 1 && size == kBlockSize1G) {
+      if (!DescriptorValid(table[index])) {
+        return Status::kNotFound;
+      }
+      table[index] = 0;
+      return Status::kOk;
+    }
+    if (level == 2 && size == kBlockSize2M) {
+      if (!DescriptorValid(table[index])) {
+        return Status::kNotFound;
+      }
+      table[index] = 0;
+      return Status::kOk;
+    }
+    if (!DescriptorValid(table[index])) {
+      return Status::kNotFound;
+    }
+    if (!DescriptorIsTable(table[index])) {
+      return Status::kInvalidArg;
+    }
+    table = reinterpret_cast<uint64_t*>(DescriptorAddress(table[index]));
+  }
+
+  const uint64_t index = Index(virtual_address, 3);
+  if (!DescriptorValid(table[index])) {
+    return Status::kNotFound;
+  }
+  table[index] = 0;
+  return Status::kOk;
+}
+
+[[nodiscard]] uint64_t ChunkSize(uint64_t virtual_address, uint64_t physical_address,
+                                uint64_t remaining) noexcept {
+  if (((virtual_address % kBlockSize1G) == 0) && ((physical_address % kBlockSize1G) == 0) &&
+      remaining >= kBlockSize1G) {
+    return kBlockSize1G;
+  }
+  if (((virtual_address % kBlockSize2M) == 0) && ((physical_address % kBlockSize2M) == 0) &&
+      remaining >= kBlockSize2M) {
+    return kBlockSize2M;
+  }
+  return kPageSize;
+}
+
+[[nodiscard]] Status MapRange(uint64_t virtual_address, uint64_t physical_address, uint64_t size,
+                             MemoryKind kind, bool executable) noexcept {
+  uint64_t offset = 0;
+  while (offset < size) {
+    const uint64_t current_virtual = virtual_address + offset;
+    const uint64_t current_physical = physical_address + offset;
+    const uint64_t remaining = size - offset;
+    const uint64_t step = ChunkSize(current_virtual, current_physical, remaining);
+    const Status status =
+      MapChunk(current_virtual, current_physical, step, kind, executable);
+    if (IsErr(status)) {
+      return status;
+    }
+    arch::aarch64::InvalidateTlbVaLocal(current_virtual);
+    offset += step;
+  }
+  arch::aarch64::InvalidateTlbSync();
+  return Status::kOk;
+}
+
+[[nodiscard]] Status UnmapRange(uint64_t virtual_address, uint64_t size) noexcept {
+  uint64_t offset = 0;
+  while (offset < size) {
+    const uint64_t current = virtual_address + offset;
+    const uint64_t remaining = size - offset;
+    uint64_t step = kPageSize;
+    if (((current % kBlockSize1G) == 0) && remaining >= kBlockSize1G) {
+      step = kBlockSize1G;
+    } else if (((current % kBlockSize2M) == 0) && remaining >= kBlockSize2M) {
+      step = kBlockSize2M;
+    }
+    const Status status = UnmapChunk(current, step);
+    if (IsErr(status)) {
+      return status;
+    }
+    arch::aarch64::InvalidateTlbVaLocal(current);
+    offset += step;
+  }
+  arch::aarch64::InvalidateTlbSync();
+  return Status::kOk;
+}
+
+}  // namespace
+
+Status VmmInit(const BootInfo& info) noexcept {
+  if (g_root != nullptr) {
+    return Status::kOk;
+  }
+  if (info.ram_base == 0) {
+    return Status::kInvalidArg;
+  }
+  if (info.ram_size == 0) {
+    return Status::kInvalidArg;
+  }
+  if ((info.ram_base % kBlockSize1G) != 0) {
+    return Status::kUnaligned;
+  }
+
+  const Result<uint64_t> root = PmmAllocPage();
+  if (root.is_err()) {
+    return root.status();
+  }
+  auto* tables = reinterpret_cast<uint64_t*>(root.value());
+  mem::Zero(tables, kPageSize);
+  g_root = tables;
+
+  // Device space below RAM, then RAM itself.
+  Status status = MapRange(0, 0, info.ram_base, MemoryKind::kDevice, false);
+  if (IsErr(status)) {
+    return status;
+  }
+  status = MapRange(info.ram_base, info.ram_base, info.ram_size, MemoryKind::kNormal, true);
+  if (IsErr(status)) {
+    return status;
+  }
+
+  return arch::aarch64::ActivateAddressSpace(root.value());
+}
+
+Status VmmMap(uint64_t virtual_address, uint64_t physical_address, uint64_t size,
+              MemoryKind kind, bool executable) noexcept {
+  if (g_root == nullptr) {
+    return Status::kNotInit;
+  }
+  if (size == 0) {
+    return Status::kInvalidArg;
+  }
+  if ((virtual_address % kPageSize) != 0) {
+    return Status::kUnaligned;
+  }
+  if ((physical_address % kPageSize) != 0) {
+    return Status::kUnaligned;
+  }
+  if ((size % kPageSize) != 0) {
+    return Status::kInvalidArg;
+  }
+  if ((virtual_address + size) < virtual_address) {
+    return Status::kInvalidArg;
+  }
+  if ((physical_address + size) < physical_address) {
+    return Status::kInvalidArg;
+  }
+  return MapRange(virtual_address, physical_address, size, kind, executable);
+}
+
+Status VmmUnmap(uint64_t virtual_address, uint64_t size) noexcept {
+  if (g_root == nullptr) {
+    return Status::kNotInit;
+  }
+  if (size == 0) {
+    return Status::kInvalidArg;
+  }
+  if ((virtual_address % kPageSize) != 0) {
+    return Status::kUnaligned;
+  }
+  if ((size % kPageSize) != 0) {
+    return Status::kInvalidArg;
+  }
+  return UnmapRange(virtual_address, size);
+}
+
+Result<uint64_t> VmmTranslate(uint64_t virtual_address) noexcept {
+  if (g_root == nullptr) {
+    return Result<uint64_t>::Err(Status::kNotInit);
+  }
+
+  uint64_t* table = g_root;
+  for (unsigned level = 0; level < 3; ++level) {
+    const uint64_t descriptor = table[Index(virtual_address, level)];
+    if (!DescriptorValid(descriptor)) {
+      return Result<uint64_t>::Err(Status::kNotFound);
+    }
+    if (level >= 1 && DescriptorIsBlock(descriptor)) {
+      const uint64_t block = (level == 1) ? kBlockSize1G : kBlockSize2M;
+      return Result<uint64_t>::Ok(DescriptorAddress(descriptor) |
+                                  (virtual_address & (block - 1U)));
+    }
+    if (!DescriptorIsTable(descriptor)) {
+      return Result<uint64_t>::Err(Status::kNotFound);
+    }
+    table = reinterpret_cast<uint64_t*>(DescriptorAddress(descriptor));
+  }
+
+  const uint64_t descriptor = table[Index(virtual_address, 3)];
+  if (!DescriptorValid(descriptor)) {
+    return Result<uint64_t>::Err(Status::kNotFound);
+  }
+  return Result<uint64_t>::Ok(DescriptorAddress(descriptor) |
+                              (virtual_address & (kPageSize - 1U)));
+}
+
+bool VmmReady() noexcept {
+  return g_root != nullptr;
+}
+
+}  // namespace og::mem

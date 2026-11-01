@@ -2,11 +2,14 @@
 #include "og/arch/registers.h"
 #include "og/arch/trap.h"
 #include "og/bootinfo.h"
+#include "og/heap.h"
 #include "og/log.h"
-#include "og/mmu.h"
+#include "og/mem_selftest.h"
 #include "og/panic.h"
+#include "og/pmm.h"
 #include "og/print.h"
 #include "og/status.h"
+#include "og/vmm.h"
 
 namespace og {
 
@@ -29,16 +32,31 @@ void kmain(BootInfo* info) noexcept {
   Log(LogLevel::kInfo, "kernel: kmain entered\n");
   LogDec(LogLevel::kInfo, "current el", arch::aarch64::CurrentEl());
   LogDec(LogLevel::kInfo, "cpu id", arch::aarch64::CpuId());
-  LogDec(LogLevel::kInfo, "memory ranges", info->memory_count);
   (void)PrintHex("uart base", info->uart_base);
 
-  arch::aarch64::Mmu mmu;
-  const Status mmu_status = mmu.init_identity(info->ram_base, info->ram_size);
-  if (IsErr(mmu_status)) {
-    Log(LogLevel::kError, "mmu: identity map failed\n");
-  } else {
-    Log(LogLevel::kInfo, "mmu: identity map active\n");
+  Status status = mem::PmmInit(*info);
+  if (IsErr(status)) {
+    Panic("mem: pmm init failed");
   }
+  LogDec(LogLevel::kInfo, "pmm: total frames", mem::PmmTotalFrames());
+  LogDec(LogLevel::kInfo, "pmm: free frames", mem::PmmFreeFrames());
+
+  status = mem::VmmInit(*info);
+  if (IsErr(status)) {
+    Panic("mem: vmm init failed");
+  }
+  Log(LogLevel::kInfo, "vmm: identity map active\n");
+
+  status = mem::HeapInit();
+  if (IsErr(status)) {
+    Panic("mem: heap init failed");
+  }
+
+  status = mem::RunSelfTest();
+  if (IsErr(status)) {
+    Panic("mem: self test failed");
+  }
+  Log(LogLevel::kInfo, "mem: self test passed\n");
 
   (void)PrintLn("kernel: halt");
   arch::aarch64::HaltForever();

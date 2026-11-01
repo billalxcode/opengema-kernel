@@ -1,7 +1,7 @@
 #pragma once
 
-// Kernel page tables. Phase 2 scope: identity map of RAM plus device space
-// below 1 GiB. Phase 3 replaces the policy with a real virtual memory manager.
+// Canonical owner of MMU activation. The virtual memory manager owns the
+// tables; this layer only programs MAIR, TCR, TTBR0, and SCTLR.
 
 #include <cstdint>
 
@@ -9,23 +9,10 @@
 
 namespace og::arch::aarch64 {
 
-class Mmu {
- public:
-  Mmu() noexcept = default;
-  ~Mmu() noexcept = default;
+// Installs ttbr0 as the EL1 translation table base and enables the MMU,
+// data cache, and instruction cache. ttbr0 must be page aligned.
+[[nodiscard]] Status ActivateAddressSpace(uint64_t ttbr0) noexcept;
 
-  Mmu(const Mmu&) = delete;
-  Mmu& operator=(const Mmu&) = delete;
-
-  // Installs identity tables covering [ram_base, ram_base + ram_size) as
-  // Normal write back memory, and everything below ram_base as Device.
-  // ram_base must be 1 GiB aligned.
-  [[nodiscard]] Status init_identity(uint64_t ram_base, uint64_t ram_size) noexcept;
-
-  [[nodiscard]] bool is_enabled() const noexcept { return enabled_; }
-
- private:
-  bool enabled_ = false;
-};
+[[nodiscard]] bool IsMmuEnabled() noexcept;
 
 }  // namespace og::arch::aarch64

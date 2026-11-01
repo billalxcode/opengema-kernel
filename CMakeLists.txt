@@ -70,13 +70,21 @@ og_add_module(og_core
   SOURCES kernel/core/log.cpp kernel/core/panic.cpp
   DEPS og_io og_inc_kernel)
 
+og_add_module(og_mem
+  SOURCES
+    kernel/mem/pmm.cpp
+    kernel/mem/vmm.cpp
+    kernel/mem/heap.cpp
+    kernel/mem/self_test.cpp
+  DEPS og_core og_inc_kernel)
+
 og_add_module(og_drivers
   SOURCES kernel/drivers/uart/pl011.cpp
   DEPS og_core og_inc_kernel)
 
 og_add_module(og_kernel
   SOURCES kernel/core/init.cpp
-  DEPS og_drivers og_inc_kernel)
+  DEPS og_mem og_inc_kernel)
 
 og_add_module(og_boot
   SOURCES
@@ -91,6 +99,7 @@ set(OG_IMAGE_OBJECTS
   $<TARGET_OBJECTS:og_boot>
   $<TARGET_OBJECTS:og_kernel>
   $<TARGET_OBJECTS:og_drivers>
+  $<TARGET_OBJECTS:og_mem>
   $<TARGET_OBJECTS:og_core>
   $<TARGET_OBJECTS:og_io>
   $<TARGET_OBJECTS:og_arch>
@@ -107,7 +116,7 @@ add_custom_command(
     /out:${CMAKE_BINARY_DIR}/BOOTAA64.EFI
     ${OG_IMAGE_OBJECTS}
   COMMAND_EXPAND_LISTS
-  DEPENDS og_boot og_kernel og_drivers og_core og_io og_arch og_lib_core
+  DEPENDS og_boot og_kernel og_drivers og_mem og_core og_io og_arch og_lib_core
   COMMENT "lld-link BOOTAA64.EFI"
 )
 
