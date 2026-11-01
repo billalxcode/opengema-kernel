@@ -16,6 +16,14 @@ python3 "$ROOT/scripts/mkgslimg.py" --verify "$TMP/a.img" >/dev/null
 python3 "$ROOT/scripts/mkgslimg.py" "$TMP/root" "$TMP/b.img" >/dev/null
 cmp "$TMP/a.img" "$TMP/b.img"
 
+CXX="${CXX:-clang++}"
+"$CXX" -std=c++20 -O1 -Wall -Wextra -Werror \
+  -I "$ROOT/libs/core" -I "$ROOT/kernel/include" \
+  "$ROOT/tests/host/gslfs_probe.cpp" "$ROOT/kernel/fs/gslfs.cpp" \
+  "$ROOT/libs/core/memory.cpp" \
+  -o "$TMP/gslfs_probe"
+"$TMP/gslfs_probe" "$TMP/a.img"
+
 python3 - "$TMP/a.img" "$TMP/corrupt.img" <<'PY'
 import struct
 import sys
