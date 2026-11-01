@@ -20,9 +20,12 @@
 #include "og/panic.h"
 #include "og/partition.h"
 #include "og/pci.h"
+#include "og/platform.h"
 #include "og/pmm.h"
 #include "og/print.h"
+#include "og/psci.h"
 #include "og/sched.h"
+#include "og/smp.h"
 #include "og/status.h"
 #include "og/syscall.h"
 #include "og/timer.h"
@@ -50,7 +53,13 @@ constexpr uint64_t kUserStackVa = 0x100100000ULL;
 constexpr uint64_t kUserStackSize = 16384;
 uint64_t g_work_runs = 0;
 uint64_t g_workers_done = 0;
+uint64_t g_ipi_count = 0;
 drivers::virtio::Blk g_block_device;
+
+Status IpiHandler(void* /*context*/, uint32_t /*irq*/) noexcept {
+  __atomic_add_fetch(&g_ipi_count, 1U, __ATOMIC_RELAXED);
+  return Status::kOk;
+}
 
 void CountWork(void* /*context*/) noexcept {
   ++g_work_runs;
@@ -325,6 +334,42 @@ void kmain(BootInfo* info) noexcept {
   }
   events::SetInterruptController(drivers::irq::MakeController(gic));
   Log(LogLevel::kInfo, "gic: ready\n");
+
+  status = psci::PsciInit();
+  if (IsErr(status)) {
+    Log(LogLevel::kWarn, "psci: not available\n");
+  } else {
+    LogDec(LogLevel::kInfo, "psci: version", psci::Version());
+    status = smp::SmpInit();
+    if (IsErr(status)) {
+      Log(LogLevel::kError, "smp: init failed\n");
+    } else {
+      status = events::RegisterIrq(smp::kIpiIrq, &IpiHandler, nullptr);
+      if (IsErr(status)) {
+        Log(LogLevel::kError, "smp: ipi register failed\n");
+      }
+      status = smp::StartSecondaries();
+      if (IsErr(status)) {
+        LogHex(LogLevel::kError, "smp: start status", static_cast<uint64_t>(status));
+      } else {
+        LogDec(LogLevel::kInfo, "smp: cpus online", smp::OnlineCount());
+        drivers::irq::Gicv3::SendSgi(smp::kIpiIrq, 1);
+
+        const uint64_t ipi_start = arch::aarch64::ReadCntpctEl0();
+        const uint64_t ipi_timeout = arch::aarch64::ReadCntfrqEl0() * 2ULL;
+        while (__atomic_load_n(&g_ipi_count, __ATOMIC_ACQUIRE) == 0U) {
+          if ((arch::aarch64::ReadCntpctEl0() - ipi_start) > ipi_timeout) {
+            break;
+          }
+        }
+        const uint64_t ipis = __atomic_load_n(&g_ipi_count, __ATOMIC_ACQUIRE);
+        LogDec(LogLevel::kInfo, "smp: ipi count", ipis);
+        if (ipis == 0U) {
+          Log(LogLevel::kError, "smp: ipi not received\n");
+        }
+      }
+    }
+  }
 
   status = time::TimerInit();
   if (IsErr(status)) {

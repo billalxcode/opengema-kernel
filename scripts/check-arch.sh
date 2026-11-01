@@ -57,6 +57,7 @@ rank_of_header() {
     og/block_device.h | og/vfs.h | og/fat32.h | og/devfs.h | og/partition.h) echo 9 ;;
     og/sched.h) echo 10 ;;
     og/syscall.h) echo 12 ;;
+    og/platform.h | og/psci.h | og/smp.h) echo 13 ;;
     og/memory_map.h) echo 13 ;;
     og/uart.h) echo 8 ;;
     *) echo -1 ;;

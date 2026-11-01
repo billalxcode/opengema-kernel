@@ -1,5 +1,6 @@
 #include "og/irq.h"
 
+#include "og/arch/cpu.h"
 #include "og/arch/spinlock.h"
 #include "og/workqueue.h"
 
@@ -12,13 +13,19 @@ struct IrqEntry {
   void* context;
 };
 
+constexpr uint32_t kMaxCpuHooks = 4;
+
 IrqEntry g_table[kMaxIrq];
 InterruptController g_controller{};
 arch::aarch64::IrqSpinlock g_table_lock;
-IrqExitHook g_exit_hook = nullptr;
-void* g_exit_context = nullptr;
+IrqExitHook g_exit_hooks[kMaxCpuHooks];
+void* g_exit_contexts[kMaxCpuHooks];
 SyncHook g_sync_hook = nullptr;
 void* g_sync_context = nullptr;
+
+[[nodiscard]] uint32_t HookIndex() noexcept {
+  return static_cast<uint32_t>(arch::aarch64::CpuId() & (kMaxCpuHooks - 1U));
+}
 
 }  // namespace
 
@@ -27,8 +34,9 @@ void SetInterruptController(InterruptController controller) noexcept {
 }
 
 void SetIrqExitHook(IrqExitHook hook, void* context) noexcept {
-  g_exit_hook = hook;
-  g_exit_context = context;
+  const uint32_t index = HookIndex();
+  g_exit_hooks[index] = hook;
+  g_exit_contexts[index] = context;
 }
 
 void SetSyncHook(SyncHook hook, void* context) noexcept {
@@ -100,8 +108,9 @@ Status HandleIrq() noexcept {
   const Status status = DispatchIrq(irq);
   g_controller.end(g_controller.context, irq);
   (void)RunPendingWork();
-  if (g_exit_hook != nullptr) {
-    g_exit_hook(g_exit_context);
+  const uint32_t index = HookIndex();
+  if (g_exit_hooks[index] != nullptr) {
+    g_exit_hooks[index](g_exit_contexts[index]);
   }
   return status;
 }
