@@ -3,6 +3,7 @@
 #include "gemapi/fs.h"
 #include "gemapi/io.h"
 #include "gemapi/process.h"
+#include "gemapi/system.h"
 
 namespace {
 
@@ -200,6 +201,21 @@ CommandResult RunAcpi(const char* /*args*/, gemapi::usize /*args_length*/) {
   return CommandResult::kContinue;
 }
 
+CommandResult RunShutdown(const char* /*args*/,
+                          gemapi::usize /*args_length*/) {
+  if (gemapi::system::shutdown() != gemapi::Status::ok) {
+    gemapi::io::write("shutdown: not supported\n");
+  }
+  return CommandResult::kContinue;
+}
+
+CommandResult RunReboot(const char* /*args*/, gemapi::usize /*args_length*/) {
+  if (gemapi::system::reboot() != gemapi::Status::ok) {
+    gemapi::io::write("reboot: not supported\n");
+  }
+  return CommandResult::kContinue;
+}
+
 constexpr Command kCommands[] = {
   {"help", &RunHelp},
   {"echo", &RunEcho},
@@ -208,6 +224,8 @@ constexpr Command kCommands[] = {
   {"clear", &RunClear},
   {"acpi", &RunAcpi},
   {"halt", &RunHalt},
+  {"shutdown", &RunShutdown},
+  {"reboot", &RunReboot},
 };
 
 constexpr gemapi::usize kCommandCount =

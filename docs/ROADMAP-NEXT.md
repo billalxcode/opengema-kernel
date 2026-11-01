@@ -21,7 +21,7 @@ Prioritas: P0 blocker, P1 penting, P2 menengah, P3 nanti.
 | TLB dan SMP | ASID dipakai, AS dipin ke satu core | TLB shootdown lintas core, ASID reuse yang aman, 4 core test | Mappings kernel/user bisa basi pada SMP | P1 |
 | Driver | UART, RTC, PCI, virtio-blk, virtio-gpu | virtio-net, input, MSI-X, virtio IRQ, multi device, DMA streaming | Belum ada jaringan atau input interaktif | P1 |
 | Platform | QEMU virt hardcoded, DTB dan ACPI discovery dasar | GTDT detail, ACPI memory map, discovery RAM/device, initrd, cmdline | Sulit pindah board atau boot ACPI penuh | P2 |
-| Daya dan waktu | RTC dibaca saat boot, halt saja | settime, timezone, PSCI SYSTEM_OFF/RESET, shutdown/reboot | Mesin tidak bisa dimatikan dengan rapi | P2 |
+| Daya dan waktu | RTC dibaca saat boot, shutdown/reboot ACPI dan PSCI | settime, timezone, shutdown dari service manager | Mesin bisa dimatikan dan di-reboot dari shell | P2 |
 | Observability | Log serial, panic, procfs uptime/threads | dmesg ring, tracing, counter, watchdog, statistik memori/CPU | Debug produksi dan regresi sulit | P1 |
 | Test dan CI | Satu smoke test QEMU, host test libs/core | Unit test VMM/sched/FS, matriks QEMU, negative test, fuzzing, sanitizer, CI | Regresi mahal dan mudah lolos | P1 |
 | Keamanan | W^X kernel, stack canary | W^X user, KASLR, PAC/BTI, PAN, validasi syscall, fuzzing | Permukaan serangan user ke kernel masih lebar | P1 |
@@ -114,12 +114,12 @@ Tujuan: userland punya API yang layak dan gemabox menjadi shell nyata.
       sederhana tanpa exception dan tanpa RTTI.
 - [x] SDK-05 `_start` meneruskan argc/argv ke `main`.
 - [~] SDK-06 gemabox shell: `help`, `echo`, `cat`, `ls`, `clear`, `acpi`,
-      dan `halt` sudah. `ps` dan `sleep` belum.
+      `halt`, `shutdown`, dan `reboot` sudah. `ps` dan `sleep` belum.
 - [x] SDK-07 Input UART ke TTY: line buffer, backspace, echo, read blocking.
 - [ ] SDK-08 Packaging: install header dan `libkgema.a`, CMake package
       config, satu contoh program baru, dan dokumentasi link.
-- [~] SDK-09 Uji: shell menerima `help`, `ls`, `acpi`, dan `halt`. Uji `ps`
-      dan `sleep` belum.
+- [x] SDK-09 Uji: shell menerima `help`, `ls`, `acpi`, `shutdown`, `reboot`,
+      dan `halt`. Uji `ps` dan `sleep` belum.
 
 **Selesai bila:** shell interaktif berjalan di atas UART dan perintah dasar
 bisa dijalankan tanpa menyalin kode syscall.
@@ -156,7 +156,7 @@ reboot.
 - [x] DRV-14 TTY input dari keyboard, bukan hanya UART.
 - [x] LOG-01 Log kernel hanya ke serial; display untuk output user dan TTY.
 - [ ] TIME-06 RTC settime, zona waktu, dan waktu dinding.
-- [ ] OPS-01 shutdown/reboot lewat PSCI SYSTEM_OFF dan SYSTEM_RESET.
+- [x] OPS-01 shutdown/reboot lewat ACPI FADT dan PSCI SYSTEM_OFF/SYSTEM_RESET.
 
 **Selesai bila:** kernel menjawab ping/UDP dari host dan menerima input
 keyboard di jendela QEMU.
@@ -195,7 +195,8 @@ sinkronisasi lulus uji stres.
 - [x] PLT-10a RSDP/XSDT discovery, validasi checksum, dan registry tabel.
 - [x] PLT-10b MADT cpu count dan GIC distributor/redistributor.
 - [x] PLT-10c SPCR UART dan MCFG PCI ECAM.
-- [ ] PLT-10d GTDT detail dan ACPI memory map.
+- [x] PLT-10d FADT flags, PSCI conduit, dan reset register.
+- [ ] PLT-10e GTDT detail dan ACPI memory map.
 - [ ] PLT-10 ACPI: MADT, GTDT, SPCR, MCFG, dan memory map.
 - [ ] PLT-11 DTB: discovery RAM, UART, GIC, timer, PCI, dan device.
 - [ ] PLT-12 Platform generik, bukan qemu_virt hardcoded.
@@ -203,7 +204,7 @@ sinkronisasi lulus uji stres.
 - [x] BOOT-02a Boot ACPI dan DTB pada QEMU.
 - [ ] BOOT-02 Boot ACPI dan DTB pada QEMU, lalu satu board nyata.
 - [ ] BOOT-03 Framebuffer handoff dan konsol awal.
-- [ ] PLT-13 Shutdown dan reboot terintegrasi dengan shell.
+- [x] PLT-13 Shutdown dan reboot terintegrasi dengan shell.
 - [ ] PLT-14 Matriks boot: 1/2/4 core, memori kecil, ACPI on/off.
 
 **Selesai bila:** satu image bisa boot dengan ACPI dan DTB, dan shutdown

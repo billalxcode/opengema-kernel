@@ -25,6 +25,18 @@ constexpr uint32_t kMcfgFirstEntry = 44;
 constexpr uint32_t kMcfgMinimumLength = 60;
 constexpr uint32_t kMcfgStartBusOffset = 10;
 constexpr uint32_t kMcfgEndBusOffset = 11;
+// FADT fields used for power management and PSCI discovery.
+constexpr uint32_t kFadtFlagsOffset = 112;
+constexpr uint32_t kFadtResetRegisterOffset = 116;
+constexpr uint32_t kFadtResetValueOffset = 128;
+constexpr uint32_t kFadtArmBootFlagsOffset = 129;
+constexpr uint32_t kFadtLengthForFlags = 116;
+constexpr uint32_t kFadtLengthForReset = 129;
+constexpr uint32_t kFadtLengthForArmBoot = 131;
+constexpr uint32_t kFadtHardwareReduced = 1U << 20;
+constexpr uint32_t kFadtResetRegisterFlag = 1U << 10;
+constexpr uint16_t kFadtPsciCompliant = 1U;
+constexpr uint16_t kFadtPsciUseHvc = 1U << 1;
 
 constexpr uint8_t kMadtGenericInterrupt = 0x0B;
 constexpr uint8_t kMadtGenericDistributor = 0x0C;
@@ -49,6 +61,12 @@ Table g_tables[kMaxTables]{};
 
 [[nodiscard]] uint8_t Read8(uint64_t address) noexcept {
   return *reinterpret_cast<const uint8_t*>(address);
+}
+
+[[nodiscard]] uint16_t Read16(uint64_t address) noexcept {
+  uint16_t value = 0;
+  mem::Copy(&value, reinterpret_cast<const void*>(address), sizeof(value));
+  return value;
 }
 
 [[nodiscard]] uint32_t Read32(uint64_t address) noexcept {
@@ -134,6 +152,41 @@ void ParseMadt() noexcept {
       }
     }
     offset += entry_length;
+  }
+}
+
+void ParseFadt() noexcept {
+  const Result<Table> table = FindTable("FACP");
+  if (table.is_err() || table.value().length < kFadtLengthForFlags) {
+    return;
+  }
+  const uint64_t address = table.value().address;
+  const uint32_t length = table.value().length;
+  g_info.fadt_flags = Read32(address + kFadtFlagsOffset);
+  g_info.hardware_reduced =
+    (g_info.fadt_flags & kFadtHardwareReduced) != 0U;
+  g_info.reset_register_supported =
+    (g_info.fadt_flags & kFadtResetRegisterFlag) != 0U;
+
+  if (g_info.reset_register_supported && length >= kFadtLengthForReset) {
+    g_info.reset_register_space = Read8(address + kFadtResetRegisterOffset);
+    g_info.reset_register_bit_width =
+      Read8(address + kFadtResetRegisterOffset + 1U);
+    g_info.reset_register_bit_offset =
+      Read8(address + kFadtResetRegisterOffset + 2U);
+    g_info.reset_register_access_size =
+      Read8(address + kFadtResetRegisterOffset + 3U);
+    g_info.reset_register_address =
+      Read64(address + kFadtResetRegisterOffset + 4U);
+    g_info.reset_value = Read8(address + kFadtResetValueOffset);
+  }
+
+  if (length >= kFadtLengthForArmBoot) {
+    g_info.arm_boot_flags = Read16(address + kFadtArmBootFlagsOffset);
+    g_info.psci_compliant =
+      (g_info.arm_boot_flags & kFadtPsciCompliant) != 0U;
+    g_info.psci_use_hvc =
+      (g_info.arm_boot_flags & kFadtPsciUseHvc) != 0U;
   }
 }
 
@@ -242,6 +295,7 @@ Status Init(uint64_t rsdp_address) noexcept {
   ParseMadt();
   ParseSpcr();
   ParseMcfg();
+  ParseFadt();
   g_info.has_gtdt = FindTable("GTDT").is_ok();
   return Status::kOk;
 }

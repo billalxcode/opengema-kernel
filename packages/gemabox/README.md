@@ -36,11 +36,14 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
 7. Mode `writer`: `chdir("/tmp")`, tulis `write ok` ke file `writer`,
    seek, read, lalu cetak `write ok`.
 8. Mode `shell`: prompt `gemabox>`, baca input UART dan keyboard,
-   jalankan `help`, `echo`, `cat`, `ls`, `clear`, `acpi`, dan `halt`.
+   jalankan `help`, `echo`, `cat`, `ls`, `clear`, `acpi`, `halt`,
+   `shutdown`, dan `reboot`.
 9. Command di luar applet dicari di `/commands/<name>`, lalu
    `/applications/<name>/<name>`.
 10. `acpi` membaca ringkasan tabel dari `/proc/acpi`. `halt` menghentikan
     shell dan init sehingga kernel menyelesaikan self test lalu berhenti.
+    `shutdown` dan `reboot` memakai ACPI/PSCI untuk mematikan atau
+    me-reboot mesin.
 
 Child mendeteksi argv kedua dan hanya mencetak `child ok`.
 
@@ -54,7 +57,7 @@ child ok
 spawn ok
 write ok
 gemabox> help
-commands: help, echo, cat, ls, clear, acpi, halt
+commands: help, echo, cat, ls, clear, acpi, halt, shutdown, reboot
 gemabox> acpi
 ACPI revision 2
 ...

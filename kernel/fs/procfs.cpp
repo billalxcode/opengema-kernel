@@ -63,6 +63,12 @@ void GenerateAcpi(og::fmt::LineBuilder& line) noexcept {
       .Hex(info.pci_ecam_size).Char('\n');
   }
   line.Text("GTDT ").Dec(info.has_gtdt ? 1U : 0U).Char('\n');
+  line.Text("FADT flags ").Hex(info.fadt_flags).Char('\n');
+  line.Text("ARM boot ").Hex(info.arm_boot_flags).Char('\n');
+  line.Text("PSCI ").Dec(info.psci_compliant ? 1U : 0U).Text(" hvc ")
+    .Dec(info.psci_use_hvc ? 1U : 0U).Char('\n');
+  line.Text("reset reg ").Dec(info.reset_register_supported ? 1U : 0U)
+    .Char('\n');
 }
 
 Status Generate(const ProcFile& file, char* buffer, std::size_t capacity,

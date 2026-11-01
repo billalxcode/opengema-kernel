@@ -233,10 +233,12 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   kgema, GPT/partition, VFS, VFS FD, ELF parser, dan FDT parser.
 - Test QEMU baru: `ls /missing` menghasilkan `ls: list failed`, dan
   perintah `.` yang menunjuk directory menghasilkan `run: spawn failed`.
+- Test QEMU power: `shutdown` mematikan QEMU dan `reboot` memicu boot kedua
+  lewat ACPI FADT dan PSCI.
 
 Verifikasi branch `dev`:
 
-- `python3 scripts/compile-check.py`: 117 file OK, 1 entri lama dilewati.
+- `python3 scripts/compile-check.py`: 124 file OK, 1 entri lama dilewati.
 - `./scripts/build.sh` lewat podman: kernel build dan link OK,
   `arch-check` dan `gsl-check` OK.
 - `./scripts/test-host.sh`: host tests, ramfs, procfs, devfs, HID, ACPI, FAT32,

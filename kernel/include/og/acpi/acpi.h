@@ -33,6 +33,18 @@ struct Info {
   uint64_t pci_ecam;        // First MCFG allocation.
   uint64_t pci_ecam_size;
   bool has_gtdt;
+  uint32_t fadt_flags;
+  uint16_t arm_boot_flags;
+  bool hardware_reduced;
+  bool psci_compliant;
+  bool psci_use_hvc;
+  bool reset_register_supported;
+  uint8_t reset_register_space;
+  uint8_t reset_register_bit_width;
+  uint8_t reset_register_bit_offset;
+  uint8_t reset_register_access_size;
+  uint64_t reset_register_address;
+  uint8_t reset_value;
 };
 
 // Safe with a zero address: returns kNotFound and leaves the module unready.

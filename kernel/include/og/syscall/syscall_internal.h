@@ -85,4 +85,8 @@ namespace og::syscall {
 [[nodiscard]] Status DoSpawn(uint64_t user_path, uint64_t user_argv,
                              uint64_t argc, uint64_t& result) noexcept;
 
+[[nodiscard]] Status DoShutdown(uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoReboot(uint64_t& result) noexcept;
+
 }  // namespace og::syscall

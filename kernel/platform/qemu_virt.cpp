@@ -92,6 +92,10 @@ Status PlatformInit(const BootInfo& info) noexcept {
       g_platform.pci_ecam.base = acpi.pci_ecam;
       g_platform.pci_ecam.size = acpi.pci_ecam_size;
     }
+    if (acpi.psci_compliant) {
+      g_platform.psci_conduit =
+        acpi.psci_use_hvc ? kPsciConduitHvc : kPsciConduitSmc;
+    }
     have_tables = true;
   }
 

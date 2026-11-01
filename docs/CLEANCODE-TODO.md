@@ -264,7 +264,7 @@ Verifikasi yang berjalan di sesi ini:
 
 ```
 python3 scripts/compile-check.py
-compile-check: 117 files OK (1 skipped)
+compile-check: 124 files OK (1 skipped)
 host tests: all passed
 ramfs probe: OK
 procfs probe: OK

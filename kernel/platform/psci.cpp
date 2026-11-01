@@ -6,10 +6,13 @@ namespace {
 
 constexpr uint64_t kFunctionVersion = 0x84000000ULL;
 constexpr uint64_t kFunctionCpuOn64 = 0xC4000003ULL;
+constexpr uint64_t kFunctionSystemOff = 0x84000008ULL;
+constexpr uint64_t kFunctionSystemReset = 0x84000009ULL;
 constexpr uint64_t kSuccess = 0;
 constexpr uint64_t kNotSupported = static_cast<uint64_t>(-1);
 
 uint32_t g_conduit = 0;  // 0 = hvc, 1 = smc
+bool g_ready = false;
 
 [[nodiscard]] uint64_t CallHvc(uint64_t function, uint64_t arg1, uint64_t arg2,
                                uint64_t arg3) noexcept {
@@ -51,23 +54,28 @@ uint32_t g_conduit = 0;  // 0 = hvc, 1 = smc
 
 Status PsciInit(uint32_t preferred_conduit) noexcept {
   const bool prefer_smc = preferred_conduit == 1U;
+  g_ready = false;
 
   if (prefer_smc) {
     if (PlausibleVersion(CallSmc(kFunctionVersion, 0, 0, 0))) {
       g_conduit = 1;
+      g_ready = true;
       return Status::kOk;
     }
     if (PlausibleVersion(CallHvc(kFunctionVersion, 0, 0, 0))) {
       g_conduit = 0;
+      g_ready = true;
       return Status::kOk;
     }
   } else {
     if (PlausibleVersion(CallHvc(kFunctionVersion, 0, 0, 0))) {
       g_conduit = 0;
+      g_ready = true;
       return Status::kOk;
     }
     if (PlausibleVersion(CallSmc(kFunctionVersion, 0, 0, 0))) {
       g_conduit = 1;
+      g_ready = true;
       return Status::kOk;
     }
   }
@@ -85,6 +93,26 @@ Result<uint64_t> CpuOn(uint64_t mpidr, uint64_t entry_address, uint64_t context)
 
 uint32_t Version() noexcept {
   return static_cast<uint32_t>(Call(kFunctionVersion, 0, 0, 0) & 0xFFFFFFFFULL);
+}
+
+bool Ready() noexcept {
+  return g_ready;
+}
+
+Status SystemOff() noexcept {
+  if (!g_ready) {
+    return Status::kNotInit;
+  }
+  (void)Call(kFunctionSystemOff, 0, 0, 0);
+  return Status::kIoError;
+}
+
+Status SystemReset() noexcept {
+  if (!g_ready) {
+    return Status::kNotInit;
+  }
+  (void)Call(kFunctionSystemReset, 0, 0, 0);
+  return Status::kIoError;
 }
 
 }  // namespace og::psci

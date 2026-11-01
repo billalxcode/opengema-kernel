@@ -79,6 +79,12 @@ constexpr uint64_t kResultError = static_cast<uint64_t>(-1);
     case kSysList:
       status = DoList(frame->x[0], frame->x[1], frame->x[2], result);
       break;
+    case kSysShutdown:
+      status = DoShutdown(result);
+      break;
+    case kSysReboot:
+      status = DoReboot(result);
+      break;
     default:
       status = Status::kInvalidArg;
       break;

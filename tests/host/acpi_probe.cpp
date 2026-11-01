@@ -11,6 +11,7 @@ constexpr uint32_t kXsdtOffset = 64;
 constexpr uint32_t kMadtOffset = 256;
 constexpr uint32_t kSpcrOffset = 1024;
 constexpr uint32_t kMcfgOffset = 1536;
+constexpr uint32_t kFadtOffset = 2048;
 constexpr uint32_t kBufferSize = 4096;
 constexpr uint32_t kSdtHeaderLength = 36;
 
@@ -109,8 +110,24 @@ void BuildMcfg() {
   FixSdtChecksum(kMcfgOffset, kLength);
 }
 
+void BuildFadt() {
+  constexpr uint32_t kLength = 276;
+  WriteHeader(kFadtOffset, "FACP", kLength, 6);
+  constexpr uint32_t kHardwareReduced = 1U << 20;
+  constexpr uint32_t kResetRegister = 1U << 10;
+  Write32(kFadtOffset + 112, kHardwareReduced | kResetRegister);
+  Write8(kFadtOffset + 116, 0);
+  Write8(kFadtOffset + 117, 8);
+  Write8(kFadtOffset + 118, 0);
+  Write8(kFadtOffset + 119, 1);
+  Write64(kFadtOffset + 120, 0x09020000ULL);
+  Write8(kFadtOffset + 128, 0x0F);
+  Write16(kFadtOffset + 129, 3);
+  FixSdtChecksum(kFadtOffset, kLength);
+}
+
 void BuildXsdt() {
-  constexpr uint32_t kLength = kSdtHeaderLength + (3U * 8U);
+  constexpr uint32_t kLength = kSdtHeaderLength + (4U * 8U);
   WriteHeader(kXsdtOffset, "XSDT", kLength, 1);
   Write64(kXsdtOffset + kSdtHeaderLength,
           reinterpret_cast<uint64_t>(g_buffer + kMadtOffset));
@@ -118,6 +135,8 @@ void BuildXsdt() {
           reinterpret_cast<uint64_t>(g_buffer + kSpcrOffset));
   Write64(kXsdtOffset + kSdtHeaderLength + 16U,
           reinterpret_cast<uint64_t>(g_buffer + kMcfgOffset));
+  Write64(kXsdtOffset + kSdtHeaderLength + 24U,
+          reinterpret_cast<uint64_t>(g_buffer + kFadtOffset));
   FixSdtChecksum(kXsdtOffset, kLength);
 }
 
@@ -156,6 +175,7 @@ int main() {
   BuildMadt();
   BuildSpcr();
   BuildMcfg();
+  BuildFadt();
 
   const uint64_t rsdp = reinterpret_cast<uint64_t>(g_buffer + kRsdpOffset);
   if (!og::IsOk(og::acpi::Init(rsdp)) || !og::acpi::Ready()) {
@@ -163,7 +183,7 @@ int main() {
   }
 
   const og::acpi::Info& info = og::acpi::GetInfo();
-  if (info.revision != 2U || info.table_count != 3U) {
+  if (info.revision != 2U || info.table_count != 4U) {
     return Fail("table count");
   }
   if (info.cpu_count != 2U) {
@@ -183,12 +203,21 @@ int main() {
   if (info.has_gtdt) {
     return Fail("unexpected gtdt");
   }
+  if (!info.hardware_reduced || !info.psci_compliant ||
+      !info.psci_use_hvc) {
+    return Fail("fadt arm flags");
+  }
+  if (!info.reset_register_supported ||
+      info.reset_register_address != 0x09020000ULL ||
+      info.reset_value != 0x0FU) {
+    return Fail("fadt reset register");
+  }
 
   const og::Result<og::acpi::Table> madt = og::acpi::FindTable("APIC");
   if (madt.is_err() || madt.value().length == 0U) {
     return Fail("find madt");
   }
-  if (og::acpi::TableAt(3).is_ok()) {
+  if (og::acpi::TableAt(4).is_ok()) {
     return Fail("table bounds");
   }
   if (og::acpi::FindTable("NOPE").is_ok()) {

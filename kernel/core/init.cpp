@@ -7,6 +7,7 @@
 #include "og/core/bootinfo.h"
 #include "og/core/log.h"
 #include "og/core/panic.h"
+#include "og/core/power.h"
 #include "og/core/status.h"
 #include "og/dma/dma.h"
 #include "og/dma/dma_selftest.h"
@@ -22,6 +23,7 @@
 #include "og/mem/pmm.h"
 #include "og/mem/vmm.h"
 #include "og/platform/platform.h"
+#include "og/platform/power.h"
 #include "og/platform/psci.h"
 #include "og/platform/smp.h"
 #include "og/process/process.h"
@@ -251,6 +253,7 @@ void kmain(BootInfo* info) noexcept {
   }
 
   InitSmp();
+  power::SetHandlers(&platform::Shutdown, &platform::Reboot);
   boot::RunSchedulerSelfTest();
   boot::RunAddressSpaceSelfTest();
   boot::RunUserSelfTest();
