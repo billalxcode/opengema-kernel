@@ -6,6 +6,7 @@
 
 #include <cstdint>
 
+#include "og/arch/cpu.h"
 #include "og/arch/registers.h"
 
 namespace og::arch::aarch64 {
@@ -36,6 +37,8 @@ class Spinlock {
 
 // Saves DAIF, masks IRQ, then takes the spin lock. Unlock restores DAIF,
 // so a lock held across an interrupt stays safe on a single core.
+// The saved state is per CPU: a spinning core must not overwrite the state
+// of the core that owns the lock.
 class IrqSpinlock {
  public:
   IrqSpinlock() noexcept = default;
@@ -44,18 +47,32 @@ class IrqSpinlock {
   IrqSpinlock& operator=(const IrqSpinlock&) = delete;
 
   void lock() noexcept {
-    state_ = IrqSave();
+    const uint32_t cpu = static_cast<uint32_t>(CpuId() & (kMaxCpus - 1U));
+    states_[cpu] = IrqSave();
     spin_.lock();
   }
 
   void unlock() noexcept {
+    const uint32_t cpu = static_cast<uint32_t>(CpuId() & (kMaxCpus - 1U));
     spin_.unlock();
-    IrqRestore(state_);
+    IrqRestore(states_[cpu]);
+  }
+
+  [[nodiscard]] bool try_lock() noexcept {
+    const uint32_t cpu = static_cast<uint32_t>(CpuId() & (kMaxCpus - 1U));
+    const uint64_t state = IrqSave();
+    if (spin_.try_lock()) {
+      states_[cpu] = state;
+      return true;
+    }
+    IrqRestore(state);
+    return false;
   }
 
  private:
+  static constexpr uint32_t kMaxCpus = 4;
   Spinlock spin_;
-  uint64_t state_ = 0;
+  uint64_t states_[kMaxCpus]{};
 };
 
 template <typename Lock>
