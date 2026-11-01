@@ -27,30 +27,97 @@ target_include_directories(og_inc_efi INTERFACE
   ${CMAKE_SOURCE_DIR}/libs/efi)
 target_link_libraries(og_inc_efi INTERFACE og_inc_cxx)
 
-# gemabox: the base command program for user mode. Compiled as freestanding
-# C, linked at its virtual address, then flattened to a raw binary for the
-# ESP.
+# gemabox and the kgema user space SDK. Both are compiled for the user ABI
+# and linked at the user virtual address. The SDK archive is shared by every
+# program in packages/.
 find_program(OG_GEMABOX_LD NAMES aarch64-linux-gnu-ld REQUIRED)
 find_program(OG_GEMABOX_OBJCOPY NAMES aarch64-linux-gnu-objcopy REQUIRED)
+find_program(OG_KGEMA_AR NAMES aarch64-linux-gnu-ar REQUIRED)
+
+set(OG_USER_CXX_FLAGS
+  --target=aarch64-linux-gnu
+  -std=c++20
+  -O2
+  -ffreestanding
+  -nostdlib
+  -nostdinc
+  -mgeneral-regs-only
+  -fno-exceptions
+  -fno-rtti
+  -fno-threadsafe-statics
+  -fno-stack-protector
+  -fno-builtin
+  -fno-unwind-tables
+  -fno-asynchronous-unwind-tables
+  -fno-use-cxa-atexit
+  -Wall
+  -Wextra
+  -Werror)
+
+set(OG_KGEMA_INCLUDE ${CMAKE_SOURCE_DIR}/packages/libkgema/include)
+set(OG_KGEMA_ARCHIVE ${CMAKE_BINARY_DIR}/libkgema.a)
+set(OG_KGEMA_OBJECTS
+  ${CMAKE_BINARY_DIR}/kgema_syscall.o
+  ${CMAKE_BINARY_DIR}/kgema_io.o
+  ${CMAKE_BINARY_DIR}/kgema_memory.o
+  ${CMAKE_BINARY_DIR}/kgema_process.o
+  ${CMAKE_BINARY_DIR}/kgema_start.o)
+
+add_custom_command(
+  OUTPUT ${OG_KGEMA_OBJECTS} ${OG_KGEMA_ARCHIVE}
+  COMMAND ${CMAKE_CXX_COMPILER} ${OG_USER_CXX_FLAGS} -I${OG_KGEMA_INCLUDE}
+          -c ${CMAKE_SOURCE_DIR}/packages/libkgema/src/syscall.cpp
+          -o ${CMAKE_BINARY_DIR}/kgema_syscall.o
+  COMMAND ${CMAKE_CXX_COMPILER} ${OG_USER_CXX_FLAGS} -I${OG_KGEMA_INCLUDE}
+          -c ${CMAKE_SOURCE_DIR}/packages/libkgema/src/io.cpp
+          -o ${CMAKE_BINARY_DIR}/kgema_io.o
+  COMMAND ${CMAKE_CXX_COMPILER} ${OG_USER_CXX_FLAGS} -I${OG_KGEMA_INCLUDE}
+          -c ${CMAKE_SOURCE_DIR}/packages/libkgema/src/memory.cpp
+          -o ${CMAKE_BINARY_DIR}/kgema_memory.o
+  COMMAND ${CMAKE_CXX_COMPILER} ${OG_USER_CXX_FLAGS} -I${OG_KGEMA_INCLUDE}
+          -c ${CMAKE_SOURCE_DIR}/packages/libkgema/src/process.cpp
+          -o ${CMAKE_BINARY_DIR}/kgema_process.o
+  COMMAND ${CMAKE_CXX_COMPILER} ${OG_USER_CXX_FLAGS} -I${OG_KGEMA_INCLUDE}
+          -c ${CMAKE_SOURCE_DIR}/packages/libkgema/src/start.cpp
+          -o ${CMAKE_BINARY_DIR}/kgema_start.o
+  COMMAND ${CMAKE_COMMAND} -E rm -f ${OG_KGEMA_ARCHIVE}
+  COMMAND ${OG_KGEMA_AR} rcs ${OG_KGEMA_ARCHIVE} ${OG_KGEMA_OBJECTS}
+  DEPENDS
+    ${CMAKE_SOURCE_DIR}/packages/libkgema/src/syscall.cpp
+    ${CMAKE_SOURCE_DIR}/packages/libkgema/src/io.cpp
+    ${CMAKE_SOURCE_DIR}/packages/libkgema/src/memory.cpp
+    ${CMAKE_SOURCE_DIR}/packages/libkgema/src/process.cpp
+    ${CMAKE_SOURCE_DIR}/packages/libkgema/src/start.cpp
+    ${CMAKE_SOURCE_DIR}/packages/libkgema/include/kgema/types.h
+    ${CMAKE_SOURCE_DIR}/packages/libkgema/include/kgema/syscall.h
+    ${CMAKE_SOURCE_DIR}/packages/libkgema/include/kgema/io.h
+    ${CMAKE_SOURCE_DIR}/packages/libkgema/include/kgema/memory.h
+    ${CMAKE_SOURCE_DIR}/packages/libkgema/include/kgema/process.h
+  COMMENT "build libkgema")
+
+add_custom_target(og_libkgema DEPENDS ${OG_KGEMA_ARCHIVE})
+
 set(OG_GEMABOX_OBJECT ${CMAKE_BINARY_DIR}/gemabox.o)
 set(OG_GEMABOX_ELF ${CMAKE_BINARY_DIR}/gemabox.elf)
 set(OG_GEMABOX_BIN ${CMAKE_BINARY_DIR}/gemabox.bin)
 
 add_custom_command(
   OUTPUT ${OG_GEMABOX_BIN}
-  COMMAND ${CMAKE_C_COMPILER} --target=aarch64-linux-gnu -ffreestanding -nostdlib
-          -nostdinc -std=c11 -O2 -Wall -Wextra -mgeneral-regs-only
-          -fno-stack-protector -fno-builtin -fno-unwind-tables
-          -fno-asynchronous-unwind-tables
-          -c ${CMAKE_SOURCE_DIR}/pubs/gemabox/main.c -o ${OG_GEMABOX_OBJECT}
-  COMMAND ${OG_GEMABOX_LD} -T ${CMAKE_SOURCE_DIR}/pubs/gemabox/link.ld -e _start
-          ${OG_GEMABOX_OBJECT} -o ${OG_GEMABOX_ELF}
+  COMMAND ${CMAKE_CXX_COMPILER} ${OG_USER_CXX_FLAGS} -I${OG_KGEMA_INCLUDE}
+          -c ${CMAKE_SOURCE_DIR}/packages/gemabox/main.cpp
+          -o ${OG_GEMABOX_OBJECT}
+  COMMAND ${OG_GEMABOX_LD} -T ${CMAKE_SOURCE_DIR}/packages/libkgema/link.ld
+          -u _start ${OG_GEMABOX_OBJECT} ${OG_KGEMA_ARCHIVE}
+          -o ${OG_GEMABOX_ELF}
   COMMAND ${OG_GEMABOX_OBJCOPY} -O binary ${OG_GEMABOX_ELF} ${OG_GEMABOX_BIN}
-  DEPENDS ${CMAKE_SOURCE_DIR}/pubs/gemabox/main.c
-          ${CMAKE_SOURCE_DIR}/pubs/gemabox/link.ld
+  DEPENDS
+    ${CMAKE_SOURCE_DIR}/packages/gemabox/main.cpp
+    ${CMAKE_SOURCE_DIR}/packages/libkgema/link.ld
+    ${OG_KGEMA_ARCHIVE}
   COMMENT "build gemabox")
 
 add_custom_target(og_gemabox DEPENDS ${OG_GEMABOX_BIN})
+add_dependencies(og_gemabox og_libkgema)
 
 # One OBJECT library per module. DEPS lists lower layers only, so the
 # link graph mirrors the architecture in docs/ROADMAP.md.
