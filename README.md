@@ -25,22 +25,27 @@ Mau lihat jendela QEMU:
 
 ## Status
 
-Sudah boot sampai kernel dengan MMU, exception handler, dan memori:
+Sudah boot sampai kernel dengan MMU, memori, GIC, dan timer:
 
 ```
 opengema-kernel: uefi entry
 uefi: boot services exited
 kernel: kmain entered
 pmm: total frames: 131072
-pmm: free frames: 122093
+pmm: free frames: 122090
 vmm: identity map active
 mem test: pmm ok
 mem test: vmm 4k ok
 mem test: vmm 2m ok
 mem test: heap ok
+event test: irq and workqueue ok
+gic: ready
+timer: frequency: 62500000
+timer: ticks: 100
+timer: periodic tick ok
 kernel: halt
 ```
 
-Berikutnya: interrupt, timer, dan sinkronisasi.
+Berikutnya: sinkronisasi, lalu DMA dan driver virtio.
 
 Roadmap lengkap ada di `docs/ROADMAP.md`.

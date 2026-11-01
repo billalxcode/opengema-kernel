@@ -275,30 +275,51 @@ Catatan hasil Fase 3:
 
 ### Fase 4 - Events dan interrupt
 
-- [ ] EV-01 `events/vector.cpp`: pasang `VBAR_EL1`, `alignas(2048)`.
-- [ ] EV-02 `events/trap.cpp`: decode `ESR_EL1` dengan struct bitfield,
-      klasifikasi data abort, instruction abort, SVC, SError.
-- [ ] EV-03 `events/trap.cpp`: handler default memanggil `Panic` dengan dump.
-- [ ] EV-04 `events/irq.h`: `RegisterIrq(n, handler, cookie)`, `UnregisterIrq`,
-      `EnableIrq`, `DisableIrq`, `AckIrq`, `EndIrq`.
-- [ ] EV-05 `events/workqueue.h`: antrian kerja tertunda, dijalankan setelah IRQ.
-- [ ] EV-06 `events/waitqueue.h`: `Wait(predicate)`, `WakeOne`, `WakeAll`,
-      tanpa busy loop.
-- [ ] EV-07 Cegah rekursi IRQ: simpan state `DAIF` di `SpinlockIrqSave`.
+- [x] EV-01 `events/trap.cpp`: pasang `VBAR_EL1`. Tabelnya tetap di
+      `arch/aarch64/vectors.S`, karena itu kode arch.
+- [x] EV-02 `kernel/core/panic.cpp`: decode `ESR_EL1` menjadi EC dan ISS
+      di satu tempat, jadi trap tidak menduplikasi dump.
+- [x] EV-03 Handler default memanggil `Panic` untuk semua exception yang
+      bukan IRQ.
+- [x] EV-04 `og/irq.h`: `RegisterIrq`, `UnregisterIrq`, `DispatchIrq`,
+      `HandleIrq`, plus `InterruptController` sebagai titik sambung driver.
+- [x] EV-05 `og/workqueue.h`: antrian 64 item, dijalankan di akhir
+      penanganan IRQ.
+- [ ] EV-06 `waitqueue`: ditunda ke Fase 10, karena butuh thread dan sleep.
+- [x] EV-07 `IrqSave` dan `IrqRestore` di `og/arch/registers.h`. Spinlock
+      yang memakainya menyusul di Fase 6.
 
 **Selesai bila:** timer tick masuk ke handler terdaftar dan bisa dihitung.
 
+Catatan hasil Fase 4:
+
+1. `AckIrq` dan `EndIrq` pindah ke driver controller, karena itu operasi
+   hardware, bukan operasi tabel. `HandleIrq` yang menyusun urutannya.
+2. Urutan penanganan: acknowledge, dispatch, end, lalu jalankan workqueue.
+   Workqueue sengaja dijalankan setelah EOI supaya IRQ berikutnya tidak
+   tertahan selama kerja tertunda.
+3. IRQ vector tidak memicu panic. IRQ tanpa handler dicatat sebagai error
+   lalu kembali, supaya satu interrupt liar tidak mematikan kernel.
+
 ### Fase 5 - Time
 
-- [ ] TIME-01 `time/clocksource.h`: counter frekuensi tetap, `Now`, `ToNs`.
-- [ ] TIME-02 `drivers/timer/arm_generic.cpp`: `CNTPCT`, `CNTFRQ`, compare.
-- [ ] TIME-03 `time/timer.h`: `ScheduleAfter`, `Cancel`, `Tick`, antrian
-      timeout berbasis delta.
-- [ ] TIME-04 `time/delay.h`: `DelayUs`, `DelayMs` pakai clocksource, bukan
-      loop kosong.
-- [ ] TIME-05 Uji: 1000 tick per detik stabil plus minus 1 persen di QEMU.
+- [x] TIME-02 Timer ARM generic di `kernel/time/timer.cpp`, memakai
+      `CNTFRQ_EL0`, `CNTP_TVAL_EL0`, dan `CNTP_CTL_EL0`. PPI 30.
+- [~] TIME-01 Clocksource: frekuensi dan hitungan tick tersedia lewat
+      `TimerFrequency` dan `ReadCntpctEl0`. Konversi ke nanodetik menyusul
+      saat ada pemakainya.
+- [ ] TIME-03 Antrian timeout `ScheduleAfter` dan `Cancel`: ditunda ke
+      Fase 10, karena butuh sleep dan scheduler.
+- [x] TIME-04 `og/delay.h`: `DelayUs` dan `DelayMs` berbasis counter,
+      dipakai GIC untuk menunggu redistributor bangun.
+- [~] TIME-05 Uji tick: 100 Hz berjalan 100 tick dalam batas waktu.
+      Uji 1000 Hz menyusul bersama beban scheduler.
 
 **Selesai bila:** sleep dan timeout jalan tanpa busy loop.
+
+Catatan hasil Fase 5: kriteria selesai fase ini bergantung pada scheduler,
+jadi statusnya sebagian. Tick periodik dan delay sudah terbukti, sleep
+belum bisa ada sebelum ada thread.
 
 ### Fase 6 - Sync
 
