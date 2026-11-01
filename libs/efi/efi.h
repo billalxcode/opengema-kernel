@@ -138,6 +138,13 @@ struct EFI_BOOT_SERVICES {
   void* set_watchdog_timer;           // 0x100
 };
 
+struct EFI_CONFIGURATION_TABLE {
+  EFI_GUID vendor_guid;
+  void* vendor_table;
+};
+
+static_assert(sizeof(EFI_CONFIGURATION_TABLE) == 24);
+
 struct EFI_SYSTEM_TABLE {
   EfiTableHeader hdr;                   // 0x00
   CHAR16* firmware_vendor;              // 0x18

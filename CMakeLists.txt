@@ -151,6 +151,7 @@ og_add_module(og_sync
 og_add_module(og_platform
   SOURCES
     kernel/platform/qemu_virt.cpp
+    kernel/platform/fdt.cpp
     kernel/platform/psci.cpp
     kernel/platform/smp.cpp
     kernel/platform/secondary.S

@@ -5,6 +5,9 @@
 
 #include <cstdint>
 
+#include "og/bootinfo.h"
+#include "og/status.h"
+
 namespace og::platform {
 
 struct Range {
@@ -28,6 +31,8 @@ struct Platform {
 constexpr uint32_t kPsciConduitHvc = 0;
 constexpr uint32_t kPsciConduitSmc = 1;
 
+// Copies the board defaults, then overrides what the device tree reports.
+[[nodiscard]] Status PlatformInit(const BootInfo& info) noexcept;
 [[nodiscard]] const Platform& Current() noexcept;
 
 }  // namespace og::platform

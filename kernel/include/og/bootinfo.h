@@ -43,9 +43,11 @@ struct BootInfo {
   uint64_t image_size;
   uint64_t text_base;
   uint64_t text_size;
+  uint64_t dtb_address;
+  uint64_t dtb_size;
   MemoryRange memory[kMaxMemoryRanges];
 };
 
-static_assert(sizeof(BootInfo) == 1616, "BootInfo layout changed");
+static_assert(sizeof(BootInfo) == 1632, "BootInfo layout changed");
 
 }  // namespace og

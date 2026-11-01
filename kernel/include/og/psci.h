@@ -8,8 +8,9 @@
 
 namespace og::psci {
 
-// Probes HVC first, then SMC, and remembers which conduit responds.
-[[nodiscard]] Status PsciInit() noexcept;
+// Tries the preferred conduit first, then the other one, and remembers
+// which responds.
+[[nodiscard]] Status PsciInit(uint32_t preferred_conduit) noexcept;
 
 [[nodiscard]] Result<uint64_t> CpuOn(uint64_t mpidr, uint64_t entry_address,
                                      uint64_t context) noexcept;

@@ -58,7 +58,7 @@ rank_of_header() {
     og/sched.h) echo 10 ;;
     og/sync.h) echo 11 ;;
     og/syscall.h) echo 12 ;;
-    og/platform.h | og/psci.h | og/smp.h) echo 13 ;;
+    og/platform.h | og/psci.h | og/smp.h | og/fdt.h) echo 13 ;;
     og/memory_map.h) echo 13 ;;
     og/uart.h) echo 8 ;;
     *) echo -1 ;;

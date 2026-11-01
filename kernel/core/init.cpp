@@ -335,7 +335,8 @@ void InitBlockDevice() noexcept {
     return;
   }
 
-  status = drivers::pci::PciInit(memmap::kPciEcamBase, memmap::kPciEcamSize);
+  status = drivers::pci::PciInit(platform::Current().pci_ecam.base,
+                                platform::Current().pci_ecam.size);
   if (IsErr(status)) {
     Log(LogLevel::kError, "pci: ecam init failed\n");
     return;
@@ -514,6 +515,15 @@ void kmain(BootInfo* info) noexcept {
     Panic("kmain: unsupported boot info version");
   }
 
+  const Status platform_status = platform::PlatformInit(*info);
+  if (IsErr(platform_status)) {
+    Log(LogLevel::kWarn, "platform: dtb unavailable\n");
+  } else {
+    Log(LogLevel::kInfo, "platform: dtb parsed\n");
+  }
+  LogDec(LogLevel::kInfo, "platform: cpus", platform::Current().cpu_count);
+  LogDec(LogLevel::kInfo, "platform: psci conduit", platform::Current().psci_conduit);
+
   // Install vectors first so any fault after this point panics with context.
   events::InstallVectorTable();
 
@@ -593,7 +603,8 @@ void kmain(BootInfo* info) noexcept {
   }
 
   drivers::irq::Gicv3 gic;
-  status = gic.init(memmap::kGicDistBase, memmap::kGicRedistBase);
+  status = gic.init(platform::Current().gic_distributor.base,
+                    platform::Current().gic_redistributor.base);
   if (IsErr(status)) {
     Panic("gic: init failed");
   }
@@ -614,7 +625,7 @@ void kmain(BootInfo* info) noexcept {
     }
   }
 
-  status = psci::PsciInit();
+  status = psci::PsciInit(platform::Current().psci_conduit);
   if (IsErr(status)) {
     Log(LogLevel::kWarn, "psci: not available\n");
   } else {

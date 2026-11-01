@@ -49,17 +49,27 @@ uint32_t g_conduit = 0;  // 0 = hvc, 1 = smc
 
 }  // namespace
 
-Status PsciInit() noexcept {
-  const uint64_t hvc_version = CallHvc(kFunctionVersion, 0, 0, 0);
-  if (PlausibleVersion(hvc_version)) {
-    g_conduit = 0;
-    return Status::kOk;
-  }
+Status PsciInit(uint32_t preferred_conduit) noexcept {
+  const bool prefer_smc = preferred_conduit == 1U;
 
-  const uint64_t smc_version = CallSmc(kFunctionVersion, 0, 0, 0);
-  if (PlausibleVersion(smc_version)) {
-    g_conduit = 1;
-    return Status::kOk;
+  if (prefer_smc) {
+    if (PlausibleVersion(CallSmc(kFunctionVersion, 0, 0, 0))) {
+      g_conduit = 1;
+      return Status::kOk;
+    }
+    if (PlausibleVersion(CallHvc(kFunctionVersion, 0, 0, 0))) {
+      g_conduit = 0;
+      return Status::kOk;
+    }
+  } else {
+    if (PlausibleVersion(CallHvc(kFunctionVersion, 0, 0, 0))) {
+      g_conduit = 0;
+      return Status::kOk;
+    }
+    if (PlausibleVersion(CallSmc(kFunctionVersion, 0, 0, 0))) {
+      g_conduit = 1;
+      return Status::kOk;
+    }
   }
 
   return Status::kUnsupported;
