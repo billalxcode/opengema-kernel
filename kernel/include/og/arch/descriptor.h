@@ -21,6 +21,8 @@ constexpr uint64_t kAccessFlag = 1ULL << 10U;
 constexpr uint64_t kShareInner = 3ULL << 8U;
 constexpr uint64_t kPxn = 1ULL << 53U;
 constexpr uint64_t kUxn = 1ULL << 54U;
+constexpr uint64_t kApShift = 6;
+constexpr uint64_t kApUserRw = 1ULL << kApShift;
 
 // MAIR attr0 is Normal write back, attr1 is Device nGnRnE.
 constexpr uint64_t kMairNormalWriteBack = 0xFFULL;
@@ -57,7 +59,7 @@ enum class MemoryKind : uint32_t {
 }
 
 [[nodiscard]] inline uint64_t BlockDescriptor(uint64_t address, MemoryKind kind,
-                                             bool executable) noexcept {
+                                             bool executable, bool user = false) noexcept {
   uint64_t descriptor = address | kDescriptorBlock |
                         (static_cast<uint64_t>(kind) << kAttrIndexShift) | kAccessFlag;
   if (kind == MemoryKind::kNormal) {
@@ -69,11 +71,14 @@ enum class MemoryKind : uint32_t {
   if (kind == MemoryKind::kDevice) {
     descriptor |= kPxn | kUxn;
   }
+  if (user) {
+    descriptor |= kApUserRw;
+  }
   return descriptor;
 }
 
 [[nodiscard]] inline uint64_t PageDescriptor(uint64_t address, MemoryKind kind,
-                                            bool executable) noexcept {
+                                            bool executable, bool user = false) noexcept {
   uint64_t descriptor = address | kDescriptorPage |
                         (static_cast<uint64_t>(kind) << kAttrIndexShift) | kAccessFlag;
   if (kind == MemoryKind::kNormal) {
@@ -84,6 +89,9 @@ enum class MemoryKind : uint32_t {
   }
   if (kind == MemoryKind::kDevice) {
     descriptor |= kPxn | kUxn;
+  }
+  if (user) {
+    descriptor |= kApUserRw;
   }
   return descriptor;
 }
