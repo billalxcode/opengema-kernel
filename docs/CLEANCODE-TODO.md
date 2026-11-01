@@ -94,6 +94,8 @@ Tujuan: fungsi kecil, satu tanggung jawab.
   (`fd_table.cpp` + `vfs_internal.h`).
 - [x] Satukan daftar device devfs dalam satu tabel untuk lookup dan
   iteration.
+- [x] Pecah `FindFiltered` menjadi `ReadGptHeader`, `MatchesType`,
+  `ParsePartition`, dan `CheckMagic`.
 - [x] Tambah test host GSLFS dari `mkgslimg`.
 - [x] Tambah test host driver GSLFS (`Mount`, lookup, read, checksum).
 - [x] Tambah test host ramfs (`Create`, `CreateDir`, `CreateFile`, read, write, iterate).
