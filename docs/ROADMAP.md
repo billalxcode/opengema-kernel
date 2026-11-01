@@ -72,7 +72,21 @@ libs/
   efi/            efi.h
   core/           memory.h, string.h, bit.h, math.h, result.h
 kernel/
-  include/og/     header publik, satu per modul
+  include/og/     header publik, satu direktori per subsistem
+    core/         status, log, panic, assert, bootinfo, kmain
+    arch/         barriers, cache, context, cpu, descriptor, mmu,
+                  registers, spinlock, tlb, trap, user
+    io/           mmio, console, print, register
+    mem/          pmm, vmm, heap, mem_selftest
+    events/       irq, trap, workqueue, event_selftest
+    time/         timer, delay
+    dma/          dma, dma_selftest
+    drivers/      device, gic, rtc, uart, pci, virtio, virtio_blk
+    fs/           vfs, block_device, fat32, devfs, ramfs, procfs, partition
+    sched/        sched
+    sync/         sync
+    syscall/      syscall
+    platform/     platform, fdt, psci, smp, memory_map
   arch/aarch64/   barriers.cpp, cache.S, context.S, vectors.S, mmu_primitives.cpp
   io/             mmio.cpp, console.cpp, print.cpp
   core/           log.cpp, panic.cpp, assert.cpp, init.cpp, version.cpp
@@ -91,8 +105,10 @@ kernel/
   sched/          thread.cpp, scheduler.cpp, context.S
   sync/           spinlock.cpp, mutex.cpp, semaphore.cpp
   syscall/        syscall.cpp, usercopy.cpp
-  platform/       qemu_virt.cpp, platform.h
+  platform/       qemu_virt.cpp, fdt.cpp, psci.cpp
   boot/uefi/      efi_main.cpp, efi_console.cpp, efi_memmap.cpp, efi_exit.cpp
+pubs/
+  gemabox/        main.S, README.md
 tests/
   host/           unit test modul murni
   qemu/           smoke test script
@@ -471,7 +487,7 @@ Catatan hasil Fase 10:
       punya sumber input sehingga mengembalikan error.
 - [x] SYS-04 `VmmCopyIn` dan `VmmCopyOut` dengan validasi terhadap region
       user yang terdaftar.
-- [x] SYS-05 Loader program user dari filesystem: `INIT.BIN` dibaca dari
+- [x] SYS-05 Loader program user dari filesystem: `GEMABOX.BIN` dibaca dari
       FAT, disalin ke ramfs, lalu dimuat ke halaman user.
 - [x] SYS-06 `mmap` dan `munmap` untuk user. Region dialokasikan naik dari
       `0x101000000`; `munmap` membebaskan frame dan menghapus mapping.
@@ -488,8 +504,8 @@ Catatan hasil Fase 11:
 3. Saat menulis ulang stub, `ELR` dan `SPSR` sempat lupa disimpan sehingga
    `eret` memakai nilai sampah dan CPU masuk AArch32. Sudah diperbaiki dan
    dikunci di urutan instruksi stub.
-4. Program user 51 byte dibangun dari `user/hello.S`, dipanggil dengan
-   `svc`, mencetak `hello from el0`, lalu `exit`.
+4. Program user 147 byte dibangun dari `pubs/gemabox/main.S`, dipanggil
+   dengan `svc`, mencetak `hello from el0`, lalu `exit`.
 
 ### Fase 12 - Platform dan SMP
 
@@ -579,7 +595,7 @@ Catatan hasil Fase 14:
 
 Sebuah modul dianggap selesai bila semua ini benar:
 
-1. Punya satu header publik di `kernel/include/og/`.
+1. Punya satu header publik di `kernel/include/og/<subsistem>/`.
 2. Semua fungsi fallible memakai `Result` atau `Status` dan `[[nodiscard]]`.
 3. Guard clause di awal, tanpa nesting lebih dari satu level.
 4. Tidak ada `volatile` di luar `io/`.

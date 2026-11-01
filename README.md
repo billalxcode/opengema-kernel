@@ -46,18 +46,20 @@ Test lain:
 ## Status
 
 Sudah boot sampai kernel dengan MMU, memori, GIC, timer, virtio, FAT32,
-scheduler, dan user mode:
+ramfs, procfs, scheduler, dan user mode. Program user pertama ada di
+`pubs/gemabox`:
 
 ```
 opengema-kernel: uefi entry
 uefi: boot services exited
-kernel: kmain entered
 platform: dtb parsed
 platform: cpus: 2
 platform: psci conduit: 0
+kernel: kmain entered
 pmm: total frames: 131072
-pmm: free frames: 122090
+pmm: free frames: 122095
 vmm: identity map active
+hardening: wx attributes ok
 mem test: pmm ok
 mem test: vmm 4k ok
 mem test: vmm 2m ok
@@ -65,38 +67,34 @@ mem test: heap ok
 dma test: coherent ok
 dma test: streaming ok
 dma test: pool ok
-hardening: wx attributes ok
 pci: virtio device id: 4097
 virtio-blk: queue size: 256
-virtio-blk: capacity sectors: 131072
-virtio-blk: gpt header ok
 fs: mounted devfs and fat32
+fs: ramfs gemabox bytes: 147
+fs: ramfs write ok
 fs: devfs console ok
-fs: efi image bytes: 68608
 fs: fat32 file read ok
-EFI
-STARTUP.NSH
+GEMABOX.BIN
 event test: irq and workqueue ok
 gic: ready
 psci: version: 65537
 smp: cpus online: 2
 smp: cpu online: 1
 smp: ipi count: 1
-timer: frequency: 62500000
-timer: ticks: 10
 timer: periodic tick ok
-sched: threads: 4
-sched: worker a
-sched: worker b
-sched: workers done: 2
 sched: round robin ok
-user: program bytes: 51
+sync: mutex, semaphore, refcount, once ok
+time: timeout ok
+uart: ready
+uart: rx ok
+user: program bytes: 147
 hello from el0
 mmap ok
 user: exit ok
 kernel: halt
 ```
 
-Berikutnya: perluasan, misalnya parser DTB, ramfs, atau driver tambahan.
+Berikutnya: driver grafis, penjadwalan lintas core, dan address space
+per proses.
 
 Roadmap lengkap ada di `docs/ROADMAP.md`.
