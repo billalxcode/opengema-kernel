@@ -19,7 +19,7 @@ Cek dalam urutan ini, berhenti di gagal pertama:
 ## 2. Perintah run standar (pflash + virtio ESP)
 
 ```sh
-VARS_TMP="$(mktemp /tmp/AAVMF_VARS.XXXXXX.fd)"
+VARS_TMP="$(mktemp /tmp/AAVMF_VARS.XXXXXX)"
 cp firmware/AAVMF_VARS.fd "$VARS_TMP"
 qemu-system-aarch64 \
   -M virt,gic-version=3 \

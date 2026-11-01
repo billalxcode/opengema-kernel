@@ -23,7 +23,7 @@ SOCKET="$SERIAL_DIR/serial.sock"
 LOG="$SERIAL_DIR/serial.log"
 MONITOR="$SERIAL_DIR/monitor.sock"
 SCREEN="$SERIAL_DIR/screen.ppm"
-VARS_TMP="$(mktemp /tmp/AAVMF_VARS.XXXXXX.fd)"
+VARS_TMP="$(mktemp /tmp/AAVMF_VARS.XXXXXX)"
 cleanup() {
   if [ -n "${QEMU_PID:-}" ]; then
     kill "$QEMU_PID" 2>/dev/null || true

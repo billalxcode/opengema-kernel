@@ -57,15 +57,17 @@ else
   DISK_ARGS="-drive file=fat:rw:$ESP,format=raw,media=disk"
 fi
 
-# GUI needs a display adapter and input devices. macOS uses cocoa.
+# The GPU is always attached so headless runs exercise the framebuffer
+# driver too. Only the window and input devices depend on GUI.
 if [ "$GUI" -eq 1 ]; then
-  DISPLAY_ARGS="-display cocoa -device virtio-gpu-pci -device virtio-keyboard-pci -device virtio-mouse-pci"
+  DISPLAY_ARGS="-display cocoa -device virtio-keyboard-pci -device virtio-mouse-pci"
 else
   DISPLAY_ARGS="-display none"
 fi
+DISPLAY_ARGS="$DISPLAY_ARGS -device virtio-gpu-pci"
 
 # Copy VARS to a writable temp file so boot does not dirty the repo file.
-VARS_TMP="$(mktemp /tmp/AAVMF_VARS.XXXXXX.fd)"
+VARS_TMP="$(mktemp /tmp/AAVMF_VARS.XXXXXX)"
 cp "$VARS" "$VARS_TMP"
 trap 'rm -f "$VARS_TMP"' EXIT
 

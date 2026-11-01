@@ -18,7 +18,7 @@ Berhenti di kegagalan pertama:
 ## 2. Jalankan dengan GDB
 
 ```sh
-VARS_TMP="$(mktemp /tmp/AAVMF_VARS.XXXXXX.fd)"
+VARS_TMP="$(mktemp /tmp/AAVMF_VARS.XXXXXX)"
 cp firmware/AAVMF_VARS.fd "$VARS_TMP"
 qemu-system-aarch64 \
   -M virt,gic-version=3,acpi=off -cpu cortex-a72 -smp 2 -m 512M -nic none \
