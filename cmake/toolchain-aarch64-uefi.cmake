@@ -6,17 +6,12 @@
 #   cmake -B build --toolchain cmake/toolchain-aarch64-uefi.cmake -G Ninja
 # Must run inside container (clang-19 + lld-19).
 
-set(CMAKE_SYSTEM_NAME Generic)
+set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_PROCESSOR aarch64)
 
 set(CMAKE_C_COMPILER clang)
 set(CMAKE_CXX_COMPILER clang++)
-
-add_compile_options(
-  --target=aarch64-unknown-windows
-  -ffreestanding
-  -nostdinc
-)
+set(CMAKE_ASM_COMPILER clang)
 
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 

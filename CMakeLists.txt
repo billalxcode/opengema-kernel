@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(opengema-kernel LANGUAGES C CXX)
+project(opengema-kernel LANGUAGES C CXX ASM)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -27,21 +27,27 @@ target_include_directories(og_inc_efi INTERFACE
   ${CMAKE_SOURCE_DIR}/libs/efi)
 target_link_libraries(og_inc_efi INTERFACE og_inc_cxx)
 
-set(OG_CXX_FLAGS
-  -Wall -Wextra -Werror -Wconversion -Wpedantic
-  -ffreestanding
-  -fno-exceptions -fno-rtti
-  -fno-threadsafe-statics -fno-unwind-tables
-  -fshort-wchar
-  -mno-red-zone
-)
-
 # One OBJECT library per module. DEPS lists lower layers only, so the
 # link graph mirrors the architecture in docs/ROADMAP.md.
 function(og_add_module name)
   cmake_parse_arguments(arg "" "" "SOURCES;DEPS" ${ARGN})
   add_library(${name} OBJECT ${arg_SOURCES})
-  target_compile_options(${name} PRIVATE ${OG_CXX_FLAGS})
+  target_compile_options(${name} PRIVATE
+    $<$<COMPILE_LANGUAGE:C,CXX>:--target=aarch64-unknown-windows>
+    $<$<COMPILE_LANGUAGE:C,CXX>:-ffreestanding>
+    $<$<COMPILE_LANGUAGE:C,CXX>:-nostdinc>
+    $<$<COMPILE_LANGUAGE:C,CXX>:-Wall>
+    $<$<COMPILE_LANGUAGE:C,CXX>:-Wextra>
+    $<$<COMPILE_LANGUAGE:C,CXX>:-Werror>
+    $<$<COMPILE_LANGUAGE:C,CXX>:-Wconversion>
+    $<$<COMPILE_LANGUAGE:C,CXX>:-Wpedantic>
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-threadsafe-statics>
+    $<$<COMPILE_LANGUAGE:CXX>:-fno-unwind-tables>
+    $<$<COMPILE_LANGUAGE:CXX>:-fshort-wchar>
+    $<$<COMPILE_LANGUAGE:CXX>:-mno-red-zone>
+    $<$<COMPILE_LANGUAGE:ASM>:--target=aarch64-unknown-windows>)
   target_link_libraries(${name} PUBLIC ${arg_DEPS})
 endfunction()
 
@@ -50,7 +56,10 @@ og_add_module(og_lib_core
   DEPS og_inc_core)
 
 og_add_module(og_arch
-  SOURCES kernel/arch/aarch64/mmu.cpp
+  SOURCES
+    kernel/arch/aarch64/mmu.cpp
+    kernel/arch/aarch64/trap.cpp
+    kernel/arch/aarch64/vectors.S
   DEPS og_lib_core og_inc_kernel)
 
 og_add_module(og_io
@@ -115,5 +124,4 @@ add_dependencies(BOOTAA64EFI og_arch_check)
 add_custom_command(TARGET BOOTAA64EFI POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/esp/EFI/BOOT
   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/BOOTAA64.EFI ${CMAKE_SOURCE_DIR}/esp/EFI/BOOT/BOOTAA64.EFI
-  COMMENT "Copy BOOTAA64.EFI to esp/EFI/BOOT"
-)
+  COMMENT "Copy BOOTAA64.EFI to esp/EFI/BOOT")

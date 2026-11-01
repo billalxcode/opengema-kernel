@@ -1,8 +1,7 @@
 #pragma once
 
 // Canonical owner of AArch64 system register access.
-// Fase 2 extends this file. Nothing else may read these registers
-// with inline asm.
+// Nothing else may read or write these registers with inline asm.
 
 #include <cstdint>
 
@@ -36,6 +35,50 @@ namespace og::arch::aarch64 {
   uint64_t value = 0;
   __asm__ volatile("mrs %0, vbar_el1" : "=r"(value));
   return value;
+}
+
+inline void WriteVbarEl1(uint64_t value) noexcept {
+  __asm__ volatile("msr vbar_el1, %0" ::"r"(value) : "memory");
+}
+
+[[nodiscard]] inline uint64_t ReadSctlrEl1() noexcept {
+  uint64_t value = 0;
+  __asm__ volatile("mrs %0, sctlr_el1" : "=r"(value));
+  return value;
+}
+
+inline void WriteSctlrEl1(uint64_t value) noexcept {
+  __asm__ volatile("msr sctlr_el1, %0" ::"r"(value) : "memory");
+}
+
+[[nodiscard]] inline uint64_t ReadTcrEl1() noexcept {
+  uint64_t value = 0;
+  __asm__ volatile("mrs %0, tcr_el1" : "=r"(value));
+  return value;
+}
+
+inline void WriteTcrEl1(uint64_t value) noexcept {
+  __asm__ volatile("msr tcr_el1, %0" ::"r"(value) : "memory");
+}
+
+[[nodiscard]] inline uint64_t ReadTtbr0El1() noexcept {
+  uint64_t value = 0;
+  __asm__ volatile("mrs %0, ttbr0_el1" : "=r"(value));
+  return value;
+}
+
+inline void WriteTtbr0El1(uint64_t value) noexcept {
+  __asm__ volatile("msr ttbr0_el1, %0" ::"r"(value) : "memory");
+}
+
+[[nodiscard]] inline uint64_t ReadMairEl1() noexcept {
+  uint64_t value = 0;
+  __asm__ volatile("mrs %0, mair_el1" : "=r"(value));
+  return value;
+}
+
+inline void WriteMairEl1(uint64_t value) noexcept {
+  __asm__ volatile("msr mair_el1, %0" ::"r"(value) : "memory");
 }
 
 inline void DisableInterrupts() noexcept {
