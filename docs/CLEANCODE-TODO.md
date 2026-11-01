@@ -93,6 +93,7 @@ Tujuan: fungsi kecil, satu tanggung jawab.
 - [ ] Pisahkan FD table dari path resolution di `vfs.cpp` jika aman.
 - [x] Tambah test host GSLFS dari `mkgslimg`.
 - [x] Tambah test host driver GSLFS (`Mount`, lookup, read, checksum).
+- [x] Tambah test host ramfs (`Create`, `CreateDir`, `CreateFile`, read, write, iterate).
 - [x] Tambah test host VFS untuk mount, path, dan `..`.
 - [x] Compile-check grup.
 

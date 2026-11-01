@@ -21,5 +21,11 @@ CXX="${CXX:-clang++}"
 
 "$BUILD_DIR/host_tests"
 
+"$CXX" -std=c++20 -O1 -Wall -Wextra -Werror \
+  -I libs/core -I kernel/include \
+  tests/host/ramfs_probe.cpp kernel/fs/ramfs.cpp libs/core/memory.cpp \
+  -o "$BUILD_DIR/ramfs_probe"
+"$BUILD_DIR/ramfs_probe"
+
 echo "== gslfs image test =="
 "$ROOT/scripts/test-gslfs.sh"
