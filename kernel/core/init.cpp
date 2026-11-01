@@ -1,6 +1,7 @@
 #include "og/arch/cpu.h"
 #include "og/arch/registers.h"
 #include "og/bootinfo.h"
+#include "og/dma_selftest.h"
 #include "og/event_selftest.h"
 #include "og/gic.h"
 #include "og/heap.h"
@@ -73,6 +74,11 @@ void kmain(BootInfo* info) noexcept {
   status = mem::RunSelfTest();
   if (IsErr(status)) {
     Panic("mem: self test failed");
+  }
+
+  status = dma::RunDmaSelfTest();
+  if (IsErr(status)) {
+    Panic("dma: self test failed");
   }
 
   status = events::WorkQueueInit();

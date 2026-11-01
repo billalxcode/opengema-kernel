@@ -52,6 +52,7 @@ rank_of_header() {
     og/irq.h | og/trap.h | og/workqueue.h | og/event_selftest.h) echo 5 ;;
     og/timer.h) echo 6 ;;
     og/delay.h) echo 6 ;;
+    og/dma.h | og/dma_selftest.h) echo 7 ;;
     og/gic.h) echo 8 ;;
     og/memory_map.h) echo 13 ;;
     og/uart.h) echo 8 ;;

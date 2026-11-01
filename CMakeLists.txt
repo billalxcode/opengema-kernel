@@ -85,6 +85,10 @@ og_add_module(og_events
     kernel/events/self_test.cpp
   DEPS og_core og_inc_kernel)
 
+og_add_module(og_dma
+  SOURCES kernel/dma/dma.cpp kernel/dma/self_test.cpp
+  DEPS og_mem og_inc_kernel)
+
 og_add_module(og_time
   SOURCES kernel/time/timer.cpp kernel/time/delay.cpp
   DEPS og_events og_inc_kernel)
@@ -97,7 +101,7 @@ og_add_module(og_drivers
 
 og_add_module(og_kernel
   SOURCES kernel/core/init.cpp
-  DEPS og_mem og_events og_time og_drivers og_inc_kernel)
+  DEPS og_mem og_events og_time og_dma og_drivers og_inc_kernel)
 
 og_add_module(og_boot
   SOURCES
@@ -113,6 +117,7 @@ set(OG_IMAGE_OBJECTS
   $<TARGET_OBJECTS:og_kernel>
   $<TARGET_OBJECTS:og_drivers>
   $<TARGET_OBJECTS:og_time>
+  $<TARGET_OBJECTS:og_dma>
   $<TARGET_OBJECTS:og_events>
   $<TARGET_OBJECTS:og_mem>
   $<TARGET_OBJECTS:og_core>
@@ -131,7 +136,7 @@ add_custom_command(
     /out:${CMAKE_BINARY_DIR}/BOOTAA64.EFI
     ${OG_IMAGE_OBJECTS}
   COMMAND_EXPAND_LISTS
-  DEPENDS og_boot og_kernel og_drivers og_time og_events og_mem og_core og_io og_arch og_lib_core
+  DEPENDS og_boot og_kernel og_drivers og_time og_dma og_events og_mem og_core og_io og_arch og_lib_core
   COMMENT "lld-link BOOTAA64.EFI"
 )
 
