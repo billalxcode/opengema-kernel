@@ -3,9 +3,9 @@
 Dokumen ini jadi acuan tunggal untuk urutan kerja, batas modul, dan aturan
 anti redundansi. Setiap task punya ID supaya bisa dirujuk di commit.
 
-Status sekarang: Fase 0 sampai 9 selesai. Kernel sudah boot di QEMU virt,
-punya MMU sendiri, allocator, interrupt, timer, virtio-blk, dan bisa membaca
-FAT32 dari partisi EFI.
+Status sekarang: Fase 0 sampai 10 selesai. Kernel sudah boot di QEMU virt,
+punya MMU sendiri, allocator, interrupt, timer, virtio-blk, FAT32, dan
+scheduler round robin dengan preemption.
 
 ---
 
@@ -433,15 +433,29 @@ Catatan hasil Fase 9:
 
 ### Fase 10 - Scheduler
 
-- [ ] SCH-01 `sched/thread.h`: `Thread`, state, kernel stack dari vmm plus
-      guard page.
-- [ ] SCH-02 `sched/scheduler.cpp`: ready queue round robin, idle thread.
-- [ ] SCH-03 Preemption dari tick timer.
-- [ ] SCH-04 `Sleep`, `Wakeup`, integrasi `waitqueue`.
-- [ ] SCH-05 Load balancing sederhana untuk SMP nanti.
-- [ ] SCH-06 Uji: dua thread bergantian print tanpa saling mengunci.
+- [x] SCH-01 `og/sched.h`: `Thread`, state, stack dari vmm plus guard page.
+- [x] SCH-02 `kernel/sched/scheduler.cpp`: ready queue round robin dan
+      idle thread.
+- [x] SCH-03 Preemption dari tick timer lewat callback dan IRQ exit hook.
+- [x] SCH-04 `ThreadSleep`, `ThreadYield`, `ThreadExit`, dan `WaitQueue`.
+- [ ] SCH-05 Load balancing SMP: menunggu Fase 12.
+- [x] SCH-06 Uji: dua worker bergantian print, lalu main lanjut dan halt.
 
 **Selesai bila:** `kmain` menjadi thread init dan idle berjalan saat kosong.
+
+Catatan hasil Fase 10:
+
+1. Stack thread tidak boleh memakai identity map karena RAM dipetakan
+   dengan blok 1 GiB, sehingga satu halaman guard tidak bisa di-unmap.
+   Solusinya, stack ditempatkan di region VA sendiri `0x200000000` dan
+   halaman pertama dibiarkan tidak termap sebagai guard.
+2. Context switch dilakukan di IRQ exit hook setelah EOI, bukan di dalam
+   handler. Kalau switch terjadi sebelum EOI, interrupt tetap aktif di GIC
+   dan timer bisa tertahan selama thread lain berjalan.
+3. Thread boot ikut didaftarkan di slot tabel thread. Tanpa itu, sleep
+   tidak pernah membangunkannya. Ini bug nyata yang ketemu saat uji.
+4. Worker yang selesai belum membebaskan stack. Reklamasi menyusul bersama
+   pengelolaan thread lanjutan.
 
 ### Fase 11 - Syscall dan user mode
 
@@ -541,15 +555,20 @@ yang belum selesai, supaya tidak ada yang hilang di antara fase.
 
 ### 9.1 Ditunda karena butuh scheduler (Fase 10)
 
-- [ ] ARCH-06 `context.S`: switch context callee saved register.
-- [ ] MEM-08 guard page di bawah stack kernel dan deteksi overflow.
-- [ ] EV-06 waitqueue dengan predikat, `Wait`, `WakeOne`, `WakeAll`.
-- [ ] TIME-03 antrian timeout `ScheduleAfter` dan `Cancel`.
-- [ ] SYN-02 mutex dengan wait queue.
-- [ ] SYN-03 semaphore.
+- [ ] SYN-02 mutex dengan wait queue. Wait queue sudah ada, mutex belum.
+- [ ] SYN-03 semaphore. Alasannya sama.
 - [ ] SYN-06 nama lock untuk debug deadlock.
+- [ ] TIME-03 callback timeout `ScheduleAfter` dan `Cancel`. Sleep per
+      thread sudah jalan lewat `wake_tick`, callback umum belum.
 - [ ] TIME-01 konversi clocksource ke nanodetik, setelah ada pemakai.
 - [ ] TIME-05 uji 1000 Hz di bawah beban scheduler.
+- [ ] SCH-05 load balancing SMP, menunggu Fase 12.
+
+### 9.1b Selesai di Fase 10
+
+- [x] ARCH-06 `context.S`: `SwitchContext` dan trampoline thread.
+- [x] MEM-08 guard page stack kernel lewat region VA terpisah.
+- [x] EV-06 waitqueue dengan `WaitQueueWait`, `WakeOne`, `WakeAll`.
 
 ### 9.2 Ditunda karena butuh user mode (Fase 11)
 
@@ -580,7 +599,7 @@ yang belum selesai, supaya tidak ada yang hilang di antara fase.
 ### 9.5 Fase yang belum dimulai
 
 - [ ] Fase 9 sisa: FS-04 ramfs dan FS-08 procfs (lihat 9.3).
-- [ ] Fase 10 seluruhnya: SCH-01 sampai SCH-06.
+- [ ] Fase 10 sisa: SCH-05 load balancing SMP (lihat 9.1).
 - [ ] Fase 11 seluruhnya: SYS-01 sampai SYS-06.
 - [ ] Fase 12 seluruhnya: PLT-01 sampai PLT-03, SMP-01 sampai SMP-03.
 - [ ] Fase 13 seluruhnya: TST-01 sampai TST-05.

@@ -25,7 +25,8 @@ Mau lihat jendela QEMU:
 
 ## Status
 
-Sudah boot sampai kernel dengan MMU, memori, GIC, dan timer:
+Sudah boot sampai kernel dengan MMU, memori, GIC, timer, virtio, FAT32,
+dan scheduler:
 
 ```
 opengema-kernel: uefi entry
@@ -53,11 +54,16 @@ STARTUP.NSH
 event test: irq and workqueue ok
 gic: ready
 timer: frequency: 62500000
-timer: ticks: 100
+timer: ticks: 10
 timer: periodic tick ok
+sched: threads: 4
+sched: worker a
+sched: worker b
+sched: workers done: 2
+sched: round robin ok
 kernel: halt
 ```
 
-Berikutnya: scheduler, wait queue, dan sleep.
+Berikutnya: syscall dan user mode.
 
 Roadmap lengkap ada di `docs/ROADMAP.md`.
