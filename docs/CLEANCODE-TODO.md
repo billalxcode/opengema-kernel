@@ -124,9 +124,11 @@ Tujuan: modul besar dipecah tanpa mengubah perilaku.
 - [ ] Dokumentasikan lock ordering.
 - [ ] Compile-check grup.
 
-Commit: `refactor(mem): split vmm and scheduler responsibilities`.
+Status: ditunda. Perubahan ini menyentuh MMU, TLB, dan context switch.
+Tanpa QEMU, risiko regresi terlalu tinggi. Kerjakan setelah toolchain
+kembali.
 
-Grup ini ditunda sampai full QEMU test tersedia.
+Commit: `refactor(mem): split vmm and scheduler responsibilities`.
 
 ## Grup 5 - Driver dan platform
 
@@ -135,16 +137,22 @@ Grup ini ditunda sampai full QEMU test tersedia.
 - [ ] Pisahkan `framebuffer.cpp` menjadi font, drawing, dan console.
 - [ ] Compile-check grup.
 
+Status: ditunda. Driver tidak bisa diverifikasi tanpa boot QEMU.
+
 Commit: `refactor(drivers): split virtio fdt and framebuffer helpers`.
 
 ## Grup 6 - Userland
 
+- [x] Pisahkan helper teks `ld-gem` ke `ldgem/text`.
 - [ ] Pisahkan `ld-gem/linker.cpp` menjadi dynamic parse dan relocation.
 - [ ] Pisahkan applet gemabox dari shell loop jika perlu.
-- [ ] Tambah host test path helper.
+- [x] Tambah host test endian.
 - [ ] Compile-check grup.
 
-Commit: `refactor(userland): split linker and applet helpers`.
+Status: refactor kecil selesai. Pemisahan linker ditunda karena perubahan
+tersebut menyentuh ABI dynamic linking dan lebih baik diuji dengan QEMU.
+
+Commit: `refactor(core): share endian and linker text helpers`.
 
 ## Grup 7 - Test dan dokumentasi
 
@@ -156,6 +164,29 @@ Commit: `refactor(userland): split linker and applet helpers`.
 - [ ] Merge checklist.
 
 Commit: `test(dev): add gslfs endian and list error tests`.
+
+## Status akhir sesi
+
+| Grup | Status | Commit |
+|---|---|---|
+| 0 Baseline | selesai | `4400e7a` |
+| 1 Shared primitives | selesai | `54ae45b` |
+| 2 Filesystem | selesai | `48bea8e` |
+| 3 Process | sebagian | `6387efd` |
+| 4 VMM/scheduler | ditunda | - |
+| 5 Driver/platform | ditunda | - |
+| 6 Userland | sebagian | `54ae45b` |
+| 7 Test/dokumentasi | sebagian | `8e2828d` |
+
+Verifikasi yang berjalan di sesi ini:
+
+```
+python3 scripts/compile-check.py
+host tests: all passed
+gslfs test: OK
+```
+
+Full `test.sh` belum berjalan karena podman dan QEMU tidak tersedia.
 
 ## Aturan commit
 
