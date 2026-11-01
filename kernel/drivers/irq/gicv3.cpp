@@ -124,7 +124,12 @@ Status Gicv3::enable_irq(uint32_t intid) noexcept {
 
   if (intid < 32U) {
     const uint32_t bit = 1U << intid;
-    const Status group = redistributor_.Write32(kRedistributorGroup0, bit);
+    const Result<uint32_t> current = redistributor_.Read32(kRedistributorGroup0);
+    if (current.is_err()) {
+      return current.status();
+    }
+    const Status group =
+      redistributor_.Write32(kRedistributorGroup0, current.value() | bit);
     if (IsErr(group)) {
       return group;
     }
@@ -138,7 +143,12 @@ Status Gicv3::enable_irq(uint32_t intid) noexcept {
 
   const uint64_t index = intid / 32U;
   const uint32_t bit = 1U << (intid % 32U);
-  const Status group = distributor_.Write32(kDistributorGroup + (index * 4U), bit);
+  const uint64_t group_offset = kDistributorGroup + (index * 4U);
+  const Result<uint32_t> current = distributor_.Read32(group_offset);
+  if (current.is_err()) {
+    return current.status();
+  }
+  const Status group = distributor_.Write32(group_offset, current.value() | bit);
   if (IsErr(group)) {
     return group;
   }
@@ -189,7 +199,11 @@ Status Gicv3::EnablePpiAt(uint64_t redistributor_base, uint32_t intid) noexcept 
   }
   io::MmioRegion frame(redistributor_base, kRedistributorSize);
   const uint32_t bit = 1U << intid;
-  Status status = frame.Write32(kRedistributorGroup0, bit);
+  const Result<uint32_t> current = frame.Read32(kRedistributorGroup0);
+  if (current.is_err()) {
+    return current.status();
+  }
+  Status status = frame.Write32(kRedistributorGroup0, current.value() | bit);
   if (IsErr(status)) {
     return status;
   }
