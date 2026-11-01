@@ -76,11 +76,11 @@ virtio-gpu: display height: 800
 virtio-gpu: scanouts: 1
 virtio-gpu: scanout ok
 fs: mounted devfs and fat32
-fs: ramfs gemabox bytes: 2248
+fs: ramfs gemabox bytes: 7992
 fs: ramfs write ok
 fs: devfs console ok
 fs: fat32 file read ok
-GEMABOX.BIN
+GEMABOX.ELF
 event test: irq and workqueue ok
 gic: ready
 psci: version: 65537

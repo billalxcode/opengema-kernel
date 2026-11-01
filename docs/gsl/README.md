@@ -51,10 +51,12 @@ Kode sekarang berada di awal GSL:
   `libkgema` yang berisi instruksi `svc`.
 - `gemabox` hanya memakai header `gemapi/` dan menautkan `libgemapi.a`.
 - `libkgema.so.1` dan `libgemapi.so.1` sudah dibangun, tetapi belum dimuat
-  karena `ld-gem` dan ELF loader belum ada.
+  karena `ld-gem` dan ELF loader dynamic belum ada.
+- Kernel sudah memuat `/ram/gemabox` sebagai ELF64 statis, memetakan
+  `PT_LOAD`, dan memakai entry point dari file.
 - `scripts/check-gsl.sh` menolak aplikasi yang menyentuh lapisan bawah.
-- Binary gemabox masih dimasukkan kernel ke ramfs.
-- Belum ada init user, system volume, atau GSLFS.
+- Binary gemabox masih dimasukkan kernel ke ramfs, bukan dari GSLFS.
+- Belum ada init user atau system volume.
 
 Dokumen GSL ini adalah target arsitektur, bukan deskripsi kode yang sudah
 selesai.

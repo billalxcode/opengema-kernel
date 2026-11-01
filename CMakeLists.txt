@@ -163,14 +163,13 @@ target_include_directories(og_gemabox_user PRIVATE ${OG_GEMAPI_INCLUDE})
 target_compile_options(og_gemabox_user PRIVATE ${OG_USER_CXX_FLAGS})
 
 set(OG_GEMABOX_ELF ${CMAKE_BINARY_DIR}/gemabox.elf)
-set(OG_GEMABOX_BIN ${CMAKE_BINARY_DIR}/gemabox.bin)
 
 add_custom_command(
-  OUTPUT ${OG_GEMABOX_BIN}
+  OUTPUT ${OG_GEMABOX_ELF}
   COMMAND ${OG_GEMABOX_LD} -T ${CMAKE_SOURCE_DIR}/packages/libgemapi/link.ld
+          -z max-page-size=4096 -s
           -u _start $<TARGET_OBJECTS:og_gemabox_user> ${OG_GEMAPI_ARCHIVE}
           -o ${OG_GEMABOX_ELF}
-  COMMAND ${OG_GEMABOX_OBJCOPY} -O binary ${OG_GEMABOX_ELF} ${OG_GEMABOX_BIN}
   DEPENDS
     og_gemabox_user
     og_libgemapi
@@ -178,7 +177,7 @@ add_custom_command(
   COMMAND_EXPAND_LISTS
   COMMENT "link gemabox")
 
-add_custom_target(og_gemabox DEPENDS ${OG_GEMABOX_BIN})
+add_custom_target(og_gemabox DEPENDS ${OG_GEMABOX_ELF})
 add_dependencies(og_gemabox og_libgemapi)
 
 # One OBJECT library per module. DEPS lists lower layers only, so the
@@ -281,7 +280,7 @@ og_add_module(og_sched
   DEPS og_events og_time og_mem og_core og_inc_kernel)
 
 og_add_module(og_process
-  SOURCES kernel/process/process.cpp
+  SOURCES kernel/process/process.cpp kernel/process/elf.cpp
   DEPS og_fs og_sched og_mem og_core og_inc_kernel)
 
 og_add_module(og_syscall

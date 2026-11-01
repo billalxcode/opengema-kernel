@@ -79,8 +79,8 @@ build/libgemapi.so -> libgemapi.so.1
 objek `libkgema` privat. Baris link aplikasi hanya menyebut `libgemapi.a`.
 
 `libgemapi.so.1` memiliki `DT_NEEDED` ke `libkgema.so.1`. Shared object ini
-belum dimuat saat boot karena `ld-gem` dan ELF loader baru dikerjakan pada
-GSL-2.
+belum dimuat saat boot karena `ld-gem` baru dikerjakan setelah ELF loader
+statis selesai.
 
 ## Aturan
 

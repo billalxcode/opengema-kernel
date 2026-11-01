@@ -42,9 +42,9 @@ Status PopulateRamfs() noexcept {
     return status;
   }
 
-  const Result<fs::Stat> stat = fs::FsStat("/GEMABOX.BIN");
+  const Result<fs::Stat> stat = fs::FsStat("/GEMABOX.ELF");
   if (stat.is_err()) {
-    Log(LogLevel::kWarn, "fs: GEMABOX.BIN missing\n");
+    Log(LogLevel::kWarn, "fs: GEMABOX.ELF missing\n");
     return stat.status();
   }
   const uint64_t size = stat.value().size;
@@ -56,7 +56,7 @@ Status PopulateRamfs() noexcept {
   if (buffer.is_err()) {
     return buffer.status();
   }
-  const Result<uint32_t> file = fs::FsOpen(g_boot_files, "/GEMABOX.BIN");
+  const Result<uint32_t> file = fs::FsOpen(g_boot_files, "/GEMABOX.ELF");
   if (file.is_err()) {
     (void)mem::HeapFree(buffer.value());
     return file.status();

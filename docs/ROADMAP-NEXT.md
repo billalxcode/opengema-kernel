@@ -281,5 +281,6 @@ Roadmap GSL ada di `docs/gsl/06-roadmap.md`.
 
 GSL-1 sudah berjalan: `packages/libgemapi` menjadi satu-satunya API
 aplikasi, `libgemapi.a` membawa `_start` dan objek `libkgema` privat, dan
-`libgemapi.so.1` sudah bergantung pada `libkgema.so.1`. Loader `ld-gem`,
-GSLFS, dan init user belum ada.
+`libgemapi.so.1` sudah bergantung pada `libkgema.so.1`. Kernel juga sudah
+memuat ELF64 statis dan memakai entry point dari file. `ld-gem`, GSLFS, dan
+init user belum ada.

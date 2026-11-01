@@ -26,6 +26,14 @@ void RunUserSelfTest() noexcept {
   (void)mem::HeapFree(warm_a.value());
   (void)mem::HeapFree(warm_b.value());
 
+  // A text file must not be accepted as an executable. This exercises the
+  // negative path of the ELF loader before the frame baseline is recorded.
+  const Result<uint32_t> rejected =
+    process::Spawn("/ram/hello", process::kKernelPid);
+  if (rejected.is_ok()) {
+    Panic("user: non-elf spawn accepted");
+  }
+
   const uint64_t frames_before = mem::PmmFreeFrames();
   const Result<uint32_t> first =
     process::Spawn("/ram/gemabox", process::kKernelPid);

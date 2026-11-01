@@ -3,8 +3,10 @@
 #include "memory.h"
 #include "og/arch/spinlock.h"
 #include "og/arch/user.h"
+#include "bit.h"
 #include "og/core/log.h"
 #include "og/mem/heap.h"
+#include "og/process/elf.h"
 #include "og/sched/sched.h"
 
 namespace og::process {
@@ -215,47 +217,89 @@ Result<uint32_t> SpawnWithArgs(const char* path, uint32_t parent_pid,
     return Result<uint32_t>::Err(Status::kInvalidArg);
   }
 
-  const Result<void*> buffer = mem::HeapAlloc(size);
-  if (buffer.is_err()) {
-    return Result<uint32_t>::Err(buffer.status());
-  }
-
   fs::FileTable loader_files{};
   (void)fs::FileTableInit(loader_files);
   const Result<uint32_t> file = fs::FsOpen(loader_files, path);
   if (file.is_err()) {
-    (void)mem::HeapFree(buffer.value());
     return Result<uint32_t>::Err(file.status());
   }
-  uint64_t read = 0;
-  const Status read_status = fs::FsRead(
+
+  uint8_t header[elf::kHeaderBufferSize]{};
+  const uint64_t header_size =
+    size < sizeof(header) ? size : static_cast<uint64_t>(sizeof(header));
+  uint64_t header_read = 0;
+  Status status = fs::FsRead(
     loader_files, file.value(),
-    std::span<uint8_t>(static_cast<uint8_t*>(buffer.value()), size), read);
-  (void)fs::FsClose(loader_files, file.value());
-  if (IsErr(read_status) || read != size) {
-    (void)mem::HeapFree(buffer.value());
+    std::span<uint8_t>(header, header_size), header_read);
+  if (IsErr(status) || header_read != header_size) {
+    (void)fs::FsClose(loader_files, file.value());
     return Result<uint32_t>::Err(Status::kIoError);
   }
 
+  const Result<elf::Image> image = elf::Parse(
+    std::span<const uint8_t>(header, header_read), size);
+  if (image.is_err()) {
+    (void)fs::FsClose(loader_files, file.value());
+    return Result<uint32_t>::Err(image.status());
+  }
+  if (image.value().interpreter_size != 0U) {
+    (void)fs::FsClose(loader_files, file.value());
+    return Result<uint32_t>::Err(Status::kUnsupported);
+  }
+
   mem::AddressSpace space{};
-  Status status = mem::AddressSpaceInit(space);
+  status = mem::AddressSpaceInit(space);
   if (IsErr(status)) {
-    (void)mem::HeapFree(buffer.value());
+    (void)fs::FsClose(loader_files, file.value());
     return Result<uint32_t>::Err(status);
   }
-  const uint64_t code_size = (size + 4095U) & ~4095U;
-  status = mem::VmmMapUser(space, kUserCodeVa, code_size, true);
-  if (IsOk(status)) {
-    status = mem::VmmCopyOut(space, kUserCodeVa, buffer.value(), size);
+
+  for (uint32_t index = 0;
+       index < image.value().segment_count && IsOk(status); ++index) {
+    const elf::Segment& segment = image.value().segments[index];
+    const uint64_t page_offset = segment.virtual_address & (elf::kPageSize - 1U);
+    const uint64_t map_base = segment.virtual_address - page_offset;
+    const uint64_t map_size =
+      bits::AlignUp(page_offset + segment.memory_size, elf::kPageSize);
+    status = mem::VmmMapUser(space, map_base, map_size, segment.executable);
+    if (IsErr(status) || segment.file_size == 0U) {
+      continue;
+    }
+
+    const Result<void*> buffer = mem::HeapAlloc(segment.file_size);
+    if (buffer.is_err()) {
+      status = buffer.status();
+      break;
+    }
+    status = fs::FsSeek(loader_files, file.value(), segment.file_offset);
+    uint64_t read = 0;
+    if (IsOk(status)) {
+      status = fs::FsRead(
+        loader_files, file.value(),
+        std::span<uint8_t>(static_cast<uint8_t*>(buffer.value()),
+                           segment.file_size),
+        read);
+    }
+    if (IsOk(status) && read != segment.file_size) {
+      status = Status::kIoError;
+    }
+    if (IsOk(status)) {
+      status = mem::VmmCopyOut(space, segment.virtual_address, buffer.value(),
+                               segment.file_size);
+    }
+    (void)mem::HeapFree(buffer.value());
   }
-  if (IsOk(status)) {
-    status = mem::VmmMapUser(space, kUserStackVa, kUserStackSize, false);
+  (void)fs::FsClose(loader_files, file.value());
+  if (IsErr(status)) {
+    (void)mem::AddressSpaceDestroy(space);
+    return Result<uint32_t>::Err(status);
   }
+
+  status = mem::VmmMapUser(space, kUserStackVa, kUserStackSize, false);
   UserStack user_stack{};
   if (IsOk(status)) {
     status = BuildUserStack(space, path, argv, argc, user_stack);
   }
-  (void)mem::HeapFree(buffer.value());
   if (IsErr(status)) {
     (void)mem::AddressSpaceDestroy(space);
     return Result<uint32_t>::Err(status);
@@ -282,7 +326,7 @@ Result<uint32_t> SpawnWithArgs(const char* path, uint32_t parent_pid,
   slot->exit_code = 0;
   slot->used = 1;
   slot->space = space;
-  slot->entry = kUserCodeVa;
+  slot->entry = image.value().entry;
   slot->stack_top = user_stack.stack_pointer;
   slot->argv = user_stack.argv;
   slot->envp = user_stack.envp;

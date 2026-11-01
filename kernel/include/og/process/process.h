@@ -51,8 +51,8 @@ struct Process {
 
 [[nodiscard]] Status Init() noexcept;
 
-// Loads a flat binary from path and starts it in a new address space.
-// With no argv, argv[0] is set to path.
+// Loads a static ELF64 executable from path and starts it in a new address
+// space. With no argv, argv[0] is set to path.
 [[nodiscard]] Result<uint32_t> Spawn(const char* path, uint32_t parent_pid) noexcept;
 
 [[nodiscard]] Result<uint32_t> SpawnWithArgs(const char* path, uint32_t parent_pid,

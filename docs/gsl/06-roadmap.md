@@ -58,17 +58,25 @@ menyusul bersama loader.
 
 Tujuan: binary dan dependency benar-benar dimuat dari filesystem.
 
-- [ ] ELF64 loader di kernel.
-- [ ] Dukungan `PT_INTERP` dan `PT_LOAD`.
-- [ ] Validasi segment, alignment, entry, dan stack.
+- [x] ELF64 loader di kernel untuk ET_EXEC statis.
+- [x] Dukungan `PT_LOAD`.
+- [x] Validasi header, mesin, entry, segmen, alignment, dan batas file.
+- [x] Kernel memakai entry point dari ELF, bukan alamat tetap.
+- [x] Binary uji tidak lagi berupa flat binary.
+- [x] Test menolak file yang bukan ELF.
+- [~] `PT_INTERP` terdeteksi dan ditolak sampai `ld-gem` tersedia.
 - [ ] `ld-gem` memproses `DT_NEEDED`.
 - [ ] Relokasi dan symbol binding.
 - [ ] Search path hanya `/System/Libraries`.
 - [ ] Read-only code mapping dan W^X user.
-- [ ] Test library hilang, versi salah, dan ELF rusak.
+- [ ] Test library hilang, versi salah, dan ELF rusak lanjutan.
 
 Selesai bila: aplikasi dynamic berjalan dengan `libgemapi.so` dan
 `libkgema.so` dari filesystem.
+
+Status: kernel sudah memuat `/ram/gemabox` sebagai ELF64, memetakan segmen
+`PT_LOAD`, dan memakai alamat entry dari file. `PT_INTERP` belum dijalankan
+karena `ld-gem` belum ada. Binary masih berasal dari ramfs, bukan GSLFS.
 
 ## GSL-3 - GSLFS dan system volume
 

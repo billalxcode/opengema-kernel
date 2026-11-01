@@ -65,7 +65,7 @@ if [ -n "$ENTRY_HITS" ]; then
 fi
 
 # 7. The gemabox link line must name libgemapi only.
-LINK_BLOCK="$(awk '/OUTPUT \$\{OG_GEMABOX_BIN\}/,/COMMENT "link gemabox"/' CMakeLists.txt 2>/dev/null)"
+LINK_BLOCK="$(awk '/OUTPUT \$\{OG_GEMABOX_ELF\}/,/COMMENT "link gemabox"/' CMakeLists.txt 2>/dev/null)"
 if [ -z "$LINK_BLOCK" ]; then
   fail "cannot find the gemabox link rule in CMakeLists.txt"
 else
