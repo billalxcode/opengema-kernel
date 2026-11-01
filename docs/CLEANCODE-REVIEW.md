@@ -158,6 +158,8 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   `CheckMagic` dari loop pencarian.
 - `gslfs.cpp` memisahkan `LoadNode` sehingga loop `LoadNodes` hanya
   mengatur state global.
+- `fat32::Mount` memisahkan `ParseBootSector` dari penyiapan volume dan
+  root node.
 - `devfs.cpp` memakai satu tabel `g_devices` untuk lookup dan iteration.
 - FD table dipindah ke `fd_table.cpp`; `vfs_internal.h` hanya membawa
   `IsReady()` untuk kode kernel, bukan header publik.
