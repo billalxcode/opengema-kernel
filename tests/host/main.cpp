@@ -276,6 +276,53 @@ og::Status DevLookup(og::fs::Node* /*directory*/, const char* name,
 const og::fs::NodeOps kRootOps{&RootLookup, nullptr, nullptr, nullptr};
 const og::fs::NodeOps kDevOps{&DevLookup, nullptr, nullptr, nullptr};
 
+// Exactly 16 payload bytes: the virtual file has no terminating NUL.
+char g_file_data[16] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h',
+                        'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p'};
+
+og::Status FileReadOp(og::fs::Node* node, uint64_t offset,
+                      std::span<uint8_t> buffer, uint64_t& out_read) noexcept {
+  out_read = 0;
+  if (node == nullptr || buffer.empty()) {
+    return og::Status::kInvalidArg;
+  }
+  if (offset >= node->size) {
+    return og::Status::kOk;
+  }
+  uint64_t available = node->size - offset;
+  if (available > buffer.size()) {
+    available = buffer.size();
+  }
+  for (uint64_t index = 0; index < available; ++index) {
+    buffer[index] = static_cast<uint8_t>(g_file_data[offset + index]);
+  }
+  out_read = available;
+  return og::Status::kOk;
+}
+
+og::Status FileWriteOp(og::fs::Node* node, uint64_t offset,
+                       std::span<const uint8_t> buffer,
+                       uint64_t& out_written) noexcept {
+  out_written = 0;
+  if (node == nullptr || buffer.empty() || offset >= sizeof(g_file_data)) {
+    return og::Status::kInvalidArg;
+  }
+  uint64_t available = sizeof(g_file_data) - offset;
+  if (available > buffer.size()) {
+    available = buffer.size();
+  }
+  for (uint64_t index = 0; index < available; ++index) {
+    g_file_data[offset + index] = static_cast<char>(buffer[index]);
+  }
+  if (offset + available > node->size) {
+    node->size = offset + available;
+  }
+  out_written = available;
+  return og::Status::kOk;
+}
+
+const og::fs::NodeOps kFileOps{nullptr, &FileReadOp, &FileWriteOp, nullptr};
+
 void TestVfs() {
   g_root_node = og::fs::Node{"/", og::fs::NodeType::kDirectory, 0, &kRootOps,
                              nullptr, nullptr};
@@ -314,6 +361,72 @@ void TestVfs() {
   const auto stat = og::fs::FsStat("/dev/console");
   CHECK(stat.is_ok());
   CHECK(stat.value().type == og::fs::NodeType::kDevice);
+
+  og::mem::Copy(g_file_data, "abcdefghijklmnop", sizeof(g_file_data));
+  g_file_node.size = sizeof(g_file_data);
+  g_file_node.ops = &kFileOps;
+
+  og::fs::FileTable table{};
+  CHECK(og::IsOk(og::fs::FileTableInit(table)));
+  const auto descriptor = og::fs::FsOpen(table, "/file");
+  CHECK(descriptor.is_ok());
+  CHECK(descriptor.value() == 3U);
+
+  char buffer[4]{};
+  uint64_t read = 0;
+  CHECK(og::IsOk(og::fs::FsRead(
+    table, descriptor.value(), std::span<uint8_t>(
+      reinterpret_cast<uint8_t*>(buffer), sizeof(buffer)), read)));
+  CHECK(read == 4U);
+  CHECK(buffer[0] == 'a' && buffer[3] == 'd');
+
+  CHECK(og::IsOk(og::fs::FsSeek(table, descriptor.value(), 0)));
+  const char payload[] = "XY";
+  uint64_t written = 0;
+  CHECK(og::IsOk(og::fs::FsWrite(
+    table, descriptor.value(),
+    std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(payload), 2),
+    written)));
+  CHECK(written == 2U);
+  CHECK(g_file_data[0] == 'X' && g_file_data[1] == 'Y');
+
+  CHECK(og::IsOk(og::fs::FsSeek(table, descriptor.value(), 12)));
+  char tail[4]{};
+  uint64_t tail_read = 0;
+  CHECK(og::IsOk(og::fs::FsRead(
+    table, descriptor.value(),
+    std::span<uint8_t>(reinterpret_cast<uint8_t*>(tail), sizeof(tail)),
+    tail_read)));
+  CHECK(tail_read == 4U);
+  CHECK(tail[0] == 'm' && tail[3] == 'p');
+
+  CHECK(og::IsOk(og::fs::FsSeek(table, descriptor.value(), g_file_node.size)));
+  uint64_t eof_read = 1;
+  CHECK(og::IsOk(og::fs::FsRead(
+    table, descriptor.value(),
+    std::span<uint8_t>(reinterpret_cast<uint8_t*>(tail), sizeof(tail)),
+    eof_read)));
+  CHECK(eof_read == 0U);
+
+  const auto second = og::fs::FsOpen(table, "/file");
+  CHECK(second.is_ok());
+  CHECK(second.value() == 4U);
+  CHECK(og::IsOk(og::fs::FsClose(table, second.value())));
+
+  // Closing a descriptor frees it for the next open.
+  const auto reused = og::fs::FsOpen(table, "/file");
+  CHECK(reused.is_ok());
+  CHECK(reused.value() == 4U);
+  CHECK(og::IsOk(og::fs::FsClose(table, reused.value())));
+
+  CHECK(og::fs::FsSeek(table, descriptor.value(), g_file_node.size + 1U) ==
+        og::Status::kInvalidArg);
+  CHECK(og::IsOk(og::fs::FsClose(table, descriptor.value())));
+  CHECK(og::fs::FsRead(
+          table, descriptor.value(),
+          std::span<uint8_t>(reinterpret_cast<uint8_t*>(buffer), sizeof(buffer)),
+          read) == og::Status::kNotFound);
+  CHECK(!og::fs::FsOpen(table, "/missing").is_ok());
 }
 
 void PutLe16(uint8_t* data, uint16_t value) {
