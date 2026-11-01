@@ -1,4 +1,4 @@
-#include "efi_console.h"
+#include "og/boot/uefi/efi_console.h"
 
 #include <cstddef>
 

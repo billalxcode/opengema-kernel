@@ -1,4 +1,4 @@
-#include "efi_boot.h"
+#include "og/boot/uefi/efi_boot.h"
 
 #include "endian.h"
 #include "og/core/bootinfo.h"

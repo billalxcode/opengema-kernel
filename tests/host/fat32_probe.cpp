@@ -72,7 +72,7 @@ void BuildImage(std::vector<uint8_t>& image) {
   uint8_t* fat = image.data() + kSectorSize;
   PutLe32(fat + 0U, 0x0FFFFFF8U);
   PutLe32(fat + 4U, 0x0FFFFFFFU);
-  for (uint32_t cluster = 2U; cluster <= 5U; ++cluster) {
+  for (uint32_t cluster = 2U; cluster <= 6U; ++cluster) {
     PutLe32(fat + (cluster * 4U), 0x0FFFFFFFU);
   }
 
@@ -88,7 +88,27 @@ void BuildImage(std::vector<uint8_t>& image) {
   sub[11U] = 0x10U;
   PutLe16(sub + 26U, 4U);
 
+  // Long name entry for "Long Name.txt", then its short entry.
+  constexpr uint32_t kLongNameOffsets[13] = {1,  3,  5,  7,  9,  14, 16,
+                                             18, 20, 22, 24, 28, 30};
+  constexpr char kLongName[] = "Long Name.txt";
+  static_assert(sizeof(kLongName) == 14U);
+  uint8_t* long_entry = root + 64U;
+  long_entry[0U] = 0x41U;
+  long_entry[11U] = 0x0FU;
+  for (uint32_t index = 0; index < 13U; ++index) {
+    PutLe16(long_entry + kLongNameOffsets[index],
+            static_cast<uint8_t>(kLongName[index]));
+  }
+
+  uint8_t* long_short = root + 96U;
+  og::mem::Copy(long_short, "LONGNA~1TXT", 11);
+  long_short[11U] = 0x20U;
+  PutLe16(long_short + 26U, 6U);
+  PutLe32(long_short + 28U, 5U);
+
   // Cluster 3: file data. Cluster 4: a subdirectory. Cluster 5: its file.
+  // Cluster 6: the long-name file.
   og::mem::Copy(image.data() + (3U * kSectorSize), "hello world\n", 12);
 
   uint8_t* subdir = image.data() + (4U * kSectorSize);
@@ -98,6 +118,7 @@ void BuildImage(std::vector<uint8_t>& image) {
   PutLe32(subdir + 28U, 5U);
 
   og::mem::Copy(image.data() + (5U * kSectorSize), "inner", 5);
+  og::mem::Copy(image.data() + (6U * kSectorSize), "long\n", 5);
 }
 
 bool ReadAll(og::fs::Node* node, uint64_t offset, char* buffer,
@@ -194,6 +215,19 @@ int main() {
     return 1;
   }
 
+  og::fs::Node* long_file = nullptr;
+  if (og::IsErr(root->ops->lookup(root, "Long Name.txt", &long_file)) ||
+      long_file == nullptr || long_file->type != og::fs::NodeType::kFile ||
+      long_file->size != 5U) {
+    std::printf("fat32 probe: long name lookup failed\n");
+    return 1;
+  }
+  if (!ReadAll(long_file, 0, text, sizeof(text), read) || read != 5U ||
+      !og::mem::Same(text, "long\n")) {
+    std::printf("fat32 probe: long name read failed\n");
+    return 1;
+  }
+
   og::fs::DirEntry entry{};
   bool found = false;
   if (og::IsErr(root->ops->iterate(root, 0, entry, found)) || !found ||
@@ -208,7 +242,13 @@ int main() {
     std::printf("fat32 probe: iterate directory failed\n");
     return 1;
   }
-  if (og::IsErr(root->ops->iterate(root, 2, entry, found)) || found) {
+  if (og::IsErr(root->ops->iterate(root, 2, entry, found)) || !found ||
+      !og::mem::Same(entry.name, "Long Name.txt") ||
+      entry.type != og::fs::NodeType::kFile || entry.size != 5U) {
+    std::printf("fat32 probe: iterate long name failed\n");
+    return 1;
+  }
+  if (og::IsErr(root->ops->iterate(root, 3, entry, found)) || found) {
     std::printf("fat32 probe: iterate past end failed\n");
     return 1;
   }

@@ -147,39 +147,60 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   `efi_image.cpp`, `gslfs.cpp`, `partition.cpp`, dan `elf.cpp` memakainya.
 - `ldgem/text.h` dan `text.cpp` menjadi satu sumber helper teks untuk
   `ld-gem`.
+- `gemapi::fs` memakai `ConvertKind` untuk `stat` dan `list`.
 - `gslfs::Mount` dipecah menjadi `ReadSuperblock`, `LoadNodes`,
   `ValidateTree`, dan `VerifyNodeData`.
 - `SetupWritableFs` dipecah menjadi `CreateWritableTree`,
   `MountWritableTree`, `SeedEtcConfig`, dan `VerifyTmpWrite`.
+- `InitFilesystem` hanya mengatur urutan; detailnya ada di
+  `FindBlockDevice`, `InitFileTables`, `MountSystemVolume`, `ProbeLibrary`,
+  `MountDevfs`, `MountOptionalFilesystems`, `ProbeConsole`, dan `ListRoot`.
 - `SpawnWithArgs` memakai `BuildInterpreterEnvironment` agar state
   environment tidak berserakan.
+- `kernel/process/loader.cpp` memisahkan baca image, map segment, dan
+  interpreter path; `SpawnWithArgs` memakai `LoadProgram` dan
+  `CreateProcess`.
+- `kernel/syscall/io.cpp` memisahkan `DoRead`, `DoWrite`, dan `TtyReadLine`;
+  deklarasi bersama ada di `og/syscall/syscall_internal.h`.
 - `vfs.cpp` memisahkan `FindBestMount` dan `ResolveSegments`.
 - `partition.cpp` memisahkan `ReadGptHeader`, `ParsePartition`, dan
   `CheckMagic` dari loop pencarian.
 - `gslfs.cpp` memisahkan `LoadNode` sehingga loop `LoadNodes` hanya
   mengatur state global.
+- `gslfs::LoadNode` memakai `ReadNodeRecord`, `ParseNodeFields`,
+  `AssignNodeName`, dan `AssignNodeExtent` untuk satu node.
+- `gslfs::ValidateTree` memakai `ReachesRoot`, dan `DirIterate` memakai
+  `FillDirEntry`.
+- `gslfs::ReadSuperblock` memakai `ParseSuperblockFields`,
+  `CheckSuperblockHeader`, dan `CheckSuperblockLayout`.
 - `fat32::Mount` memisahkan `ParseBootSector` dari penyiapan volume dan
   root node.
+- `fat32::WalkDirectory` memakai `ParseEntry` untuk satu slot direktori,
+  termasuk nama pendek, long name, dan volume label.
+- `fat32::FileRead` memakai `SeekCluster` dan `AdvanceCluster` sehingga
+  penelusuran rantai cluster tidak diduplikasi.
 - `devfs.cpp` memakai satu tabel `g_devices` untuk lookup dan iteration.
-- FD table dipindah ke `fd_table.cpp`; `vfs_internal.h` hanya membawa
-  `IsReady()` untuk kode kernel, bukan header publik.
+- FD table dipindah ke `fd_table.cpp`; `og/fs/vfs_internal.h` hanya
+  membawa `IsReady()` untuk kode kernel, bukan header publik.
 - `fd_table.cpp` meng-include `og/fs/vfs.h` yang mendeklarasikan fungsi
   yang diimplementasikannya, sesuai aturan include header di .cpp.
+- Semua header baru disimpan di `kernel/include/og/...`; tidak ada header
+  yang diletakkan di samping file `.cpp`.
 - `fdt.cpp` memakai satu `NodeBodyOffset` untuk prolog node.
 - `docs/LOCKING.md` mencatat urutan lock yang diketahui: heap -> PMM,
   scheduler -> PMM, dan virtio-blk sebagai leaf.
 - `VmmMapDevice` diperbaiki formatting-nya.
-- Test host baru: endian reader, image GSLFS valid/rusak/deterministik,
-  driver GSLFS, ramfs, procfs, devfs, FAT32, GPT/partition, VFS, VFS FD,
-  ELF parser, dan FDT parser.
+- Test host baru: endian reader, image GSLFS valid/rusak/siklus/deterministik,
+  driver GSLFS, ramfs, procfs, devfs, FAT32, gemapi fs, gemapi api, kgema,
+  GPT/partition, VFS, VFS FD, ELF parser, dan FDT parser.
 - Test QEMU baru: `ls /missing` diharapkan menghasilkan
   `ls: list failed`.
 
 Verifikasi branch `dev`:
 
 - `python3 scripts/compile-check.py`: 90 file OK, 1 entri lama dilewati.
-- `./scripts/test-host.sh`: host tests, ramfs, procfs, devfs, FAT32, GPT,
-  FDT, VFS, ELF, dan GSLFS probe OK.
+- `./scripts/test-host.sh`: host tests, ramfs, procfs, devfs, FAT32, gemapi
+  fs, gemapi api, kgema, GPT, FDT, VFS, ELF, dan GSLFS probe OK.
 - `test.sh` penuh belum dijalankan karena podman/QEMU tidak tersedia.
 
 ## Kesimpulan

@@ -475,10 +475,11 @@ og_add_module(og_sched
 
 og_add_module(og_process
   SOURCES kernel/process/process.cpp kernel/process/elf.cpp
+          kernel/process/loader.cpp
   DEPS og_fs og_sched og_mem og_core og_inc_kernel)
 
 og_add_module(og_syscall
-  SOURCES kernel/syscall/syscall.cpp
+  SOURCES kernel/syscall/syscall.cpp kernel/syscall/io.cpp
   DEPS og_process og_sched og_events og_mem og_core og_inc_kernel)
 
 og_add_module(og_sync

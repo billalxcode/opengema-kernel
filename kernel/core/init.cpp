@@ -1,4 +1,4 @@
-#include "init/boot.h"
+#include "og/boot/init.h"
 
 #include "memory.h"
 #include "og/arch/cpu.h"

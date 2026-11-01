@@ -88,26 +88,39 @@ Tujuan: fungsi kecil, satu tanggung jawab.
   `ValidateTree`, dan `VerifyNodeData`.
 - [x] Pecah `SetupWritableFs` menjadi `CreateWritableTree`,
   `MountWritableTree`, `SeedEtcConfig`, dan `VerifyTmpWrite`.
+- [x] Pecah `InitFilesystem` menjadi `FindBlockDevice`, `InitFileTables`,
+  `MountSystemVolume`, `ProbeLibrary`, `MountDevfs`,
+  `MountOptionalFilesystems`, `ProbeConsole`, dan `ListRoot`.
 - [x] Pisahkan mount lookup dan path walk di `vfs.cpp` (`FindBestMount`,
   `ResolveSegments`).
 - [x] Pisahkan FD table dari path resolution di `vfs.cpp`
-  (`fd_table.cpp` + `vfs_internal.h`).
+  (`fd_table.cpp` + `og/fs/vfs_internal.h`).
 - [x] Satukan daftar device devfs dalam satu tabel untuk lookup dan
   iteration.
 - [x] Pecah `FindFiltered` menjadi `ReadGptHeader`, `MatchesType`,
   `ParsePartition`, dan `CheckMagic`.
 - [x] Pecah `LoadNodes` menjadi `LoadNode` per node.
+- [x] Pecah `LoadNode` menjadi `ReadNodeRecord`, `ParseNodeFields`,
+  `AssignNodeName`, dan `AssignNodeExtent`.
+- [x] Pecah `ValidateTree` dengan `ReachesRoot` dan `DirIterate` dengan
+  `FillDirEntry`.
+- [x] Pecah `ReadSuperblock` menjadi `ParseSuperblockFields`,
+  `CheckSuperblockHeader`, dan `CheckSuperblockLayout`.
 - [x] Pecah `fat32::Mount` menjadi `ParseBootSector` dan pembuatan root.
+- [x] Pecah `WalkDirectory` dengan `ParseEntry` untuk satu slot direktori.
+- [x] Pecah `FileRead` FAT32 dengan `SeekCluster` dan `AdvanceCluster`.
 - [x] Tambah test host GSLFS dari `mkgslimg`.
 - [x] Tambah test host driver GSLFS (`Mount`, lookup, read, checksum).
+- [x] Tambah test siklus parent GSLFS ditolak saat mount.
 - [x] Tambah test host ramfs (`Create`, `CreateDir`, `CreateFile`, read, write, iterate).
 - [x] Tambah test host VFS untuk mount, path, dan `..`.
 - [x] Tambah test host VFS FD (`FsOpen`, `FsRead`, `FsWrite`, `FsSeek`,
   `FsClose`, descriptor reuse).
 - [x] Compile-check grup.
 
-Catatan: `vfs_internal.h` hanya berisi `IsReady()` dan tidak masuk header
-publik. `fd_table.cpp` meng-include header publik `og/fs/vfs.h` sebagai
+Catatan: `og/fs/vfs_internal.h` hanya berisi `IsReady()` dan bukan header
+publik. Semua header disimpan di tree `kernel/include/og`, bukan di
+samping file `.cpp`. `fd_table.cpp` meng-include `og/fs/vfs.h` sebagai
 deklarasi fungsi yang diimplementasikannya.
 
 Commit: `refactor(fs): split gslfs mount and writable setup`.
@@ -118,15 +131,22 @@ Tujuan: batas tanggung jawab yang jelas.
 
 - [x] Ekstrak `BuildInterpreterEnvironment` dari `SpawnWithArgs`.
 - [x] Tambah host test ELF parser (`Parse` valid dan invalid).
-- [ ] Pindahkan load ELF dari `process.cpp` ke helper `elf.cpp`.
-- [ ] Pisahkan `SpawnWithArgs` menjadi `LoadProgram`, `CreateAddressSpace`,
-  `CreateProcess`.
-- [ ] Pisahkan handler syscall per kategori: io, fs, process.
-- [ ] Tambah test error `list` dan `spawn`.
-- [ ] Compile-check grup.
+- [x] Pindahkan load ELF dari `process.cpp` ke `loader.cpp`; `elf.cpp`
+  tetap parser murni.
+- [x] Ekstrak `LoadProgram` (termasuk `AddressSpaceInit` dan mapping) dari
+  `SpawnWithArgs`.
+- [x] Pisahkan alokasi dan pengisian process slot menjadi `CreateProcess`.
+- [x] Pisahkan handler I/O (`DoRead`, `DoWrite`, `TtyReadLine`) ke
+  `kernel/syscall/io.cpp`.
+- [ ] Pisahkan handler fs dan process dari `syscall.cpp`.
+- [x] Tambah test error `list` dan `spawn` (siap, menunggu QEMU).
+- [x] Compile-check `process.cpp` dan `loader.cpp`.
 
-Catatan: pemisahan load ELF dan syscall ditunda sampai QEMU tersedia.
-Ekstraksi environment sudah mengurangi state lokal di `SpawnWithArgs`.
+Catatan: `loader.cpp` menangani baca image, map segment, dan interpreter
+path. Deklarasinya ada di `og/process/loader.h`. `LoadProgram` menghasilkan
+`LoadedProgram`, lalu `CreateProcess` mengisi slot process. Deklarasi
+handler syscall kategori ada di `og/syscall/syscall_internal.h`.
+Pemisahan handler fs dan process ditunda sampai QEMU tersedia.
 
 Commit: `refactor(process): extract interpreter environment`.
 
@@ -163,6 +183,13 @@ Commit: `test(dev): add fdt host test`.
 ## Grup 6 - Userland
 
 - [x] Pisahkan helper teks `ld-gem` ke `ldgem/text`.
+- [x] Satukan mapping tipe node di `gemapi::fs::ConvertKind`.
+- [x] Tambah host test libgemapi fs (`open`, `read`, `write`, `seek`,
+  move, `stat`, `list`).
+- [x] Tambah host test libkgema (`file`, `io`, `process`, `memory`,
+  penerusan argumen syscall).
+- [x] Tambah host test libgemapi io/process/memory (`read_line`, `spawn`,
+  `wait`, `map`, `unmap`, `to_string`).
 - [ ] Pisahkan `ld-gem/linker.cpp` menjadi dynamic parse dan relocation.
 - [ ] Pisahkan applet gemabox dari shell loop jika perlu.
 - [x] Tambah host test endian.
@@ -189,7 +216,7 @@ Commit: `refactor(core): share endian and linker text helpers`.
 - [x] Tambah test host devfs (`console`, `null`, `zero`, lookup, iterate,
   read/write).
 - [x] Tambah test host FAT32 (mount, lookup case-insensitive, offset read,
-  nested directory, iterate, error path dan validasi boot sector).
+  nested directory, iterate, long name, error path dan validasi boot sector).
 - [x] Tambah test host ELF parser valid dan invalid.
 - [x] Tambah test negative `ls /missing` di test QEMU (menunggu QEMU).
 - [ ] Update `docs/CLEANCODE-REVIEW.md`.
@@ -228,6 +255,8 @@ Full `test.sh` belum berjalan karena podman dan QEMU tidak tersedia.
 
 ## Aturan commit
 
+- Jangan commit tanpa perintah eksplisit dari user. Kumpulkan perubahan
+  dulu, lalu tunggu perintah commit.
 - Satu grup satu commit.
 - Jangan campur refactor dengan fitur.
 - Compile-check hijau sebelum commit.

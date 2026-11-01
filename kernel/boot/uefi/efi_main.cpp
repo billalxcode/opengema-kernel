@@ -1,6 +1,6 @@
 #include "efi.h"
-#include "efi_boot.h"
-#include "efi_console.h"
+#include "og/boot/uefi/efi_boot.h"
+#include "og/boot/uefi/efi_console.h"
 
 #include "og/core/bootinfo.h"
 #include "og/core/kmain.h"

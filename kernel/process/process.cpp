@@ -3,10 +3,9 @@
 #include "memory.h"
 #include "og/arch/spinlock.h"
 #include "og/arch/user.h"
-#include "bit.h"
 #include "og/core/log.h"
-#include "og/mem/heap.h"
 #include "og/process/elf.h"
+#include "og/process/loader.h"
 #include "og/sched/sched.h"
 
 namespace og::process {
@@ -80,96 +79,6 @@ void BuildInterpreterEnvironment(const elf::Image& image, bool dynamic,
   ++out.count;
   out.values[out.count] = out.dynamic;
   ++out.count;
-}
-
-[[nodiscard]] Status ReadImage(fs::FileTable& files, uint32_t file,
-                               uint64_t file_size, elf::Image& image) noexcept {
-  uint8_t header[elf::kHeaderBufferSize]{};
-  const uint64_t size =
-    file_size < sizeof(header) ? file_size : static_cast<uint64_t>(sizeof(header));
-  Status status = fs::FsSeek(files, file, 0);
-  if (IsErr(status)) {
-    return status;
-  }
-  uint64_t read = 0;
-  status = fs::FsRead(files, file, std::span<uint8_t>(header, size), read);
-  if (IsErr(status) || read != size) {
-    return Status::kIoError;
-  }
-  const Result<elf::Image> parsed =
-    elf::Parse(std::span<const uint8_t>(header, read), file_size);
-  if (parsed.is_err()) {
-    return parsed.status();
-  }
-  image = parsed.value();
-  return Status::kOk;
-}
-
-[[nodiscard]] Status MapImage(fs::FileTable& files, uint32_t file,
-                              const elf::Image& image,
-                              mem::AddressSpace& space) noexcept {
-  Status status = Status::kOk;
-  for (uint32_t index = 0;
-       index < image.segment_count && IsOk(status); ++index) {
-    const elf::Segment& segment = image.segments[index];
-    const uint64_t page_offset = segment.virtual_address & (elf::kPageSize - 1U);
-    const uint64_t map_base = segment.virtual_address - page_offset;
-    const uint64_t map_size =
-      bits::AlignUp(page_offset + segment.memory_size, elf::kPageSize);
-    status = mem::VmmMapUser(space, map_base, map_size, segment.executable);
-    if (IsErr(status) || segment.file_size == 0U) {
-      continue;
-    }
-
-    const Result<void*> buffer = mem::HeapAlloc(segment.file_size);
-    if (buffer.is_err()) {
-      status = buffer.status();
-      break;
-    }
-    status = fs::FsSeek(files, file, segment.file_offset);
-    uint64_t read = 0;
-    if (IsOk(status)) {
-      status = fs::FsRead(
-        files, file,
-        std::span<uint8_t>(static_cast<uint8_t*>(buffer.value()),
-                           segment.file_size),
-        read);
-    }
-    if (IsOk(status) && read != segment.file_size) {
-      status = Status::kIoError;
-    }
-    if (IsOk(status)) {
-      status = mem::VmmCopyOut(space, segment.virtual_address, buffer.value(),
-                               segment.file_size);
-    }
-    (void)mem::HeapFree(buffer.value());
-  }
-  return status;
-}
-
-[[nodiscard]] Status ReadInterpreterPath(fs::FileTable& files, uint32_t file,
-                                         const elf::Image& image, char* path,
-                                         uint64_t capacity) noexcept {
-  if (image.interpreter_size < 2U || image.interpreter_size > capacity) {
-    return Status::kInvalidArg;
-  }
-  Status status = fs::FsSeek(files, file, image.interpreter_offset);
-  if (IsErr(status)) {
-    return status;
-  }
-  uint64_t read = 0;
-  status = fs::FsRead(
-    files, file,
-    std::span<uint8_t>(reinterpret_cast<uint8_t*>(path),
-                       image.interpreter_size),
-    read);
-  if (IsErr(status) || read != image.interpreter_size) {
-    return Status::kIoError;
-  }
-  if (path[image.interpreter_size - 1U] != '\0' || path[0] != '/') {
-    return Status::kInvalidArg;
-  }
-  return Status::kOk;
 }
 
 [[nodiscard]] Status BuildUserStack(const mem::AddressSpace& space, const char* path,
@@ -361,6 +270,171 @@ void CloseFiles(Process& process) noexcept {
   }
 }
 
+struct LoadedProgram {
+  mem::AddressSpace space;
+  elf::Image image;
+  elf::Image interpreter_image;
+  uint64_t file_size;
+  bool dynamic;
+};
+
+// Opens the program, loads its image and optional interpreter, then maps
+// both into a fresh address space. Files are closed before returning.
+[[nodiscard]] Status LoadProgram(const char* path, LoadedProgram& out) noexcept {
+  out = LoadedProgram{};
+
+  const Result<fs::Stat> stat = fs::FsStat(path);
+  if (stat.is_err()) {
+    return stat.status();
+  }
+  out.file_size = stat.value().size;
+  if (out.file_size == 0U || out.file_size > kMaxProgramSize) {
+    return Status::kInvalidArg;
+  }
+
+  fs::FileTable files{};
+  (void)fs::FileTableInit(files);
+  const Result<uint32_t> file = fs::FsOpen(files, path);
+  if (file.is_err()) {
+    return file.status();
+  }
+
+  Status status = loader::ReadImage(files, file.value(), out.file_size,
+                                    out.image);
+  if (IsErr(status)) {
+    (void)fs::FsClose(files, file.value());
+    return status;
+  }
+
+  out.dynamic = out.image.interpreter_size != 0U;
+  char interpreter_path[kMaxInterpreterPath]{};
+  uint32_t interpreter_descriptor = 0;
+  bool interpreter_open = false;
+
+  if (out.dynamic) {
+    if (out.image.dynamic_address == 0U) {
+      (void)fs::FsClose(files, file.value());
+      return Status::kInvalidArg;
+    }
+    status = loader::ReadInterpreterPath(files, file.value(), out.image,
+                                         interpreter_path,
+                                         sizeof(interpreter_path));
+    if (IsErr(status)) {
+      (void)fs::FsClose(files, file.value());
+      return status;
+    }
+
+    const Result<fs::Stat> interpreter_stat = fs::FsStat(interpreter_path);
+    if (interpreter_stat.is_err() || interpreter_stat.value().size == 0U ||
+        interpreter_stat.value().size > kMaxProgramSize) {
+      (void)fs::FsClose(files, file.value());
+      return interpreter_stat.is_err() ? interpreter_stat.status()
+                                       : Status::kInvalidArg;
+    }
+    const Result<uint32_t> interpreter = fs::FsOpen(files, interpreter_path);
+    if (interpreter.is_err()) {
+      (void)fs::FsClose(files, file.value());
+      return interpreter.status();
+    }
+    interpreter_descriptor = interpreter.value();
+    interpreter_open = true;
+    status = loader::ReadImage(files, interpreter_descriptor,
+                               interpreter_stat.value().size,
+                               out.interpreter_image);
+    if (IsErr(status)) {
+      (void)fs::FsClose(files, interpreter_descriptor);
+      (void)fs::FsClose(files, file.value());
+      return status;
+    }
+    if (out.interpreter_image.interpreter_size != 0U ||
+        out.interpreter_image.dynamic_address != 0U) {
+      (void)fs::FsClose(files, interpreter_descriptor);
+      (void)fs::FsClose(files, file.value());
+      return Status::kUnsupported;
+    }
+  }
+
+  status = mem::AddressSpaceInit(out.space);
+  if (IsErr(status)) {
+    if (interpreter_open) {
+      (void)fs::FsClose(files, interpreter_descriptor);
+    }
+    (void)fs::FsClose(files, file.value());
+    return status;
+  }
+
+  status = loader::MapImage(files, file.value(), out.image, out.space);
+  if (IsOk(status) && out.dynamic) {
+    status = loader::MapImage(files, interpreter_descriptor,
+                              out.interpreter_image, out.space);
+  }
+  if (interpreter_open) {
+    (void)fs::FsClose(files, interpreter_descriptor);
+  }
+  (void)fs::FsClose(files, file.value());
+  if (IsErr(status)) {
+    (void)mem::AddressSpaceDestroy(out.space);
+    return status;
+  }
+  return Status::kOk;
+}
+
+[[nodiscard]] Result<uint32_t> CreateProcess(const char* path,
+                                             uint32_t parent_pid,
+                                             LoadedProgram& program,
+                                             const UserStack& user_stack) noexcept {
+  const uint64_t entry = program.dynamic ? program.interpreter_image.entry
+                                         : program.image.entry;
+
+  g_lock.lock();
+  Process* slot = nullptr;
+  for (uint32_t index = 0; index < kMaxProcesses; ++index) {
+    if (g_processes[index].used == 0U) {
+      slot = &g_processes[index];
+      break;
+    }
+  }
+  if (slot == nullptr) {
+    g_lock.unlock();
+    (void)mem::AddressSpaceDestroy(program.space);
+    return Result<uint32_t>::Err(Status::kNoMem);
+  }
+
+  mem::Zero(slot, sizeof(*slot));
+  slot->pid = NextPidLocked();
+  slot->parent_pid = parent_pid;
+  slot->state = ProcessState::kReady;
+  slot->exit_code = 0;
+  slot->used = 1;
+  slot->space = program.space;
+  slot->entry = entry;
+  slot->stack_top = user_stack.stack_pointer;
+  slot->argv = user_stack.argv;
+  slot->envp = user_stack.envp;
+  slot->argc = user_stack.argc;
+  (void)fs::FileTableInit(slot->files);
+  const std::size_t name_length = mem::Length(path);
+  const std::size_t name_copy =
+    name_length >= sizeof(slot->name) ? (sizeof(slot->name) - 1U) : name_length;
+  mem::Copy(slot->name, path, name_copy);
+  slot->name[name_copy] = '\0';
+  slot->cwd[0] = '/';
+  slot->cwd[1] = '\0';
+
+  const Result<sched::Thread*> thread = sched::ThreadCreateIn(
+    "user", &ProcessThreadEntry, slot, &slot->space, slot);
+  if (thread.is_err()) {
+    slot->used = 0;
+    g_lock.unlock();
+    (void)mem::AddressSpaceDestroy(program.space);
+    return Result<uint32_t>::Err(thread.status());
+  }
+  slot->thread = thread.value();
+  const uint32_t pid = slot->pid;
+  g_lock.unlock();
+  return Result<uint32_t>::Ok(pid);
+}
+
 }  // namespace
 
 Status Init() noexcept {
@@ -384,167 +458,35 @@ Result<uint32_t> SpawnWithArgs(const char* path, uint32_t parent_pid,
     return Result<uint32_t>::Err(Status::kInvalidArg);
   }
 
-  const Result<fs::Stat> stat = fs::FsStat(path);
-  if (stat.is_err()) {
-    return Result<uint32_t>::Err(stat.status());
-  }
-  const uint64_t size = stat.value().size;
-  if (size == 0U || size > kMaxProgramSize) {
-    return Result<uint32_t>::Err(Status::kInvalidArg);
+  LoadedProgram program{};
+  const Status load_status = LoadProgram(path, program);
+  if (IsErr(load_status)) {
+    return Result<uint32_t>::Err(load_status);
   }
 
-  fs::FileTable loader_files{};
-  (void)fs::FileTableInit(loader_files);
-  const Result<uint32_t> file = fs::FsOpen(loader_files, path);
-  if (file.is_err()) {
-    return Result<uint32_t>::Err(file.status());
-  }
-
-  elf::Image image{};
-  Status status = ReadImage(loader_files, file.value(), size, image);
-  if (IsErr(status)) {
-    (void)fs::FsClose(loader_files, file.value());
-    return Result<uint32_t>::Err(status);
-  }
-
-  const bool dynamic = image.interpreter_size != 0U;
-  char interpreter_path[kMaxInterpreterPath]{};
-  elf::Image interpreter_image{};
-  uint32_t interpreter_descriptor = 0;
-  bool interpreter_open = false;
-
-  if (dynamic) {
-    if (image.dynamic_address == 0U) {
-      (void)fs::FsClose(loader_files, file.value());
-      return Result<uint32_t>::Err(Status::kInvalidArg);
-    }
-    status = ReadInterpreterPath(loader_files, file.value(), image,
-                                 interpreter_path, sizeof(interpreter_path));
-    if (IsErr(status)) {
-      (void)fs::FsClose(loader_files, file.value());
-      return Result<uint32_t>::Err(status);
-    }
-
-    const Result<fs::Stat> interpreter_stat = fs::FsStat(interpreter_path);
-    if (interpreter_stat.is_err() || interpreter_stat.value().size == 0U ||
-        interpreter_stat.value().size > kMaxProgramSize) {
-      (void)fs::FsClose(loader_files, file.value());
-      return Result<uint32_t>::Err(interpreter_stat.is_err()
-                                     ? interpreter_stat.status()
-                                     : Status::kInvalidArg);
-    }
-    const Result<uint32_t> interpreter =
-      fs::FsOpen(loader_files, interpreter_path);
-    if (interpreter.is_err()) {
-      (void)fs::FsClose(loader_files, file.value());
-      return Result<uint32_t>::Err(interpreter.status());
-    }
-    interpreter_descriptor = interpreter.value();
-    interpreter_open = true;
-    status = ReadImage(loader_files, interpreter_descriptor,
-                       interpreter_stat.value().size, interpreter_image);
-    if (IsErr(status)) {
-      (void)fs::FsClose(loader_files, interpreter_descriptor);
-      (void)fs::FsClose(loader_files, file.value());
-      return Result<uint32_t>::Err(status);
-    }
-    if (interpreter_image.interpreter_size != 0U ||
-        interpreter_image.dynamic_address != 0U) {
-      (void)fs::FsClose(loader_files, interpreter_descriptor);
-      (void)fs::FsClose(loader_files, file.value());
-      return Result<uint32_t>::Err(Status::kUnsupported);
-    }
-  }
-
-  mem::AddressSpace space{};
-  status = mem::AddressSpaceInit(space);
-  if (IsErr(status)) {
-    if (interpreter_open) {
-      (void)fs::FsClose(loader_files, interpreter_descriptor);
-    }
-    (void)fs::FsClose(loader_files, file.value());
-    return Result<uint32_t>::Err(status);
-  }
-
-  status = MapImage(loader_files, file.value(), image, space);
-  if (IsOk(status) && dynamic) {
-    status = MapImage(loader_files, interpreter_descriptor, interpreter_image,
-                      space);
-  }
-  if (interpreter_open) {
-    (void)fs::FsClose(loader_files, interpreter_descriptor);
-  }
-  (void)fs::FsClose(loader_files, file.value());
-  if (IsErr(status)) {
-    (void)mem::AddressSpaceDestroy(space);
-    return Result<uint32_t>::Err(status);
-  }
-
-  status = mem::VmmMapUser(space, kUserStackVa, kUserStackSize, false);
+  Status status =
+    mem::VmmMapUser(program.space, kUserStackVa, kUserStackSize, false);
   InterpreterEnvironment environment{};
-  BuildInterpreterEnvironment(image, dynamic, environment);
+  BuildInterpreterEnvironment(program.image, program.dynamic, environment);
   UserStack user_stack{};
   if (IsOk(status)) {
-    status = BuildUserStack(space, path, argv, argc, environment.values,
-                            environment.count, user_stack);
+    status = BuildUserStack(program.space, path, argv, argc,
+                            environment.values, environment.count, user_stack);
   }
   if (IsErr(status)) {
-    (void)mem::AddressSpaceDestroy(space);
+    (void)mem::AddressSpaceDestroy(program.space);
     return Result<uint32_t>::Err(status);
   }
 
-  const uint64_t entry = dynamic ? interpreter_image.entry : image.entry;
-
-  g_lock.lock();
-  Process* slot = nullptr;
-  for (uint32_t index = 0; index < kMaxProcesses; ++index) {
-    if (g_processes[index].used == 0U) {
-      slot = &g_processes[index];
-      break;
-    }
-  }
-  if (slot == nullptr) {
-    g_lock.unlock();
-    (void)mem::AddressSpaceDestroy(space);
-    return Result<uint32_t>::Err(Status::kNoMem);
+  const Result<uint32_t> created =
+    CreateProcess(path, parent_pid, program, user_stack);
+  if (created.is_err()) {
+    return created;
   }
 
-  mem::Zero(slot, sizeof(*slot));
-  slot->pid = NextPidLocked();
-  slot->parent_pid = parent_pid;
-  slot->state = ProcessState::kReady;
-  slot->exit_code = 0;
-  slot->used = 1;
-  slot->space = space;
-  slot->entry = entry;
-  slot->stack_top = user_stack.stack_pointer;
-  slot->argv = user_stack.argv;
-  slot->envp = user_stack.envp;
-  slot->argc = user_stack.argc;
-  (void)fs::FileTableInit(slot->files);
-  const std::size_t name_length = mem::Length(path);
-  const std::size_t name_copy =
-    name_length >= sizeof(slot->name) ? (sizeof(slot->name) - 1U) : name_length;
-  mem::Copy(slot->name, path, name_copy);
-  slot->name[name_copy] = '\0';
-  slot->cwd[0] = '/';
-  slot->cwd[1] = '\0';
-
-  const Result<sched::Thread*> thread = sched::ThreadCreateIn(
-    "user", &ProcessThreadEntry, slot, &slot->space, slot);
-  if (thread.is_err()) {
-    slot->used = 0;
-    g_lock.unlock();
-    (void)mem::AddressSpaceDestroy(space);
-    return Result<uint32_t>::Err(thread.status());
-  }
-  slot->thread = thread.value();
-  const uint32_t pid = slot->pid;
-  g_lock.unlock();
-
-  LogDec(LogLevel::kInfo, "user: program bytes", size);
-  LogDec(LogLevel::kInfo, "user: spawn pid", pid);
-  return Result<uint32_t>::Ok(pid);
+  LogDec(LogLevel::kInfo, "user: program bytes", program.file_size);
+  LogDec(LogLevel::kInfo, "user: spawn pid", created.value());
+  return created;
 }
 
 Result<uint32_t> WaitFor(uint32_t pid, int32_t& status) noexcept {

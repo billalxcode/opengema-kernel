@@ -146,6 +146,30 @@ const NodeOps kDirectoryOps{&Lookup, nullptr, nullptr, &IterateDirectory};
   return Result<uint32_t>::Ok(value);
 }
 
+[[nodiscard]] Result<uint32_t> AdvanceCluster(uint32_t cluster) noexcept {
+  const Result<uint32_t> next = NextCluster(cluster);
+  if (next.is_err()) {
+    return Result<uint32_t>::Err(next.status());
+  }
+  if (next.value() == kClusterEnd) {
+    return Result<uint32_t>::Err(Status::kIoError);
+  }
+  return Result<uint32_t>::Ok(next.value());
+}
+
+[[nodiscard]] Result<uint32_t> SeekCluster(uint32_t first_cluster,
+                                           uint64_t cluster_index) noexcept {
+  uint32_t cluster = first_cluster;
+  for (uint64_t step = 0; step < cluster_index; ++step) {
+    const Result<uint32_t> next = AdvanceCluster(cluster);
+    if (next.is_err()) {
+      return Result<uint32_t>::Err(next.status());
+    }
+    cluster = next.value();
+  }
+  return Result<uint32_t>::Ok(cluster);
+}
+
 [[nodiscard]] Status ReadCluster(uint32_t cluster, uint8_t* buffer) noexcept {
   if (!ValidCluster(cluster)) {
     return Status::kInvalidArg;
@@ -229,6 +253,61 @@ void AccumulateLongName(const uint8_t* entry, char* text, bool& active) noexcept
   }
 }
 
+struct ParsedEntry {
+  DirEntry entry;
+  uint32_t first_cluster;
+};
+
+// Parses one 32-byte directory slot. Returns false for slots that do not
+// produce a node, such as deleted entries, long-name fragments, and volume
+// labels. The end-of-directory marker is handled by the caller because it
+// stops the whole walk.
+[[nodiscard]] Result<bool> ParseEntry(const uint8_t* raw, char* long_name,
+                                      bool& long_name_active,
+                                      ParsedEntry& out) noexcept {
+  if (raw[0] == 0xE5U) {
+    long_name_active = false;
+    return Result<bool>::Ok(false);
+  }
+
+  const uint8_t attribute = raw[11];
+  if (attribute == kAttributeLongName) {
+    AccumulateLongName(raw, long_name, long_name_active);
+    return Result<bool>::Ok(false);
+  }
+  if ((attribute & kAttributeVolumeLabel) != 0U) {
+    long_name_active = false;
+    return Result<bool>::Ok(false);
+  }
+
+  out = ParsedEntry{};
+  if (long_name_active && long_name[0] != '\0') {
+    const std::size_t length = mem::Length(long_name);
+    if (length >= sizeof(out.entry.name)) {
+      return Result<bool>::Err(Status::kInvalidArg);
+    }
+    mem::Copy(out.entry.name, long_name, length + 1U);
+  } else {
+    BuildShortName(raw, out.entry.name);
+  }
+  long_name_active = false;
+
+  const uint32_t cluster_high = static_cast<uint32_t>(raw[20]) |
+                                (static_cast<uint32_t>(raw[21]) << 8U);
+  const uint32_t cluster_low = static_cast<uint32_t>(raw[26]) |
+                               (static_cast<uint32_t>(raw[27]) << 8U);
+  out.first_cluster = (cluster_high << 16U) | cluster_low;
+
+  out.entry.size = static_cast<uint32_t>(raw[28]) |
+                   (static_cast<uint32_t>(raw[29]) << 8U) |
+                   (static_cast<uint32_t>(raw[30]) << 16U) |
+                   (static_cast<uint32_t>(raw[31]) << 24U);
+  out.entry.type = ((attribute & kAttributeDirectory) != 0U)
+                     ? NodeType::kDirectory
+                     : NodeType::kFile;
+  return Result<bool>::Ok(true);
+}
+
 [[nodiscard]] Status WalkDirectory(Node* directory, const Visitor& visitor) noexcept {
   if (directory == nullptr || visitor.visit == nullptr) {
     return Status::kInvalidArg;
@@ -252,49 +331,17 @@ void AccumulateLongName(const uint8_t* entry, char* text, bool& active) noexcept
       if (entry[0] == 0x00U) {
         return Status::kOk;
       }
-      if (entry[0] == 0xE5U) {
-        long_name_active = false;
+
+      ParsedEntry parsed{};
+      const Result<bool> emit =
+        ParseEntry(entry, long_name, long_name_active, parsed);
+      if (emit.is_err()) {
+        return emit.status();
+      }
+      if (!emit.value()) {
         continue;
       }
-
-      const uint8_t attribute = entry[11];
-      if (attribute == kAttributeLongName) {
-        AccumulateLongName(entry, long_name, long_name_active);
-        continue;
-      }
-      if ((attribute & kAttributeVolumeLabel) != 0U) {
-        long_name_active = false;
-        continue;
-      }
-
-      DirEntry result{};
-      if (long_name_active && long_name[0] != '\0') {
-        const std::size_t length = mem::Length(long_name);
-        if (length >= sizeof(result.name)) {
-          return Status::kInvalidArg;
-        }
-        mem::Copy(result.name, long_name, length + 1U);
-      } else {
-        BuildShortName(entry, result.name);
-      }
-      long_name_active = false;
-
-      const uint32_t cluster_high = static_cast<uint32_t>(entry[20]) |
-                                    (static_cast<uint32_t>(entry[21]) << 8U);
-      const uint32_t cluster_low = static_cast<uint32_t>(entry[26]) |
-                                   (static_cast<uint32_t>(entry[27]) << 8U);
-      const uint32_t first_cluster = (cluster_high << 16U) | cluster_low;
-
-      const uint32_t size = static_cast<uint32_t>(entry[28]) |
-                            (static_cast<uint32_t>(entry[29]) << 8U) |
-                            (static_cast<uint32_t>(entry[30]) << 16U) |
-                            (static_cast<uint32_t>(entry[31]) << 24U);
-
-      result.type = ((attribute & kAttributeDirectory) != 0U) ? NodeType::kDirectory
-                                                              : NodeType::kFile;
-      result.size = size;
-
-      if (visitor.visit(visitor.context, result, first_cluster)) {
+      if (visitor.visit(visitor.context, parsed.entry, parsed.first_cluster)) {
         return Status::kOk;
       }
     }
@@ -403,21 +450,16 @@ Status FileRead(Node* node, uint64_t offset, std::span<uint8_t> buffer,
   }
 
   const auto* fat_node = reinterpret_cast<const FatNode*>(node);
-  uint32_t cluster = fat_node->first_cluster;
   const uint64_t cluster_index = offset / g_volume.cluster_bytes;
   if (cluster_index > g_volume.total_clusters) {
     return Status::kInvalidArg;
   }
-  for (uint64_t step = 0; step < cluster_index; ++step) {
-    const Result<uint32_t> next = NextCluster(cluster);
-    if (next.is_err()) {
-      return next.status();
-    }
-    if (next.value() == kClusterEnd) {
-      return Status::kIoError;
-    }
-    cluster = next.value();
+  const Result<uint32_t> start =
+    SeekCluster(fat_node->first_cluster, cluster_index);
+  if (start.is_err()) {
+    return start.status();
   }
+  uint32_t cluster = start.value();
 
   uint64_t within = offset % g_volume.cluster_bytes;
   uint64_t remaining = node->size - offset;
@@ -446,12 +488,9 @@ Status FileRead(Node* node, uint64_t offset, std::span<uint8_t> buffer,
     within = 0;
 
     if (remaining > 0) {
-      const Result<uint32_t> next = NextCluster(cluster);
+      const Result<uint32_t> next = AdvanceCluster(cluster);
       if (next.is_err()) {
         return next.status();
-      }
-      if (next.value() == kClusterEnd) {
-        return Status::kIoError;
       }
       cluster = next.value();
     }

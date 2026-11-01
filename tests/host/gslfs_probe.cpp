@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <iterator>
 #include <span>
@@ -82,8 +83,10 @@ bool ReadText(og::fs::Node* node, char* buffer, std::size_t capacity,
 }  // namespace
 
 int main(int argc, char** argv) {
-  if (argc != 2) {
-    std::printf("usage: gslfs_probe IMAGE\n");
+  const bool expect_mount_fail =
+    argc == 3 && std::strcmp(argv[2], "--expect-mount-fail") == 0;
+  if (argc < 2 || argc > 3 || (argc == 3 && !expect_mount_fail)) {
+    std::printf("usage: gslfs_probe IMAGE [--expect-mount-fail]\n");
     return 2;
   }
   std::ifstream file(argv[1], std::ios::binary);
@@ -102,6 +105,14 @@ int main(int argc, char** argv) {
   const og::fs::BlockDevice device{
     &ReadDisk, &disk, image.size() / 512U, 0};
   const auto root = og::fs::gslfs::Mount(device);
+  if (expect_mount_fail) {
+    if (root.is_err() && root.status() == og::Status::kInvalidArg) {
+      std::printf("gslfs probe: mount rejected as expected\n");
+      return 0;
+    }
+    std::printf("gslfs probe: expected an invalid tree\n");
+    return 1;
+  }
   if (root.is_err()) {
     std::printf("gslfs probe: mount failed: %u\n",
                 static_cast<unsigned>(root.status()));

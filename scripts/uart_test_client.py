@@ -40,6 +40,7 @@ def main(argv):
     help_sent = False
     ls_sent = False
     ls_error_sent = False
+    spawn_error_sent = False
     hello_sent = False
     exit_sent = False
     halted = False
@@ -68,7 +69,11 @@ def main(argv):
                 client.sendall(b"ls /missing\n")
                 ls_error_sent = True
 
-            if ls_error_sent and not hello_sent and b"ls: list failed" in buffer:
+            if ls_error_sent and not spawn_error_sent and b"ls: list failed" in buffer:
+                client.sendall(b"run missing\n")
+                spawn_error_sent = True
+
+            if spawn_error_sent and not hello_sent and b"run: spawn failed" in buffer:
                 client.sendall(b"hello\n")
                 hello_sent = True
 

@@ -1,7 +1,7 @@
 #include "og/fs/vfs.h"
 
 #include "memory.h"
-#include "vfs_internal.h"
+#include "og/fs/vfs_internal.h"
 
 // File descriptor table only. Path resolution and mounting stay in vfs.cpp.
 namespace og::fs {

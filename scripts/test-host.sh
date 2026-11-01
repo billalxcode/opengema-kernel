@@ -46,5 +46,27 @@ CXX="${CXX:-clang++}"
   -o "$BUILD_DIR/fat32_probe"
 "$BUILD_DIR/fat32_probe"
 
+"$CXX" -std=c++20 -O1 -Wall -Wextra -Werror \
+  -I packages/libgemapi/include -I packages/libkgema/include \
+  tests/host/gemapi_fs_probe.cpp packages/libgemapi/src/fs.cpp \
+  -o "$BUILD_DIR/gemapi_fs_probe"
+"$BUILD_DIR/gemapi_fs_probe"
+
+"$CXX" -std=c++20 -O1 -Wall -Wextra -Werror \
+  -I packages/libkgema/include \
+  tests/host/kgema_probe.cpp \
+  packages/libkgema/src/file.cpp packages/libkgema/src/io.cpp \
+  packages/libkgema/src/process.cpp packages/libkgema/src/memory.cpp \
+  -o "$BUILD_DIR/kgema_probe"
+"$BUILD_DIR/kgema_probe"
+
+"$CXX" -std=c++20 -O1 -Wall -Wextra -Werror \
+  -I packages/libgemapi/include -I packages/libkgema/include \
+  tests/host/gemapi_api_probe.cpp \
+  packages/libgemapi/src/io.cpp packages/libgemapi/src/process.cpp \
+  packages/libgemapi/src/memory.cpp packages/libgemapi/src/error.cpp \
+  -o "$BUILD_DIR/gemapi_api_probe"
+"$BUILD_DIR/gemapi_api_probe"
+
 echo "== gslfs image test =="
 "$ROOT/scripts/test-gslfs.sh"

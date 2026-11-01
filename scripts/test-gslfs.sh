@@ -24,6 +24,29 @@ CXX="${CXX:-clang++}"
   -o "$TMP/gslfs_probe"
 "$TMP/gslfs_probe" "$TMP/a.img"
 
+python3 - "$TMP/a.img" "$TMP/cycle.img" <<'PY'
+import struct
+import sys
+import zlib
+
+data = bytearray(open(sys.argv[1], "rb").read())
+node_offset = struct.unpack_from("<Q", data, 32)[0]
+node_count = struct.unpack_from("<I", data, 24)[0]
+root = struct.unpack_from("<I", data, 28)[0]
+for index in range(node_count):
+    offset = node_offset + index * 56
+    node_type = struct.unpack_from("<I", data, offset)[0]
+    if index != root and node_type == 1:
+        struct.pack_into("<I", data, offset + 16, index)
+        crc = zlib.crc32(data[offset:offset + 48]) & 0xFFFFFFFF
+        struct.pack_into("<I", data, offset + 48, crc)
+        break
+else:
+    raise SystemExit("no directory node found")
+open(sys.argv[2], "wb").write(data)
+PY
+"$TMP/gslfs_probe" "$TMP/cycle.img" --expect-mount-fail
+
 python3 - "$TMP/a.img" "$TMP/corrupt.img" <<'PY'
 import struct
 import sys
