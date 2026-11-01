@@ -46,6 +46,10 @@ struct PageAttributes {
 // Allocates and zeroes user accessible pages at virtual_address.
 [[nodiscard]] Status VmmMapUser(uint64_t virtual_address, uint64_t size, bool executable) noexcept;
 
+// Unmaps a user region and frees its physical frames. The range must match
+// a region created by VmmMapUser exactly.
+[[nodiscard]] Status VmmUnmapUser(uint64_t virtual_address, uint64_t size) noexcept;
+
 // Validated copies between kernel buffers and user mappings.
 [[nodiscard]] Status VmmCopyIn(uint64_t user_address, void* destination, uint64_t size) noexcept;
 [[nodiscard]] Status VmmCopyOut(uint64_t user_address, const void* source, uint64_t size) noexcept;

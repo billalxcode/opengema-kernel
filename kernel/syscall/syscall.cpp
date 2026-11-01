@@ -20,8 +20,43 @@ constexpr uint64_t kSyscallNumberRegister = 8;
 constexpr uint64_t kMaxWriteChunk = 256;
 constexpr uint64_t kStdout = 1;
 constexpr uint64_t kResultError = static_cast<uint64_t>(-1);
+constexpr uint64_t kPageSize = 4096;
+constexpr uint64_t kUserMmapBase = 0x101000000ULL;
+constexpr uint64_t kUserMmapLimit = 0x102000000ULL;
 
 bool g_user_exited = false;
+uint64_t g_mmap_next = kUserMmapBase;
+
+[[nodiscard]] Status DoMmap(uint64_t size, uint64_t& result) noexcept {
+  if (size == 0) {
+    return Status::kInvalidArg;
+  }
+  const uint64_t aligned = (size + kPageSize - 1U) & ~(kPageSize - 1U);
+  if (aligned > (kUserMmapLimit - g_mmap_next)) {
+    return Status::kNoMem;
+  }
+  const uint64_t address = g_mmap_next;
+  const Status status = mem::VmmMapUser(address, aligned, false);
+  if (IsErr(status)) {
+    return status;
+  }
+  g_mmap_next += aligned;
+  result = address;
+  return Status::kOk;
+}
+
+[[nodiscard]] Status DoMunmap(uint64_t address, uint64_t size, uint64_t& result) noexcept {
+  if (size == 0) {
+    return Status::kInvalidArg;
+  }
+  const uint64_t aligned = (size + kPageSize - 1U) & ~(kPageSize - 1U);
+  const Status status = mem::VmmUnmapUser(address, aligned);
+  if (IsErr(status)) {
+    return status;
+  }
+  result = 0;
+  return Status::kOk;
+}
 
 [[nodiscard]] Status DoWrite(uint64_t descriptor, uint64_t user_buffer, uint64_t length,
                              uint64_t& result) noexcept {
@@ -79,6 +114,12 @@ bool g_user_exited = false;
     case kSysYield:
       sched::ThreadYield();
       result = 0;
+      break;
+    case kSysMmap:
+      status = DoMmap(frame->x[0], result);
+      break;
+    case kSysMunmap:
+      status = DoMunmap(frame->x[0], frame->x[1], result);
       break;
     default:
       status = Status::kInvalidArg;

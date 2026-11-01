@@ -11,6 +11,8 @@ constexpr uint64_t kSysWrite = 1;
 constexpr uint64_t kSysRead = 2;
 constexpr uint64_t kSysExit = 3;
 constexpr uint64_t kSysYield = 4;
+constexpr uint64_t kSysMmap = 5;
+constexpr uint64_t kSysMunmap = 6;
 
 void SyscallInit() noexcept;
 

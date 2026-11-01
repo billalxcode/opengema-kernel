@@ -516,8 +516,72 @@ Status VmmMapUser(uint64_t virtual_address, uint64_t size, bool executable) noex
   return Status::kOk;
 }
 
-bool VmmUserContains(uint64_t user_address, uint64_t size) noexcept {
+Status VmmUnmapUser(uint64_t virtual_address, uint64_t size) noexcept {
+  if (g_root == nullptr) {
+    return Status::kNotInit;
+  }
   if (size == 0) {
+    return Status::kInvalidArg;
+  }
+  if ((virtual_address % kPageSize) != 0) {
+    return Status::kUnaligned;
+  }
+  const uint64_t aligned = (size + kPageSize - 1U) & ~(kPageSize - 1U);
+
+  uint32_t region_index = 0;
+  bool found = false;
+  for (uint32_t index = 0; index < g_user_region_count; ++index) {
+    if (g_user_regions[index].base == virtual_address &&
+        g_user_regions[index].size == aligned) {
+      region_index = index;
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
+    return Status::kInvalidArg;
+  }
+
+  for (uint64_t offset = 0; offset < aligned; offset += kPageSize) {
+    const uint64_t address = virtual_address + offset;
+
+    const uint64_t root_entry = g_root[Index(address, 0)];
+    if (!DescriptorValid(root_entry) || !DescriptorIsTable(root_entry)) {
+      return Status::kNotFound;
+    }
+    auto* level1 = reinterpret_cast<uint64_t*>(DescriptorAddress(root_entry));
+
+    const uint64_t level1_entry = level1[Index(address, 1)];
+    if (!DescriptorValid(level1_entry) || !DescriptorIsTable(level1_entry)) {
+      return Status::kNotFound;
+    }
+    auto* level2 = reinterpret_cast<uint64_t*>(DescriptorAddress(level1_entry));
+
+    const uint64_t level2_entry = level2[Index(address, 2)];
+    if (!DescriptorValid(level2_entry) || !DescriptorIsTable(level2_entry)) {
+      return Status::kNotFound;
+    }
+    auto* level3 = reinterpret_cast<uint64_t*>(DescriptorAddress(level2_entry));
+
+    uint64_t& entry = level3[Index(address, 3)];
+    if (!DescriptorValid(entry)) {
+      return Status::kNotFound;
+    }
+    const uint64_t physical = DescriptorAddress(entry);
+    entry = 0;
+    (void)PmmFreePage(physical);
+    arch::aarch64::InvalidateTlbVaLocal(address);
+  }
+  arch::aarch64::InvalidateTlbSync();
+
+  for (uint32_t index = region_index; (index + 1U) < g_user_region_count; ++index) {
+    g_user_regions[index] = g_user_regions[index + 1U];
+  }
+  --g_user_region_count;
+  return Status::kOk;
+}
+
+bool VmmUserContains(uint64_t user_address, uint64_t size) noexcept {  if (size == 0) {
     return false;
   }
   const uint64_t end = user_address + size;
