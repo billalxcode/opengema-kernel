@@ -53,6 +53,10 @@ EFI
 STARTUP.NSH
 event test: irq and workqueue ok
 gic: ready
+psci: version: 65537
+smp: cpus online: 2
+smp: cpu online: 1
+smp: ipi count: 1
 timer: frequency: 62500000
 timer: ticks: 10
 timer: periodic tick ok
@@ -67,6 +71,6 @@ user: exit ok
 kernel: halt
 ```
 
-Berikutnya: platform dan SMP.
+Berikutnya: testing dan hardening.
 
 Roadmap lengkap ada di `docs/ROADMAP.md`.

@@ -3,9 +3,9 @@
 Dokumen ini jadi acuan tunggal untuk urutan kerja, batas modul, dan aturan
 anti redundansi. Setiap task punya ID supaya bisa dirujuk di commit.
 
-Status sekarang: Fase 0 sampai 11 selesai. Kernel sudah boot di QEMU virt,
+Status sekarang: Fase 0 sampai 12 selesai. Kernel sudah boot di QEMU virt,
 punya MMU sendiri, allocator, interrupt, timer, virtio-blk, FAT32, scheduler
-round robin, dan user mode EL0 dengan syscall.
+round robin, user mode EL0, dan dua core aktif dengan IPI.
 
 ---
 
@@ -489,15 +489,32 @@ Catatan hasil Fase 11:
 
 ### Fase 12 - Platform dan SMP
 
-- [ ] PLT-01 `platform/platform.h`: deskripsi board, base device, IRQ map.
-- [ ] PLT-02 `platform/qemu_virt.cpp`: konfigurasi QEMU virt, termasuk DTB
-      opsional.
-- [ ] PLT-03 Parser DTB minimal untuk base address dan memory.
-- [ ] SMP-01 PSCI `CPU_ON` dan boot sekunder.
-- [ ] SMP-02 Per-CPU data, `Tpidr_el1`.
-- [ ] SMP-03 SGI untuk reschedule dan TLB shootdown.
+- [x] PLT-01 `og/platform.h`: deskripsi board dengan rentang UART, GIC,
+      PCIe, RAM, jumlah CPU, dan konduit PSCI.
+- [x] PLT-02 `kernel/platform/qemu_virt.cpp`: konfigurasi QEMU virt.
+- [ ] PLT-03 Parser DTB: ditunda. Konduit PSCI dideteksi dengan mencoba
+      `PSCI_VERSION` lewat HVC lalu SMC, jadi tidak perlu DTB untuk boot.
+- [x] SMP-01 PSCI `CPU_ON` dengan entry point dan stack fisik, lalu
+      secondary menyalakan MMU dan vektor sendiri.
+- [x] SMP-02 Per-CPU data lewat `TPIDR_EL1`.
+- [x] SMP-03 SGI sebagai IPI, diterima dan dihitung di core kedua.
 
 **Selesai bila:** dua core hidup dan print bergantian.
+
+Catatan hasil Fase 12:
+
+1. Konduit PSCI di host ini HVC, terbukti dari `PSCI_VERSION` yang
+   mengembalikan 65537 (PSCI 1.1). Kode mencoba HVC lalu SMC, jadi tetap
+   jalan pada akselerator lain.
+2. Core kedua sempat mati dengan ESR EC `0x07`. Penyebabnya compiler
+   memakai `ldr q0` untuk menyalin struct 16 byte, sementara core baru
+   punya `CPACR_EL1.FPEN` nol. Kernel sekarang dibangun dengan
+   `-mgeneral-regs-only`, yang juga wajib karena context switch belum
+   menyimpan state SIMD.
+3. Hook IRQ exit sekarang per-CPU. Scheduler hanya terpasang di CPU 0,
+   jadi core kedua tidak ikut menyentuh state scheduler global.
+4. Secondary hanya menangani IPI lalu park di `wfi`. Penjadwalan lintas
+   core (SCH-05) masih backlog.
 
 ### Fase 13 - Testing dan tooling
 
@@ -597,6 +614,9 @@ yang belum selesai, supaya tidak ada yang hilang di antara fase.
 
 ### 9.3 Ditunda karena belum ada pemakai nyata
 
+- [ ] PLT-03 parser DTB: konduit PSCI dan alamat device masih memakai
+      deskripsi platform. Parser dibutuhkan saat menambah board lain.
+- [ ] SMP penjadwalan lintas core (SCH-05): butuh per-CPU scheduler.
 - [ ] SYN-04 refcount: menunggu objek yang benar benar dibagi, misalnya
       file atau device.
 - [ ] SYN-05 once: menunggu init yang perlu sekali jalan di luar `kmain`.
@@ -620,7 +640,7 @@ yang belum selesai, supaya tidak ada yang hilang di antara fase.
 - [ ] Fase 9 sisa: FS-04 ramfs dan FS-08 procfs (lihat 9.3).
 - [ ] Fase 10 sisa: SCH-05 load balancing SMP (lihat 9.1).
 - [ ] Fase 11 sisa: SYS-06 mmap dan loader dari filesystem (lihat 9.2).
-- [ ] Fase 12 seluruhnya: PLT-01 sampai PLT-03, SMP-01 sampai SMP-03.
+- [ ] Fase 12 sisa: PLT-03 parser DTB dan SMP scheduling (lihat 9.3).
 - [ ] Fase 13 seluruhnya: TST-01 sampai TST-05.
 - [ ] Fase 14 seluruhnya: HARD-01 sampai HARD-05.
 
