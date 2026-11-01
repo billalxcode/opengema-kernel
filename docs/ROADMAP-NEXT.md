@@ -10,11 +10,11 @@ Prioritas: P0 blocker, P1 penting, P2 menengah, P3 nanti.
 
 | Area | Kondisi sekarang | Yang kurang | Dampak | Prioritas |
 |---|---|---|---|---|
-| Model proses | Satu program user, exit memakai flag global | Objek proses, PID, parent, exit status, wait, exec, argv | Belum bisa menjalankan banyak program atau shell | P0 |
-| File descriptor | Tabel global 16 slot di VFS | FD per proses, open flags, close, stat, seek | Program tidak bisa membuka berkas sendiri | P0 |
-| Syscall | write, read (belum ada sumber), exit, yield, mmap, munmap | read, open, close, stat, seek, getpid, wait, exec, error yang konsisten | Userland hanya bisa uji jalur syscall | P0 |
-| Reklamasi | Stack thread, address space, dan FD belum otomatis dibebaskan saat proses keluar | Reklamasi proses, zombie, wait, PID reuse | Membocorkan memori jika ada banyak proses | P0 |
-| SDK dan shell | libkgema kecil, gemabox satu program uji | API berkas/proses, argv, konstruktor C++, shell multi perintah, packaging SDK | Belum ada pengalaman userland yang nyata | P1 |
+| Model proses | Dua proses, PID, parent, wait, exit status, dan reklamasi | argv/env, exec, cwd, daftar anak, banyak thread per proses | Shell dan program berbeda belum bisa dijalankan | P0 |
+| File descriptor | FD per proses sudah ada | Write ke FD, open flags, FD 0/1/2 standar | Program belum bisa menulis berkas | P0 |
+| Syscall | open, close, read, write stdout, stat, seek, getpid, wait, spawn, exit, mmap | Write file, exec, error/errno konsisten, validasi lengkap | Userland belum bisa menjalankan program lain dengan argumen | P0 |
+| Reklamasi | Stack, address space, FD, dan slot proses dibebaskan; frame kembali | PID reuse, reklamasi saat gagal di tengah jalan | Aman untuk dua proses, belum untuk beban besar | P0 |
+| SDK dan shell | API berkas/proses awal, gemabox dua proses uji | argv, konstruktor C++, shell multi perintah, packaging SDK | Belum ada pengalaman userland yang nyata | P1 |
 | Filesystem | FAT32 read-only, ramfs statis, mount internal | Tulis berkas, mkdir, unlink, rename, mount/umount, permission, sync | Data tidak bisa disimpan atau diubah | P1 |
 | Memori user | Semua halaman user RWX, tanpa demand paging | W^X user, guard stack, stack growth, COW, file-backed mmap, accounting, OOM | Isolasi dan keamanan user lemah | P1 |
 | Scheduler | Per-CPU, thread tidak migrasi, tanpa prioritas | Migrasi/work stealing, prioritas, join, condvar, rwlock, futex, TLS | Beban tidak seimbang, primitif sinkronisasi kurang | P1 |
@@ -56,32 +56,42 @@ Prioritas: P0 blocker, P1 penting, P2 menengah, P3 nanti.
 Tujuan: satu program user menjadi satu proses nyata, bisa dibuat, ditunggu,
 dan dibersihkan.
 
-- [ ] PRC-01 `Process`: PID, address space, state, exit status, parent,
-      daftar anak, FD table, cwd, dan nama program.
-- [ ] PRC-02 Pisahkan kernel thread dari proses. Thread punya pointer proses,
-      proses punya satu atau lebih thread.
-- [ ] PRC-03 Pindahkan tabel FD dari VFS global ke proses. VFS hanya
+Status saat ini: inti fase sudah jalan. Dua proses gemabox berjalan di
+address space berbeda, punya tabel FD sendiri, parent menunggu, dan seluruh
+frame kembali setelah proses selesai.
+
+- [x] PRC-01 `Process`: PID, address space, state, exit status, parent,
+      FD table, dan nama program. Daftar anak dan cwd belum.
+- [x] PRC-02 Pisahkan kernel thread dari proses. Thread menyimpan pointer
+      proses lewat field `process`.
+- [x] PRC-03 Pindahkan tabel FD dari VFS global ke proses. VFS hanya
       menyimpan node; FD menyimpan offset dan flags.
-- [ ] PRC-04 Syscall `open`, `close`, `read`, `write`, `stat`, `seek`,
-      `getpid`, `exit(status)`, `waitpid`.
-- [ ] PRC-05 Loader program dari filesystem: format flat dan ELF64,
-      argv/env, susun stack user, entry point dinamis.
-- [ ] PRC-06 Lifecycle: zombie, wait, reklamasi stack, address space, FD,
-      dan PID. PID tidak boleh dipakai ulang sebelum objek dibersihkan.
-- [ ] PRC-07 `spawn` atau `exec` minimal. `fork` bisa menyusul setelah
-      COW tersedia.
-- [ ] PRC-08 Uji: dua proses berbeda address space, parent wait, exit
-      status benar, frame bebas kembali setelah proses selesai.
+- [~] PRC-04 Syscall `open`, `close`, `read`, `stat`, `seek`, `getpid`,
+      `exit(status)`, dan `waitpid` sudah ada. `write` masih khusus stdout;
+      write ke FD berkas belum.
+- [~] PRC-05 Loader flat dari filesystem sudah. ELF64, argv/env, dan stack
+      layout dinamis belum.
+- [x] PRC-06 Lifecycle: zombie, wait, reklamasi stack, address space, FD,
+      dan slot proses. PID tidak dipakai ulang.
+- [~] PRC-07 `spawn` dan `wait` sudah ada di kernel dan syscall. `exec`
+      dan `fork` belum.
+- [x] PRC-08 Uji: dua proses berjalan bersamaan, parent wait, exit status
+      benar, dan jumlah frame bebas kembali ke angka sebelum spawn.
 
 **Selesai bila:** kernel bisa menjalankan dua program berbeda, parent
 menunggu anak, dan tidak ada kebocoran thread, stack, page, atau FD.
+Target itu sudah tercapai untuk dua proses gemabox yang sama.
+
+Langkah berikutnya untuk fase ini: argv/env, ELF64, cwd, daftar anak,
+`write` ke FD, lalu `exec`.
 
 ## 5. Fase 16 - SDK v2 dan shell gemabox
 
 Tujuan: userland punya API yang layak dan gemabox menjadi shell nyata.
 
-- [ ] SDK-01 `libkgema` API berkas: open, read, write, close, stat, seek.
-- [ ] SDK-02 API proses: getpid, wait, exit, spawn, argv.
+- [~] SDK-01 `libkgema` API berkas: open, read, close, stat, seek sudah.
+      Write ke FD berkas belum.
+- [~] SDK-02 API proses: getpid, wait, exit, spawn sudah. argv belum.
 - [ ] SDK-03 API waktu dan error yang konsisten, tanpa libc.
 - [ ] SDK-04 Jalankan `.init_array` di `_start`, dukung konstruktor global
       sederhana tanpa exception dan tanpa RTTI.

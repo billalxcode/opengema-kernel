@@ -87,6 +87,7 @@ kernel/
     fs/           vfs, block_device, fat32, devfs, ramfs, procfs, partition
     sched/        sched
     sync/         sync
+    process/      process
     syscall/      syscall
     platform/     platform, fdt, psci, smp, memory_map
   arch/aarch64/   barriers.cpp, cache.S, context.S, vectors.S, mmu_primitives.cpp
@@ -106,14 +107,15 @@ kernel/
   fs/             vfs.cpp, devfs.cpp, ramfs.cpp, fat32.cpp
   sched/          thread.cpp, scheduler.cpp, context.S
   sync/           spinlock.cpp, mutex.cpp, semaphore.cpp
+  process/        process.cpp
   syscall/        syscall.cpp, usercopy.cpp
   platform/       qemu_virt.cpp, fdt.cpp, psci.cpp
   boot/uefi/      efi_main.cpp, efi_console.cpp, efi_memmap.cpp, efi_exit.cpp
 packages/
   gemabox/        main.cpp, README.md
   libkgema/
-    include/kgema/ types.h, syscall.h, io.h, memory.h, process.h
-    src/           syscall.cpp, io.cpp, memory.cpp, process.cpp, start.cpp
+    include/kgema/ types.h, syscall.h, io.h, file.h, memory.h, process.h
+    src/           syscall.cpp, io.cpp, file.cpp, memory.cpp, process.cpp, start.cpp
     link.ld        linker script program user
     README.md
 tests/
@@ -544,7 +546,7 @@ Catatan hasil Fase 11:
 3. Saat menulis ulang stub, `ELR` dan `SPSR` sempat lupa disimpan sehingga
    `eret` memakai nilai sampah dan CPU masuk AArch32. Sudah diperbaiki dan
    dikunci di urutan instruksi stub.
-4. Program user 373 byte ditulis dalam C++20 dengan SDK `libkgema`
+4. Program user 885 byte ditulis dalam C++20 dengan SDK `libkgema`
    (`packages/gemabox/main.cpp`), dipanggil dengan `svc`, mencetak
    `hello from el0`, lalu `exit`.
 5. Program user ditautkan di 1 TiB dan dijalankan di `AddressSpace` milik

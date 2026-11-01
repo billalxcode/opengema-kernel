@@ -29,8 +29,10 @@ Hasil yang diharapkan di serial:
 
 ```
 hello from el0
+file ok
 mmap ok
-user: exit ok
+user: exit pid: 1
+user: exit status: 0
 ```
 
 ## Rencana

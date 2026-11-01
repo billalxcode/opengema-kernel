@@ -12,8 +12,9 @@ program seperti `gemabox` cukup menulis C++20 tanpa menyalin instruksi
 | `kgema/types.h` | Tipe dasar `usize`, `u64`, `i64` tanpa header standar |
 | `kgema/syscall.h` | Nomor syscall dan `invoke3` |
 | `kgema/io.h` | `write` untuk buffer dan string literal |
+| `kgema/file.h` | `open`, `close`, `read`, `seek`, dan `stat` |
 | `kgema/memory.h` | `mmap` dan `munmap` |
-| `kgema/process.h` | `exit` |
+| `kgema/process.h` | `getpid`, `spawn`, `wait`, dan `exit` |
 
 `src/start.cpp` menyediakan `_start` di section `.text.entry`. `link.ld`
 menempatkannya tepat di 1 TiB, alamat yang dipakai kernel untuk user space.
@@ -21,10 +22,17 @@ menempatkannya tepat di 1 TiB, alamat yang dipakai kernel untuk user space.
 ## Pemakaian
 
 ```cpp
+#include "kgema/file.h"
 #include "kgema/io.h"
 
 int main() {
   kgema::write("hello from el0\n");
+  const kgema::i64 fd = kgema::open("/ram/hello");
+  if (fd >= 0) {
+    char text[32];
+    (void)kgema::read(fd, text, sizeof(text));
+    (void)kgema::close(fd);
+  }
   return 0;
 }
 ```
@@ -38,5 +46,5 @@ ditautkan bersama program memakai `packages/libkgema/link.ld`.
 - Tanpa exception dan RTTI.
 - Global object dengan konstruktor dinamis belum dijalankan otomatis.
   Gunakan `constexpr`, `const`, atau static initialization.
-- Satu program per address space pada satu waktu masih menjadi model
-  eksekusi kernel saat ini.
+- Setiap proses punya satu address space dan satu thread user saat ini.
+- `write` baru mendukung stdout; write ke FD berkas belum.
