@@ -9,6 +9,7 @@
 #include "format.h"
 #include "memory.h"
 #include "og/fs/partition.h"
+#include "og/platform/fdt.h"
 
 namespace {
 
@@ -170,6 +171,79 @@ void TestGpt() {
   CHECK(gslfs.value().sector_count == 2048U);
 }
 
+void PutBe32(uint8_t* data, uint32_t value) {
+  for (uint32_t index = 0; index < 4; ++index) {
+    data[index] = static_cast<uint8_t>(value >> ((3U - index) * 8U));
+  }
+}
+
+void TestFdt() {
+  constexpr uint32_t kStructOffset = 56;
+  constexpr uint32_t kStringsOffset = 108;
+  constexpr uint32_t kStructSize = 52;
+  constexpr uint32_t kStringsSize = 11;
+  constexpr uint32_t kTotal = 119;
+
+  std::vector<uint8_t> dtb(128, 0);
+  PutBe32(dtb.data(), 0xD00DFEEDU);
+  PutBe32(dtb.data() + 4U, kTotal);
+  PutBe32(dtb.data() + 8U, kStructOffset);
+  PutBe32(dtb.data() + 12U, kStringsOffset);
+  PutBe32(dtb.data() + 16U, 40U);
+  PutBe32(dtb.data() + 20U, 17U);
+  PutBe32(dtb.data() + 24U, 16U);
+  PutBe32(dtb.data() + 32U, kStringsSize);
+  PutBe32(dtb.data() + 36U, kStructSize);
+
+  uint8_t* node = dtb.data() + kStructOffset;
+  PutBe32(node, 1U);
+  og::mem::Copy(node + 4U, "root", 5);
+  node += 12U;
+  PutBe32(node, 3U);
+  PutBe32(node + 4U, 4U);
+  PutBe32(node + 8U, 0U);
+  og::mem::Copy(node + 12U, "test", 4);
+  node += 16U;
+  PutBe32(node, 1U);
+  og::mem::Copy(node + 4U, "child", 6);
+  node += 12U;
+  PutBe32(node, 2U);
+  node += 4U;
+  PutBe32(node, 2U);
+  node += 4U;
+  PutBe32(node, 9U);
+  og::mem::Copy(dtb.data() + kStringsOffset, "compatible", 11);
+
+  CHECK(og::IsOk(og::platform::fdt::Init(
+    reinterpret_cast<uint64_t>(dtb.data()), dtb.size())));
+  CHECK(og::platform::fdt::Ready());
+
+  const auto root = og::platform::fdt::FindNode("/");
+  CHECK(root.is_ok());
+  const auto child = og::platform::fdt::FindNode("/child");
+  CHECK(child.is_ok());
+  CHECK(og::platform::fdt::ChildCount(root.value()) == 1U);
+  const auto first_child = og::platform::fdt::Child(root.value(), 0);
+  CHECK(first_child.is_ok());
+  CHECK(first_child.value() == child.value());
+  CHECK(!og::platform::fdt::Child(root.value(), 1).is_ok());
+
+  const auto name = og::platform::fdt::NodeName(root.value());
+  CHECK(name.is_ok());
+  CHECK(og::mem::Same(name.value(), "root"));
+  const auto child_name = og::platform::fdt::NodeName(child.value());
+  CHECK(child_name.is_ok());
+  CHECK(og::mem::Same(child_name.value(), "child"));
+
+  const auto property =
+    og::platform::fdt::FindProperty(root.value(), "compatible");
+  CHECK(property.is_ok());
+  CHECK(property.value().size() == 4U);
+  CHECK(property.value()[0] == 't');
+  CHECK(!og::platform::fdt::FindProperty(root.value(), "missing").is_ok());
+  CHECK(!og::platform::fdt::FindNode("/missing").is_ok());
+}
+
 }  // namespace
 
 int main() {
@@ -178,6 +252,7 @@ int main() {
   TestBits();
   TestEndian();
   TestGpt();
+  TestFdt();
 
   if (g_failures != 0) {
     std::printf("host tests: %d failure(s)\n", g_failures);

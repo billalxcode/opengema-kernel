@@ -136,11 +136,13 @@ Commit: `docs(mem): document kernel lock ordering`.
 - [ ] Pisahkan `virtio_common.cpp` menjadi queue dan transport.
 - [ ] Pisahkan `fdt.cpp` menjadi tokenizer dan property access.
 - [ ] Pisahkan `framebuffer.cpp` menjadi font, drawing, dan console.
+- [x] Tambah host test FDT (`FindNode`, `FindProperty`, `Child`, `NodeName`).
 - [ ] Compile-check grup.
 
-Status: ditunda. Driver tidak bisa diverifikasi tanpa boot QEMU.
+Status: test FDT selesai. Pemisahan file ditunda karena perubahan driver
+tidak bisa diverifikasi tanpa boot QEMU.
 
-Commit: `refactor(drivers): split virtio fdt and framebuffer helpers`.
+Commit: `test(dev): add fdt host test`.
 
 ## Grup 6 - Userland
 
