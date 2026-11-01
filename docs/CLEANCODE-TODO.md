@@ -144,7 +144,7 @@ Tujuan: batas tanggung jawab yang jelas.
   `kernel/syscall/process.cpp`.
 - [x] Pisahkan handler memory (`DoMmap`, `DoMunmap`) ke
   `kernel/syscall/memory.cpp`.
-- [x] Tambah test error `list` dan `spawn` (siap, menunggu QEMU).
+- [x] Tambah test error `list` dan `spawn` (lulus QEMU).
 - [x] Compile-check `process.cpp` dan `loader.cpp`.
 
 Catatan: `loader.cpp` menangani baca image, map segment, dan interpreter
@@ -224,9 +224,10 @@ Commit: `refactor(core): share endian and linker text helpers`.
 - [x] Tambah test host FAT32 (mount, lookup case-insensitive, offset read,
   nested directory, iterate, long name, error path dan validasi boot sector).
 - [x] Tambah test host ELF parser valid dan invalid.
-- [x] Tambah test negative `ls /missing` di test QEMU (menunggu QEMU).
-- [x] Tambah test negative `run missing` di test QEMU (menunggu QEMU).
+- [x] Tambah test negative `ls /missing` di test QEMU (lulus QEMU).
+- [x] Tambah test negative spawn gagal di test QEMU (lulus QEMU).
 - [x] Kernel build dan link lewat podman.
+- [x] QEMU smoke test lewat container arm64.
 - [ ] Update `docs/CLEANCODE-REVIEW.md`.
 - [ ] Jalankan `test.sh` di environment build.
 - [ ] Merge checklist.
@@ -264,10 +265,12 @@ gslfs test: OK
 kernel build via podman: OK
 arch-check: OK
 gsl-check: OK
+qemu test: OK
 ```
 
-Full `test.sh` belum berjalan karena `qemu-system-aarch64` tidak tersedia
-di host. Kernel build dan link sudah diverifikasi lewat podman.
+Full `test.sh` belum dijalankan sebagai satu perintah, tetapi komponennya
+sudah lulus: build, host test, GSLFS test, dan QEMU smoke test di container
+arm64.
 
 ## Aturan commit
 

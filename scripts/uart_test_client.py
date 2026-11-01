@@ -70,7 +70,7 @@ def main(argv):
                 ls_error_sent = True
 
             if ls_error_sent and not spawn_error_sent and b"ls: list failed" in buffer:
-                client.sendall(b"run missing\n")
+                client.sendall(b".\n")
                 spawn_error_sent = True
 
             if spawn_error_sent and not hello_sent and b"run: spawn failed" in buffer:

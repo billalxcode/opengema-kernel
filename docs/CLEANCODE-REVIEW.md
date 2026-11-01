@@ -135,9 +135,8 @@ Ini bukan prioritas sampai ada fitur waktu user yang nyata.
 
 Refactor `run_external` hanya mengubah pembentukan path di user space dan
 sudah dikompilasi dengan `clang++ --target=aarch64-linux-gnu`. Full
-`test.sh` belum dijalankan ulang setelah refactor karena podman dan QEMU
-tidak tersedia di sesi ini. Jalankan `./scripts/test.sh` di environment
-build sebelum merge.
+`test.sh` belum dijalankan sebagai satu perintah, tetapi build, host test,
+GSLFS test, dan QEMU smoke test sudah lulus lewat podman container.
 
 ## Refactor branch dev
 
@@ -200,8 +199,8 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 - Test host baru: endian reader, image GSLFS valid/rusak/siklus/deterministik,
   driver GSLFS, ramfs, procfs, devfs, FAT32, gemapi fs, gemapi api, kgema,
   GPT/partition, VFS, VFS FD, ELF parser, dan FDT parser.
-- Test QEMU baru: `ls /missing` diharapkan menghasilkan `ls: list failed`,
-  dan `run missing` menghasilkan `run: spawn failed`.
+- Test QEMU baru: `ls /missing` menghasilkan `ls: list failed`, dan
+  perintah `.` yang menunjuk directory menghasilkan `run: spawn failed`.
 
 Verifikasi branch `dev`:
 
@@ -210,8 +209,8 @@ Verifikasi branch `dev`:
   `arch-check` dan `gsl-check` OK.
 - `./scripts/test-host.sh`: host tests, ramfs, procfs, devfs, FAT32, gemapi
   fs, gemapi api, kgema, GPT, FDT, VFS, ELF, dan GSLFS probe OK.
-- `test.sh` penuh belum dijalankan karena `qemu-system-aarch64` tidak
-  tersedia di host.
+- `./scripts/test-qemu.sh` lewat container arm64: OK.
+- `test.sh` penuh belum dijalankan sebagai satu perintah.
 
 ## Kesimpulan
 
