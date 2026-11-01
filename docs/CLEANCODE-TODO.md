@@ -166,12 +166,13 @@ Tujuan: modul besar dipecah tanpa mengubah perilaku.
   `kernel/mem/vmm_user.cpp`.
 - [x] Pisahkan query attribute dan translate ke `kernel/mem/vmm_query.cpp`.
 - [x] Pisahkan address space init/destroy ke `kernel/mem/vmm_space.cpp`.
-- [ ] Pisahkan thread creation, run queue, dan wait queue.
-- [ ] Compile-check grup.
+- [x] Pisahkan run queue ke `kernel/sched/run_queue.cpp`.
+- [x] Pisahkan wait queue dan wakeup ke `kernel/sched/wait_queue.cpp`.
+- [x] Pisahkan thread creation ke `kernel/sched/thread.cpp`.
+- [x] Compile-check grup.
 
-Status: copy user, query, dan address space sudah dipisah dan
-diverifikasi dengan QEMU. Pemisahan scheduler masih ditunda karena
-menyentuh context switch dan run queue.
+Status: VMM dan scheduler sudah dipisah per tanggung jawab dan
+diverifikasi dengan QEMU.
 
 Commit: `docs(mem): document kernel lock ordering`.
 
@@ -180,14 +181,16 @@ Commit: `docs(mem): document kernel lock ordering`.
 - [x] Pisahkan `Queue` dari `virtio_common.cpp` ke
   `kernel/drivers/virtio/virtio_queue.cpp`.
 - [ ] Pisahkan `fdt.cpp` menjadi tokenizer dan property access.
+- [x] Pisahkan `fdt.cpp` menjadi state/tokenizer (`fdt_state.cpp`) dan
+  property access (`fdt_property.cpp`).
 - [x] Pisahkan console framebuffer ke `kernel/io/framebuffer_console.cpp`.
 - [x] Pisahkan font ke `kernel/io/font.cpp` dan drawing ke
   `kernel/io/framebuffer_draw.cpp`.
 - [x] Tambah host test FDT (`FindNode`, `FindProperty`, `Child`, `NodeName`).
 - [ ] Compile-check grup.
 
-Status: virtio queue dan framebuffer sudah dipisah dan diverifikasi
-dengan QEMU. FDT masih satu file.
+Status: virtio queue, framebuffer, dan FDT sudah dipisah dan diverifikasi
+dengan host test serta QEMU.
 
 Commit: `test(dev): add fdt host test`.
 

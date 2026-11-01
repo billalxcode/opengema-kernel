@@ -477,7 +477,8 @@ og_add_module(og_fs
   DEPS og_sched og_mem og_core og_inc_kernel)
 
 og_add_module(og_sched
-  SOURCES kernel/sched/scheduler.cpp
+  SOURCES kernel/sched/scheduler.cpp kernel/sched/run_queue.cpp
+          kernel/sched/thread.cpp kernel/sched/wait_queue.cpp
   DEPS og_events og_time og_mem og_core og_inc_kernel)
 
 og_add_module(og_process
@@ -499,6 +500,8 @@ og_add_module(og_platform
   SOURCES
     kernel/platform/qemu_virt.cpp
     kernel/platform/fdt.cpp
+    kernel/platform/fdt_state.cpp
+    kernel/platform/fdt_property.cpp
     kernel/platform/psci.cpp
     kernel/platform/smp.cpp
     kernel/platform/secondary.S

@@ -194,6 +194,9 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   yang diimplementasikannya, sesuai aturan include header di .cpp.
 - Semua header baru disimpan di `kernel/include/og/...`; tidak ada header
   yang diletakkan di samping file `.cpp`.
+- `fdt.cpp` memisahkan state/tokenizer (`fdt_state.cpp`) dan property
+  access (`fdt_property.cpp`); helper internal ada di
+  `og/platform/fdt_internal.h`.
 - `fdt.cpp` memakai satu `NodeBodyOffset` untuk prolog node.
 - `docs/LOCKING.md` mencatat urutan lock yang diketahui: heap -> PMM,
   scheduler -> PMM, dan virtio-blk sebagai leaf.
@@ -208,6 +211,13 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   `kernel/mem/vmm_query.cpp`; helper internal ada di `og/mem/vmm_internal.h`.
 - `AddressSpaceInit` dan `AddressSpaceDestroy` dipindah ke
   `kernel/mem/vmm_space.cpp`; aktivasi per-CPU tetap di `vmm.cpp`.
+- Wait queue, `WakeThread`, dan `ScheduleCurrent` dipindah ke
+  `kernel/sched/wait_queue.cpp`; akses internal lewat
+  `og/sched/scheduler_internal.h`.
+- Run queue (`EnqueueLocked`, `DequeueLocked`, `RemoveLocked`, dan
+  `PickHomeLocked`) dipindah ke `kernel/sched/run_queue.cpp`.
+- Thread creation dipindah ke `kernel/sched/thread.cpp`; alokasi slot dan
+  ID tetap di `scheduler.cpp` lewat helper internal.
 - Test host baru: endian reader, image GSLFS valid/rusak/siklus/deterministik,
   driver GSLFS, ramfs, procfs, devfs, FAT32, gemapi fs, gemapi api, kgema,
   GPT/partition, VFS, VFS FD, ELF parser, dan FDT parser.
@@ -216,7 +226,7 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 
 Verifikasi branch `dev`:
 
-- `python3 scripts/compile-check.py`: 105 file OK, 1 entri lama dilewati.
+- `python3 scripts/compile-check.py`: 110 file OK, 1 entri lama dilewati.
 - `./scripts/build.sh` lewat podman: kernel build dan link OK,
   `arch-check` dan `gsl-check` OK.
 - `./scripts/test-host.sh`: host tests, ramfs, procfs, devfs, FAT32, gemapi
