@@ -60,6 +60,75 @@ bool g_ready = false;
   return Status::kOk;
 }
 
+[[nodiscard]] const MountEntry* FindBestMount(const char* path) noexcept {
+  uint32_t best = 0;
+  std::size_t best_length = 0;
+  bool found = false;
+  for (uint32_t index = 0; index < g_mount_count; ++index) {
+    if (!IsMountPrefix(path, g_mounts[index].path)) {
+      continue;
+    }
+    const std::size_t length = mem::Length(g_mounts[index].path);
+    if (!found || length > best_length) {
+      best = index;
+      best_length = length;
+      found = true;
+    }
+  }
+  return found ? &g_mounts[best] : nullptr;
+}
+
+[[nodiscard]] Result<Node*> ResolveSegments(Node* root,
+                                            const char* cursor) noexcept {
+  Node* current = root;
+  while (*cursor != '\0') {
+    while (IsSeparator(*cursor)) {
+      ++cursor;
+    }
+    if (*cursor == '\0') {
+      break;
+    }
+
+    char segment[64];
+    std::size_t length = 0;
+    while (*cursor != '\0' && !IsSeparator(*cursor)) {
+      if (length >= (sizeof(segment) - 1U)) {
+        return Result<Node*>::Err(Status::kInvalidArg);
+      }
+      segment[length] = *cursor;
+      ++length;
+      ++cursor;
+    }
+    segment[length] = '\0';
+
+    if (Equals(segment, ".")) {
+      continue;
+    }
+    if (Equals(segment, "..")) {
+      // Escaping the mount root is rejected rather than guessed.
+      return Result<Node*>::Err(Status::kInvalidArg);
+    }
+    if (current->type != NodeType::kDirectory) {
+      return Result<Node*>::Err(Status::kNotFound);
+    }
+    if (current->ops == nullptr || current->ops->lookup == nullptr) {
+      return Result<Node*>::Err(Status::kUnsupported);
+    }
+
+    Node* next = nullptr;
+    const Status status = current->ops->lookup(current, segment, &next);
+    if (IsErr(status)) {
+      return Result<Node*>::Err(status);
+    }
+    if (next == nullptr) {
+      return Result<Node*>::Err(Status::kNotFound);
+    }
+    current = next;
+  }
+
+  return Result<Node*>::Ok(current);
+}
+
 }  // namespace
 
 Status FsInit() noexcept {
@@ -115,73 +184,11 @@ Result<Node*> FsResolve(const char* path) noexcept {
     return Result<Node*>::Err(Status::kNotFound);
   }
 
-  uint32_t best = 0;
-  std::size_t best_length = 0;
-  bool found = false;
-  for (uint32_t index = 0; index < g_mount_count; ++index) {
-    if (!IsMountPrefix(path, g_mounts[index].path)) {
-      continue;
-    }
-    const std::size_t length = mem::Length(g_mounts[index].path);
-    if (!found || length > best_length) {
-      best = index;
-      best_length = length;
-      found = true;
-    }
-  }
-  if (!found) {
+  const MountEntry* mount = FindBestMount(path);
+  if (mount == nullptr) {
     return Result<Node*>::Err(Status::kNotFound);
   }
-
-  Node* current = g_mounts[best].root;
-  const char* cursor = path + best_length;
-
-  while (*cursor != '\0') {
-    while (IsSeparator(*cursor)) {
-      ++cursor;
-    }
-    if (*cursor == '\0') {
-      break;
-    }
-
-    char segment[64];
-    std::size_t length = 0;
-    while (*cursor != '\0' && !IsSeparator(*cursor)) {
-      if (length >= (sizeof(segment) - 1U)) {
-        return Result<Node*>::Err(Status::kInvalidArg);
-      }
-      segment[length] = *cursor;
-      ++length;
-      ++cursor;
-    }
-    segment[length] = '\0';
-
-    if (Equals(segment, ".")) {
-      continue;
-    }
-    if (Equals(segment, "..")) {
-      // Escaping the mount root is rejected rather than guessed.
-      return Result<Node*>::Err(Status::kInvalidArg);
-    }
-    if (current->type != NodeType::kDirectory) {
-      return Result<Node*>::Err(Status::kNotFound);
-    }
-    if (current->ops == nullptr || current->ops->lookup == nullptr) {
-      return Result<Node*>::Err(Status::kUnsupported);
-    }
-
-    Node* next = nullptr;
-    const Status status = current->ops->lookup(current, segment, &next);
-    if (IsErr(status)) {
-      return Result<Node*>::Err(status);
-    }
-    if (next == nullptr) {
-      return Result<Node*>::Err(Status::kNotFound);
-    }
-    current = next;
-  }
-
-  return Result<Node*>::Ok(current);
+  return ResolveSegments(mount->root, path + mem::Length(mount->path));
 }
 
 Result<uint32_t> FsOpen(FileTable& table, const char* path,

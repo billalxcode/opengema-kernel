@@ -9,6 +9,7 @@
 #include "format.h"
 #include "memory.h"
 #include "og/fs/partition.h"
+#include "og/fs/vfs.h"
 #include "og/platform/fdt.h"
 
 namespace {
@@ -244,6 +245,76 @@ void TestFdt() {
   CHECK(!og::platform::fdt::FindNode("/missing").is_ok());
 }
 
+og::fs::Node g_root_node;
+og::fs::Node g_dev_node;
+og::fs::Node g_console_node;
+og::fs::Node g_file_node;
+
+og::Status RootLookup(og::fs::Node* /*directory*/, const char* name,
+                      og::fs::Node** out) noexcept {
+  if (og::mem::Same(name, "dev")) {
+    *out = &g_dev_node;
+    return og::Status::kOk;
+  }
+  if (og::mem::Same(name, "file")) {
+    *out = &g_file_node;
+    return og::Status::kOk;
+  }
+  return og::Status::kNotFound;
+}
+
+og::Status DevLookup(og::fs::Node* /*directory*/, const char* name,
+                     og::fs::Node** out) noexcept {
+  if (og::mem::Same(name, "console")) {
+    *out = &g_console_node;
+    return og::Status::kOk;
+  }
+  return og::Status::kNotFound;
+}
+
+const og::fs::NodeOps kRootOps{&RootLookup, nullptr, nullptr, nullptr};
+const og::fs::NodeOps kDevOps{&DevLookup, nullptr, nullptr, nullptr};
+
+void TestVfs() {
+  g_root_node = og::fs::Node{"/", og::fs::NodeType::kDirectory, 0, &kRootOps,
+                             nullptr, nullptr};
+  g_dev_node = og::fs::Node{"dev", og::fs::NodeType::kDirectory, 0, &kDevOps,
+                            nullptr, nullptr};
+  g_console_node = og::fs::Node{"console", og::fs::NodeType::kDevice, 0,
+                                nullptr, nullptr, nullptr};
+  g_file_node = og::fs::Node{"file", og::fs::NodeType::kFile, 12, nullptr,
+                             nullptr, nullptr};
+
+  CHECK(og::IsOk(og::fs::FsInit()));
+  CHECK(og::IsOk(og::fs::FsMount("/", &g_root_node)));
+  CHECK(og::IsOk(og::fs::FsMount("/dev", &g_dev_node)));
+  CHECK(!og::IsOk(og::fs::FsMount("/dev", &g_dev_node)));
+
+  const auto root = og::fs::FsResolve("/");
+  CHECK(root.is_ok());
+  CHECK(root.value() == &g_root_node);
+
+  const auto dev = og::fs::FsResolve("/dev");
+  CHECK(dev.is_ok());
+  CHECK(dev.value() == &g_dev_node);
+
+  const auto console = og::fs::FsResolve("/dev/console");
+  CHECK(console.is_ok());
+  CHECK(console.value() == &g_console_node);
+
+  const auto file = og::fs::FsResolve("/file");
+  CHECK(file.is_ok());
+  CHECK(file.value() == &g_file_node);
+
+  CHECK(!og::fs::FsResolve("/missing").is_ok());
+  CHECK(!og::fs::FsResolve("/../file").is_ok());
+  CHECK(!og::fs::FsResolve("/dev/../file").is_ok());
+
+  const auto stat = og::fs::FsStat("/dev/console");
+  CHECK(stat.is_ok());
+  CHECK(stat.value().type == og::fs::NodeType::kDevice);
+}
+
 }  // namespace
 
 int main() {
@@ -253,6 +324,7 @@ int main() {
   TestEndian();
   TestGpt();
   TestFdt();
+  TestVfs();
 
   if (g_failures != 0) {
     std::printf("host tests: %d failure(s)\n", g_failures);

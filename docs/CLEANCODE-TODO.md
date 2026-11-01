@@ -88,8 +88,11 @@ Tujuan: fungsi kecil, satu tanggung jawab.
   `ValidateTree`, dan `VerifyNodeData`.
 - [x] Pecah `SetupWritableFs` menjadi `CreateWritableTree`,
   `MountWritableTree`, `SeedEtcConfig`, dan `VerifyTmpWrite`.
+- [x] Pisahkan mount lookup dan path walk di `vfs.cpp` (`FindBestMount`,
+  `ResolveSegments`).
 - [ ] Pisahkan FD table dari path resolution di `vfs.cpp` jika aman.
 - [x] Tambah test host GSLFS dari `mkgslimg`.
+- [x] Tambah test host VFS untuk mount, path, dan `..`.
 - [x] Compile-check grup.
 
 Catatan: pemisahan FD table di `vfs.cpp` ditunda karena menyentuh jalur
@@ -162,6 +165,7 @@ Commit: `refactor(core): share endian and linker text helpers`.
 - [x] Tambah test image GSLFS valid dan rusak.
 - [x] Tambah test host untuk `endian.h`.
 - [x] Tambah test host GPT/partition (`FindEspPartition`, `FindPartitionByMagic`).
+- [x] Tambah test host VFS (`FsMount`, `FsResolve`, `FsStat`, path `..`).
 - [x] Tambah test negative `ls /missing` di test QEMU (menunggu QEMU).
 - [ ] Update `docs/CLEANCODE-REVIEW.md`.
 - [ ] Jalankan `test.sh` di environment build.
