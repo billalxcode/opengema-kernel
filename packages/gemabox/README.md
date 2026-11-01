@@ -1,9 +1,12 @@
 # gemabox
 
 Program user mode dasar untuk opengema-kernel. Ditulis dengan C++20 di atas
-SDK `libkgema`, dikompilasi menjadi `build/gemabox.bin`, disalin ke ESP
-sebagai `GEMABOX.BIN`, lalu dibaca kernel ke ramfs sebagai `/ram/gemabox`
-sebelum dijalankan di EL0.
+API publik `libgemapi`, dikompilasi menjadi `build/gemabox.bin`, disalin ke
+ESP sebagai `GEMABOX.BIN`, lalu dibaca kernel ke ramfs sebagai
+`/ram/gemabox` sebelum dijalankan di EL0.
+
+Aplikasi ini tidak menyertakan header `kgema/` dan tidak menautkan
+`libkgema`. Lapisan ABI itu dipakai `libgemapi` secara privat.
 
 ## Berkas
 
@@ -13,8 +16,8 @@ sebelum dijalankan di EL0.
 | `README.md` | Dokumen ini |
 
 Entry point `_start`, pembungkus syscall, dan helper output disediakan oleh
-`packages/libkgema`. Program cukup menulis `main()`. Hanya instruksi
-`svc #0` di dalam library yang memakai inline assembly, karena itu batas
+`packages/libgemapi`. Program cukup menulis `main()`. Hanya instruksi
+`svc #0` di dalam `libkgema` yang memakai inline assembly, karena itu batas
 ABI yang tidak bisa dihindari. Tidak ada file `.S`.
 
 ## Isi saat ini

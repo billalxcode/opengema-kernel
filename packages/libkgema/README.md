@@ -1,9 +1,11 @@
 # libkgema
 
-SDK user space untuk opengema-kernel. Nama lengkapnya lib kernel open gema.
-Library ini menyediakan titik masuk EL0 dan pembungkus syscall supaya
-program seperti `gemabox` cukup menulis C++20 tanpa menyalin instruksi
-`svc` dan tanpa libc.
+Lapisan ABI kernel untuk user space opengema-kernel. Library ini privat:
+hanya `libgemapi` yang boleh memakainya. Aplikasi memakai `libgemapi`.
+
+Isi library ini adalah pembungkus syscall mentah dan helper ABI. Tidak ada
+kebijakan aplikasi, validasi API, atau titik masuk program di sini. Titik
+masuk `_start` berada di `libgemapi`.
 
 ## Isi
 
@@ -16,39 +18,33 @@ program seperti `gemabox` cukup menulis C++20 tanpa menyalin instruksi
 | `kgema/memory.h` | `mmap` dan `munmap` |
 | `kgema/process.h` | `getpid`, `spawn`, `wait`, dan `exit` |
 
-`src/start.cpp` menyediakan `_start` di section `.text.entry`. `link.ld`
-menempatkannya tepat di 1 TiB, alamat yang dipakai kernel untuk user space.
+`src/syscall.cpp` adalah satu-satunya tempat instruksi `svc` di seluruh
+proyek. `scripts/check-gsl.sh` menolak `svc` di paket lain.
 
-## Pemakaian
+## Aturan pemakaian
 
-```cpp
-#include "kgema/file.h"
-#include "kgema/io.h"
+- Hanya `packages/libgemapi/src` yang boleh menyertakan `kgema/...`.
+- Aplikasi tidak boleh menyertakan header ini.
+- Aplikasi tidak boleh menautkan `libkgema.a` atau `libkgema.so`.
+- `libkgema` tidak boleh menyertakan header `gemapi/` atau header kernel.
 
-int main(int argc, char** argv, char** envp) {
-  (void)argc;
-  (void)argv;
-  (void)envp;
-  kgema::write("hello from el0\n");
-  const kgema::i64 fd = kgema::open("/ram/hello");
-  if (fd >= 0) {
-    char text[32];
-    (void)kgema::read(fd, text, sizeof(text));
-    (void)kgema::close(fd);
-  }
-  return 0;
-}
+## Build
+
+CMake proyek utama menghasilkan:
+
+```
+build/libkgema.a
+build/libkgema.so.1
+build/libkgema.so -> libkgema.so.1
 ```
 
-Build dilakukan oleh CMake proyek utama. Hasilnya `build/libkgema.a`,
-ditautkan bersama program memakai `packages/libkgema/link.ld`.
+`libkgema.so.1` adalah dependency dari `libgemapi.so.1`. Dynamic linker
+`ld-gem` memuatnya dari `/System/Libraries` pada tahap GSL berikutnya.
 
 ## Batasan
 
 - Freestanding, tanpa libc dan tanpa STL.
 - Tanpa exception dan RTTI.
-- Global object dengan konstruktor dinamis belum dijalankan otomatis.
-  Gunakan `constexpr`, `const`, atau static initialization.
 - Setiap proses punya satu address space dan satu thread user saat ini.
 - Descriptor 0, 1, dan 2 dicadangkan untuk stdio. Berkas mulai dari fd 3.
 - `read` pada fd 0 membaca satu baris dari UART dengan echo, backspace, dan

@@ -39,6 +39,7 @@ Test lain:
 
 ```sh
 ./scripts/check-arch.sh   # aturan lapisan dan duplikasi
+./scripts/check-gsl.sh    # aplikasi hanya memakai libgemapi
 ./scripts/test-host.sh    # unit test libs/core
 ./scripts/test-qemu.sh    # boot dan cek output
 ```
@@ -125,7 +126,9 @@ kernel: halt
 
 Framebuffer console memakai virtio-gpu 1280x800 dan diuji otomatis dengan
 `screendump` dari monitor QEMU. Program user ditulis dengan C++20 di atas
-SDK `packages/libkgema`, berjalan di address space sendiri pada 1 TiB,
+API publik `packages/libgemapi`, yang memakai lapisan ABI
+`packages/libkgema` secara privat. Aplikasi tidak menyentuh `svc` atau
+header kernel. Program berjalan di address space sendiri pada 1 TiB,
 dengan ASID yang dipasang saat context switch. Dua proses gemabox berjalan
 bersamaan, masing masing punya tabel file sendiri, lalu setiap proses
 menjalankan child dengan argv dan menunggu. Proses writer menguji `chdir`,

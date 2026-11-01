@@ -44,12 +44,17 @@ atau `libkgema`.
 
 ## 3. Status implementasi saat ini
 
-Kode sekarang masih berada pada tahap sebelum GSL:
+Kode sekarang berada di awal GSL:
 
-- `packages/libkgema` berisi syscall, startup, io, file, memory, dan proses.
-- `packages/gemabox` memakai `libkgema` langsung.
-- Binary gemabox masih dimasukkan ke ramfs oleh kernel.
-- Belum ada `libgemapi`, init user, atau system volume.
+- `packages/libgemapi` sudah ada dan menjadi satu-satunya API aplikasi.
+- `packages/libkgema` adalah ABI privat di bawah `libgemapi`; hanya
+  `libkgema` yang berisi instruksi `svc`.
+- `gemabox` hanya memakai header `gemapi/` dan menautkan `libgemapi.a`.
+- `libkgema.so.1` dan `libgemapi.so.1` sudah dibangun, tetapi belum dimuat
+  karena `ld-gem` dan ELF loader belum ada.
+- `scripts/check-gsl.sh` menolak aplikasi yang menyentuh lapisan bawah.
+- Binary gemabox masih dimasukkan kernel ke ramfs.
+- Belum ada init user, system volume, atau GSLFS.
 
 Dokumen GSL ini adalah target arsitektur, bukan deskripsi kode yang sudah
 selesai.

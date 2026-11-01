@@ -27,9 +27,13 @@ target_include_directories(og_inc_efi INTERFACE
   ${CMAKE_SOURCE_DIR}/libs/efi)
 target_link_libraries(og_inc_efi INTERFACE og_inc_cxx)
 
-# gemabox and the kgema user space SDK. Both are compiled for the user ABI
-# and linked at the user virtual address. The SDK archive is shared by every
-# program in packages/.
+# User space packages. Each layer has its own include root:
+#   libkgema   kernel ABI, private to libgemapi
+#   libgemapi  public API, the only library an application links
+#   gemabox    application
+# An application link line names libgemapi only; libgemapi privately carries
+# the kgema objects in its static archive and depends on libkgema.so in its
+# shared form.
 find_program(OG_GEMABOX_LD NAMES aarch64-linux-gnu-ld REQUIRED)
 find_program(OG_GEMABOX_OBJCOPY NAMES aarch64-linux-gnu-objcopy REQUIRED)
 find_program(OG_KGEMA_AR NAMES aarch64-linux-gnu-ar REQUIRED)
@@ -55,17 +59,38 @@ set(OG_USER_CXX_FLAGS
   -Werror)
 
 set(OG_KGEMA_INCLUDE ${CMAKE_SOURCE_DIR}/packages/libkgema/include)
+set(OG_GEMAPI_INCLUDE ${CMAKE_SOURCE_DIR}/packages/libgemapi/include)
 set(OG_KGEMA_ARCHIVE ${CMAKE_BINARY_DIR}/libkgema.a)
+set(OG_GEMAPI_ARCHIVE ${CMAKE_BINARY_DIR}/libgemapi.a)
 
-add_library(og_kgema_user OBJECT
+set(OG_KGEMA_SOURCES
   packages/libkgema/src/syscall.cpp
   packages/libkgema/src/io.cpp
   packages/libkgema/src/file.cpp
   packages/libkgema/src/memory.cpp
-  packages/libkgema/src/process.cpp
-  packages/libkgema/src/start.cpp)
+  packages/libkgema/src/process.cpp)
+
+set(OG_GEMAPI_SOURCES
+  packages/libgemapi/src/error.cpp
+  packages/libgemapi/src/io.cpp
+  packages/libgemapi/src/fs.cpp
+  packages/libgemapi/src/memory.cpp
+  packages/libgemapi/src/process.cpp)
+
+add_library(og_kgema_user OBJECT ${OG_KGEMA_SOURCES})
 target_include_directories(og_kgema_user PRIVATE ${OG_KGEMA_INCLUDE})
 target_compile_options(og_kgema_user PRIVATE ${OG_USER_CXX_FLAGS})
+
+add_library(og_gemapi_user OBJECT ${OG_GEMAPI_SOURCES})
+target_include_directories(og_gemapi_user PRIVATE
+  ${OG_GEMAPI_INCLUDE}
+  ${OG_KGEMA_INCLUDE})
+target_compile_options(og_gemapi_user PRIVATE ${OG_USER_CXX_FLAGS})
+
+# The process entry point belongs to the API runtime, not to the ABI layer.
+add_library(og_gemapi_start OBJECT packages/libgemapi/src/start.cpp)
+target_include_directories(og_gemapi_start PRIVATE ${OG_GEMAPI_INCLUDE})
+target_compile_options(og_gemapi_start PRIVATE ${OG_USER_CXX_FLAGS})
 
 add_custom_command(
   OUTPUT ${OG_KGEMA_ARCHIVE}
@@ -77,8 +102,64 @@ add_custom_command(
 
 add_custom_target(og_libkgema DEPENDS ${OG_KGEMA_ARCHIVE})
 
+# libgemapi.a is a single link unit: application archive, runtime entry, and
+# the private kgema ABI objects. An application never sees its own copy of
+# the API boundary in the link line.
+add_custom_command(
+  OUTPUT ${OG_GEMAPI_ARCHIVE}
+  COMMAND ${CMAKE_COMMAND} -E rm -f ${OG_GEMAPI_ARCHIVE}
+  COMMAND ${OG_KGEMA_AR} rcs ${OG_GEMAPI_ARCHIVE}
+          $<TARGET_OBJECTS:og_gemapi_user>
+          $<TARGET_OBJECTS:og_gemapi_start>
+          $<TARGET_OBJECTS:og_kgema_user>
+  DEPENDS og_gemapi_user og_gemapi_start og_kgema_user
+  COMMAND_EXPAND_LISTS
+  COMMENT "archive libgemapi")
+
+add_custom_target(og_libgemapi DEPENDS ${OG_GEMAPI_ARCHIVE})
+
+# Shared objects for the dynamic GSL target. They are built now so the ABI
+# and the dependency edge are checked on every build; ld-gem loads them in
+# GSL-2.
+add_library(og_kgema_pic OBJECT ${OG_KGEMA_SOURCES})
+target_include_directories(og_kgema_pic PRIVATE ${OG_KGEMA_INCLUDE})
+target_compile_options(og_kgema_pic PRIVATE ${OG_USER_CXX_FLAGS} -fPIC)
+
+add_library(og_gemapi_pic OBJECT ${OG_GEMAPI_SOURCES})
+target_include_directories(og_gemapi_pic PRIVATE
+  ${OG_GEMAPI_INCLUDE}
+  ${OG_KGEMA_INCLUDE})
+target_compile_options(og_gemapi_pic PRIVATE ${OG_USER_CXX_FLAGS} -fPIC)
+
+set(OG_KGEMA_SO ${CMAKE_BINARY_DIR}/libkgema.so.1)
+set(OG_GEMAPI_SO ${CMAKE_BINARY_DIR}/libgemapi.so.1)
+
+add_custom_command(
+  OUTPUT ${OG_KGEMA_SO}
+  COMMAND ${OG_GEMABOX_LD} -shared -soname libkgema.so.1
+          -o ${OG_KGEMA_SO} $<TARGET_OBJECTS:og_kgema_pic>
+  COMMAND ${CMAKE_COMMAND} -E create_symlink libkgema.so.1
+          ${CMAKE_BINARY_DIR}/libkgema.so
+  DEPENDS og_kgema_pic
+  COMMAND_EXPAND_LISTS
+  COMMENT "link libkgema.so")
+
+add_custom_command(
+  OUTPUT ${OG_GEMAPI_SO}
+  COMMAND ${OG_GEMABOX_LD} -shared -soname libgemapi.so.1
+          -o ${OG_GEMAPI_SO} $<TARGET_OBJECTS:og_gemapi_pic>
+          -L${CMAKE_BINARY_DIR} -lkgema
+  COMMAND ${CMAKE_COMMAND} -E create_symlink libgemapi.so.1
+          ${CMAKE_BINARY_DIR}/libgemapi.so
+  DEPENDS og_gemapi_pic ${OG_KGEMA_SO}
+  COMMAND_EXPAND_LISTS
+  COMMENT "link libgemapi.so")
+
+add_custom_target(og_shared_libraries ALL
+  DEPENDS ${OG_KGEMA_SO} ${OG_GEMAPI_SO})
+
 add_library(og_gemabox_user OBJECT packages/gemabox/main.cpp)
-target_include_directories(og_gemabox_user PRIVATE ${OG_KGEMA_INCLUDE})
+target_include_directories(og_gemabox_user PRIVATE ${OG_GEMAPI_INCLUDE})
 target_compile_options(og_gemabox_user PRIVATE ${OG_USER_CXX_FLAGS})
 
 set(OG_GEMABOX_ELF ${CMAKE_BINARY_DIR}/gemabox.elf)
@@ -86,19 +167,19 @@ set(OG_GEMABOX_BIN ${CMAKE_BINARY_DIR}/gemabox.bin)
 
 add_custom_command(
   OUTPUT ${OG_GEMABOX_BIN}
-  COMMAND ${OG_GEMABOX_LD} -T ${CMAKE_SOURCE_DIR}/packages/libkgema/link.ld
-          -u _start $<TARGET_OBJECTS:og_gemabox_user> ${OG_KGEMA_ARCHIVE}
+  COMMAND ${OG_GEMABOX_LD} -T ${CMAKE_SOURCE_DIR}/packages/libgemapi/link.ld
+          -u _start $<TARGET_OBJECTS:og_gemabox_user> ${OG_GEMAPI_ARCHIVE}
           -o ${OG_GEMABOX_ELF}
   COMMAND ${OG_GEMABOX_OBJCOPY} -O binary ${OG_GEMABOX_ELF} ${OG_GEMABOX_BIN}
   DEPENDS
     og_gemabox_user
-    og_libkgema
-    ${CMAKE_SOURCE_DIR}/packages/libkgema/link.ld
+    og_libgemapi
+    ${CMAKE_SOURCE_DIR}/packages/libgemapi/link.ld
   COMMAND_EXPAND_LISTS
   COMMENT "link gemabox")
 
 add_custom_target(og_gemabox DEPENDS ${OG_GEMABOX_BIN})
-add_dependencies(og_gemabox og_libkgema)
+add_dependencies(og_gemabox og_libgemapi)
 
 # One OBJECT library per module. DEPS lists lower layers only, so the
 # link graph mirrors the architecture in docs/ROADMAP.md.
@@ -294,6 +375,14 @@ add_custom_target(og_arch_check ALL
   VERBATIM)
 
 add_dependencies(BOOTAA64EFI og_arch_check)
+
+# GSL guard: applications only use libgemapi, and only libkgema has svc.
+add_custom_target(og_gsl_check ALL
+  COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/check-gsl.sh
+  COMMENT "check GSL layer rules"
+  VERBATIM)
+
+add_dependencies(BOOTAA64EFI og_gsl_check)
 
 add_custom_command(TARGET BOOTAA64EFI POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/esp/EFI/BOOT

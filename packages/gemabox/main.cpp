@@ -1,15 +1,17 @@
 // gemabox: base user command program for opengema-kernel.
-// Built for EL0 with the kgema SDK.
+// Built for EL0 against the public gemapi layer only. It never calls a
+// syscall and never includes a kernel header.
 
-#include "kgema/file.h"
-#include "kgema/io.h"
-#include "kgema/memory.h"
-#include "kgema/process.h"
-#include "kgema/types.h"
+#include "gemapi/error.h"
+#include "gemapi/fs.h"
+#include "gemapi/io.h"
+#include "gemapi/memory.h"
+#include "gemapi/process.h"
+#include "gemapi/types.h"
 
 namespace {
 
-constexpr kgema::usize kPageSize = 4096;
+constexpr gemapi::usize kPageSize = gemapi::kPageSize;
 constexpr char kHello[] = "hello from el0\n";
 constexpr char kFileOk[] = "file ok\n";
 constexpr char kMmapMessage[] = "mmap ok\n";
@@ -46,86 +48,80 @@ bool starts_with(const char* text, const char* prefix) {
 }
 
 void cat_file(const char* path) {
-  const kgema::i64 descriptor = kgema::open(path);
-  if (descriptor < 0) {
-    kgema::write("cat: open failed\n");
+  auto file = gemapi::fs::File::open(path);
+  if (!file) {
+    gemapi::io::write("cat: open failed\n");
     return;
   }
   char buffer[64];
   for (;;) {
-    const kgema::i64 count = kgema::read(descriptor, buffer, sizeof(buffer));
-    if (count < 0) {
-      kgema::write("cat: read failed\n");
+    auto count = file.value().read(buffer, sizeof(buffer));
+    if (!count) {
+      gemapi::io::write("cat: read failed\n");
       break;
     }
-    if (count == 0) {
+    if (count.value() == 0U) {
       break;
     }
-    kgema::write(buffer, static_cast<kgema::usize>(count));
+    gemapi::io::write(buffer, count.value());
   }
-  (void)kgema::close(descriptor);
 }
 
 int run_shell() {
   char line[128];
   for (;;) {
-    kgema::write(kPrompt);
-    const kgema::i64 length = kgema::read(0, line, sizeof(line) - 1U);
-    if (length < 0) {
+    gemapi::io::write(kPrompt);
+    auto length = gemapi::io::read_line(line, sizeof(line));
+    if (!length) {
       return 1;
     }
-    line[length] = '\0';
-    if (length == 0) {
+    const gemapi::usize size = length.value();
+    if (size == 0U) {
       continue;
     }
     if (same(line, "exit")) {
       return 0;
     }
     if (same(line, "help")) {
-      kgema::write(kHelp);
+      gemapi::io::write(kHelp);
       continue;
     }
-    if (starts_with(line, "echo ") && length > 5) {
-      kgema::write(line + 5, static_cast<kgema::usize>(length - 5));
-      kgema::write("\n");
+    if (starts_with(line, "echo ") && size > 5U) {
+      gemapi::io::write(line + 5, size - 5U);
+      gemapi::io::write("\n");
       continue;
     }
-    if (starts_with(line, "cat ") && length > 4) {
+    if (starts_with(line, "cat ") && size > 4U) {
       cat_file(line + 4);
       continue;
     }
-    kgema::write("unknown: ");
-    kgema::write(line, static_cast<kgema::usize>(length));
-    kgema::write("\n");
+    gemapi::io::write("unknown: ");
+    gemapi::io::write(line, size);
+    gemapi::io::write("\n");
   }
 }
 
 int run_writer() {
-  if (!kgema::chdir("/ram")) {
+  if (gemapi::fs::chdir("/ram") != gemapi::Status::ok) {
     return 1;
   }
-  const kgema::i64 descriptor = kgema::open("writer", kgema::kOpenWrite);
-  if (descriptor < 0) {
+  auto file = gemapi::fs::File::open("writer", gemapi::fs::kOpenWrite);
+  if (!file) {
     return 1;
   }
-  const kgema::i64 written =
-    kgema::write(descriptor, kWriteMessage, sizeof(kWriteMessage) - 1U);
-  if (written != static_cast<kgema::i64>(sizeof(kWriteMessage) - 1U)) {
-    (void)kgema::close(descriptor);
+  const gemapi::usize message_size = sizeof(kWriteMessage) - 1U;
+  if (file.value().write(kWriteMessage, message_size) != gemapi::Status::ok) {
     return 1;
   }
-  if (!kgema::seek(descriptor, 0)) {
-    (void)kgema::close(descriptor);
+  if (file.value().seek(0) != gemapi::Status::ok) {
     return 1;
   }
   char readback[16];
-  const kgema::i64 read = kgema::read(descriptor, readback, sizeof(readback));
-  (void)kgema::close(descriptor);
-  if (read < static_cast<kgema::i64>(sizeof(kWriteMessage) - 1U) ||
-      readback[0] != 'w') {
+  auto count = file.value().read(readback, sizeof(readback));
+  if (!count || count.value() < message_size || readback[0] != 'w') {
     return 1;
   }
-  kgema::write(kWriteMessage);
+  gemapi::io::write(kWriteMessage);
   return 0;
 }
 
@@ -133,7 +129,7 @@ int run_writer() {
 
 int main(int argc, char** argv, char** /*envp*/) {
   if (argc > 1 && same(argv[1], "child")) {
-    kgema::write(kChildOk);
+    gemapi::io::write(kChildOk);
     return 0;
   }
   if (argc > 1 && same(argv[1], "writer")) {
@@ -142,56 +138,55 @@ int main(int argc, char** argv, char** /*envp*/) {
   if (argc > 1 && same(argv[1], "shell")) {
     return run_shell();
   }
-  if (kgema::getpid() == 0U) {
+  if (gemapi::process::id() == 0U) {
     return 1;
   }
-  kgema::write(kHello);
+  gemapi::io::write(kHello);
 
-  const kgema::i64 descriptor = kgema::open("/ram/hello");
-  if (descriptor < 0) {
+  auto file = gemapi::fs::File::open("/ram/hello");
+  if (!file) {
     return 1;
   }
   char text[32];
-  const kgema::i64 count = kgema::read(descriptor, text, sizeof(text));
-  kgema::Stat info{};
-  bool file_ok = count >= 5;
-  file_ok = file_ok && kgema::stat("/ram/hello", info);
-  file_ok = file_ok && info.size >= 5U;
-  file_ok = file_ok && kgema::seek(descriptor, 0);
+  auto count = file.value().read(text, sizeof(text));
+  bool file_ok = count && count.value() >= 5U;
+  auto info = gemapi::fs::stat("/ram/hello");
+  file_ok = file_ok && info && info.value().size >= 5U;
+  file_ok = file_ok && file.value().seek(0) == gemapi::Status::ok;
   char first = '\0';
-  file_ok = file_ok && kgema::read(descriptor, &first, 1) == 1;
-  file_ok = file_ok && first == 'r';
-  (void)kgema::close(descriptor);
+  auto one = file.value().read(&first, 1);
+  file_ok = file_ok && one && one.value() == 1U && first == 'r';
   if (!file_ok) {
     return 1;
   }
-  kgema::write(kFileOk);
+  gemapi::io::write(kFileOk);
 
-  void* mapping = kgema::mmap(kPageSize);
-  if (mapping == nullptr) {
-    kgema::write(kMmapFailed);
+  auto mapping = gemapi::memory::map(kPageSize);
+  if (!mapping) {
+    gemapi::io::write(kMmapFailed);
     return 1;
   }
 
-  auto* bytes = static_cast<char*>(mapping);
-  for (kgema::usize index = 0; index < (sizeof(kMmapMessage) - 1U); ++index) {
+  auto* bytes = static_cast<char*>(mapping.value());
+  for (gemapi::usize index = 0; index < (sizeof(kMmapMessage) - 1U); ++index) {
     bytes[index] = kMmapMessage[index];
   }
-  kgema::write(bytes, sizeof(kMmapMessage) - 1U);
+  gemapi::io::write(bytes, sizeof(kMmapMessage) - 1U);
 
-  if (!kgema::munmap(mapping, kPageSize)) {
+  if (gemapi::memory::unmap(mapping.value(), kPageSize) != gemapi::Status::ok) {
     return 1;
   }
 
   const char* child_argv[] = {"gemabox", "child"};
-  const kgema::i64 child = kgema::spawn("/ram/gemabox", child_argv, 2);
-  if (child <= 0) {
+  auto child = gemapi::process::spawn("/ram/gemabox", child_argv, 2);
+  if (!child) {
     return 1;
   }
   int child_status = 0;
-  if (kgema::wait(child, &child_status) != child || child_status != 0) {
+  if (gemapi::process::wait(child.value(), child_status) != gemapi::Status::ok ||
+      child_status != 0) {
     return 1;
   }
-  kgema::write(kSpawnOk);
+  gemapi::io::write(kSpawnOk);
   return 0;
 }

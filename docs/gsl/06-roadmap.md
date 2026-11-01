@@ -36,16 +36,23 @@ Status: selesai untuk keputusan utama.
 Tujuan: aplikasi hanya melihat API, dan library dibangun sebagai shared
 object.
 
-- [ ] Buat `packages/libgemapi`.
-- [ ] Pindahkan `libkgema` menjadi dependency privat.
-- [ ] Build `libkgema.so` dan `libgemapi.so`.
-- [ ] Tetapkan soname dan versi ABI.
-- [ ] `gemabox` hanya memakai header `gemapi/`.
-- [ ] Tambah `scripts/check-gsl.sh`.
+- [x] Buat `packages/libgemapi`.
+- [x] Pindahkan `libkgema` menjadi dependency privat.
+- [x] Build `libkgema.so` dan `libgemapi.so`.
+- [x] Tetapkan soname `libkgema.so.1` dan `libgemapi.so.1`.
+- [x] `gemabox` hanya memakai header `gemapi/`.
+- [x] Tambah `scripts/check-gsl.sh`.
+- [ ] Symbol versioning dan aturan kompatibilitas ABI.
 - [ ] Siapkan `ld-gem` statis sebagai bootstrap.
 
 Selesai bila: `libgemapi.so` dan `libkgema.so` bisa dibangun, dan aplikasi
 tidak memiliki simbol atau include `kgema`.
+
+Status: boundary API dan shared object sudah ada. `libgemapi.a` adalah satu
+kesatuan link berisi objek API, `_start`, dan objek `libkgema` privat.
+`libgemapi.so.1` sudah memiliki `DT_NEEDED` ke `libkgema.so.1`, tetapi
+belum dimuat karena `ld-gem` baru dikerjakan pada GSL-2. Symbol versioning
+menyusul bersama loader.
 
 ## GSL-2 - ELF loader dan dynamic linker
 
