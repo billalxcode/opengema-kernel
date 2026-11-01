@@ -52,7 +52,7 @@ Kode sekarang berada di awal GSL:
   `libkgema` yang berisi instruksi `svc`.
 - `gemabox` hanya memakai header `gemapi/` dan menautkan `libgemapi.a`.
 - `libkgema.so.1` dan `libgemapi.so.1` dimuat oleh `ld-gem` dari `/ram`
-  sebagai bootstrap menuju `/System/Libraries`.
+  sebagai bootstrap menuju `/system/libraries`.
 - Kernel memuat `/ram/gemabox` sebagai ELF64 dynamic, membaca `PT_INTERP`,
   dan memetakan `/ram/ld-gem`.
 - `scripts/check-gsl.sh` menolak aplikasi yang menyentuh lapisan bawah.
@@ -70,10 +70,13 @@ selesai.
 | API aplikasi | Hanya `libgemapi` |
 | ABI kernel user | Hanya `libkgema`, disembunyikan dari aplikasi |
 | Binary | ELF64 dynamic, dimuat dari filesystem |
-| Library | `.so` di `/System/Libraries`, bukan ditanam di kernel |
+| Library | `.so` di `/system/libraries`, bukan ditanam di kernel |
 | Mount | Satu volume system, bukan satu mount per library |
 | System volume | Filesystem GSL khusus, read-only |
-| Init | Kernel menjalankan `/System/Boot/init` sebagai proses pertama |
+| Layout | Unix-like lowercase, satu root, system read-only |
+| Home | `/users/<user>` writable |
+| Aplikasi | `/applications/<package>`, command di `/commands` |
+| Init | Kernel menjalankan `/system/boot/init` sebagai proses pertama |
 | Shell | Proses user, bukan bagian kernel |
 | Isolasi | Satu proses per aplikasi, address space sendiri |
 | Kegagalan | Error dikembalikan ke pemanggil, kernel tidak ikut gagal |

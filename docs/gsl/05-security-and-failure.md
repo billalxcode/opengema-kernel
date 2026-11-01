@@ -34,7 +34,7 @@ Contoh:
 - `console.write`
 - `console.read`
 - `filesystem.read`
-- `filesystem.write:/Home`
+- `filesystem.write:/users`
 - `process.spawn`
 - `device.block0.read`
 - `network.udp`

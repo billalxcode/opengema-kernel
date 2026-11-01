@@ -43,7 +43,7 @@ build/libkgema.so -> libkgema.so.1
 ```
 
 `libkgema.so.1` adalah dependency dari `libgemapi.so.1`. Dynamic linker
-`ld-gem` memuatnya dari `/System/Libraries` pada tahap GSL berikutnya.
+`ld-gem` memuatnya dari `/system/libraries` pada tahap GSL berikutnya.
 
 ## Batasan
 

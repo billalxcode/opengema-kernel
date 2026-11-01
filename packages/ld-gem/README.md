@@ -38,7 +38,7 @@ sebagai bagian dari layer libraries, bukan `libgemapi`.
 
 ## Batasan saat ini
 
-- Search path hanya `/ram`. Target akhirnya `/System/Libraries` setelah
+- Search path hanya `/ram`. Target akhirnya `/system/libraries` setelah
   GSLFS dan init user ada.
 - Hanya hash SYSV (`DT_HASH`) yang dipakai untuk lookup simbol. Library
   harus dibangun dengan hash SYSV, yang merupakan default `ld` di proyek

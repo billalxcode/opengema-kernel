@@ -34,11 +34,11 @@ Opsi:
 
 - A. Satu root Linux-like.
 - B. Drive letter Windows-like.
-- C. Hybrid dengan `/Volumes/C`.
+- C. Hybrid dengan `/volumes/c`.
 
-Rekomendasi: A, dengan C sebagai adaptasi jika diperlukan.
+Keputusan: A. Satu root Unix-like lowercase, tanpa drive letter.
 
-Status: usulan kuat.
+Status: diputuskan. Detail di `03-filesystem-layout.md`.
 
 ## 4. Busybox atau binary terpisah
 
@@ -123,22 +123,32 @@ Opsi:
 - B. Case-insensitive Windows.
 - C. Case-sensitive di system, case-insensitive di data.
 
-Rekomendasi: A untuk kesederhanaan VFS.
+Keputusan: A. Case-sensitive mengikuti Unix.
 
-Status: usulan.
+Status: diputuskan.
 
 ## 11. Nama direktori
 
-Opsi:
+Keputusan: lowercase Unix.
 
-- `/Applications` atau `/Apps`
-- `/System/Libraries` atau `/Lib`
-- `/Devices` atau `/Dev`
+```
+/system
+  boot/
+  libraries/
+  services/
+  config/
+/applications
+/commands
+/etc
+/users
+/tmp
+/var
+/dev
+/proc
+/volumes
+```
 
-Rekomendasi: nama panjang yang jelas untuk GSL, dengan alias pendek nanti
-jika perlu.
-
-Status: usulan.
+Status: diputuskan. Detail ada di `03-filesystem-layout.md`.
 
 ## 12. API namespace
 

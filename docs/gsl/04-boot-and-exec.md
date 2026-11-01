@@ -19,10 +19,11 @@ Firmware UEFI
   -> kmain
   -> init hardware, MMU, heap, interrupt, timer
   -> driver block dan VFS read-only
-  -> mount root/system minimal
-  -> load /System/Boot/init
+  -> mount volume system GSLFS read-only di /
+  -> mount devfs di /dev dan procfs di /proc
+  -> load /system/boot/init
   -> PID 1 user mode
-       -> mount /System, /Applications, /Data
+       -> mount /etc, /users, /var, dan /tmp
        -> start service manager
        -> start shell atau user interface
 ```
@@ -43,7 +44,7 @@ kebijakan dan urutan mount.
 
 ## 4. Alur exec
 
-Usulan alur `spawn("/Applications/gemabox", argv)`:
+Usulan alur `spawn("/applications/gemabox/gemabox", argv)`:
 
 1. libgemapi memvalidasi path, argv, dan capability.
 2. libgemapi memanggil `libkgema`.
@@ -56,7 +57,7 @@ Usulan alur `spawn("/Applications/gemabox", argv)`:
 9. Kernel membuat proses dan thread user.
 10. Jika dynamic, kernel menjalankan dynamic linker.
 11. Dynamic linker memuat `libgemapi.so` dan `libkgema.so` dari
-    `/System/Libraries`.
+    `/system/libraries`.
 12. Program masuk ke `_start`, lalu `main`.
 
 Jika salah satu langkah gagal, proses lama tidak berubah dan error
@@ -80,7 +81,7 @@ Keputusan brainstorming: aplikasi memakai dynamic library langsung.
 - Interpreter adalah `ld-gem`, dynamic linker statis.
 - `ld-gem` membaca `DT_NEEDED` dari executable.
 - `libgemapi.so` bergantung pada `libkgema.so`.
-- `ld-gem` mencari library hanya di `/System/Libraries`.
+- `ld-gem` mencari library hanya di `/system/libraries`.
 - Loader memvalidasi versi, soname, dan dependensi.
 - Segment code dipetakan read-only dan executable.
 - Relokasi dan symbol binding diselesaikan sebelum entry.
@@ -107,7 +108,7 @@ executable. Aplikasi biasa tidak memakai flag itu; `gemapi::memory::map`
 tetap non-executable.
 
 Selama bootstrap, `ld-gem` mencari library di `/ram`. Setelah GSLFS dan
-init user ada, search path menjadi `/System/Libraries`.
+init user ada, search path menjadi `/system/libraries`.
 
 Pengecualian bootstrap:
 

@@ -67,7 +67,7 @@ Tujuan: binary dan dependency benar-benar dimuat dari filesystem.
 - [x] `ld-gem` memproses `DT_NEEDED` secara rekursif.
 - [x] Relokasi `RELATIVE`, `GLOB_DAT`, `JUMP_SLOT`, dan `ABS64`.
 - [x] Symbol binding dengan hash SYSV.
-- [~] Search path `/ram` untuk bootstrap, target `/System/Libraries`.
+- [~] Search path `/ram` untuk bootstrap, target `/system/libraries`.
 - [ ] Read-only code mapping dan W^X user.
 - [ ] Test library hilang, versi salah, dan ELF rusak lanjutan.
 
@@ -88,7 +88,9 @@ Tujuan: system volume read-only dan reproducible.
 - [ ] Tool `mkgslimg`.
 - [ ] Driver GSLFS read-only di kernel.
 - [ ] Image system berisi init, library, dan aplikasi inti.
-- [ ] Mount `/System` dan `/Applications`.
+- [ ] Mount `/` sebagai volume system read-only, lalu `/etc`, `/users`,
+  `/var`, dan `/tmp` di init.
+- [ ] Mount `/dev` dan `/proc` sebagai filesystem virtual.
 - [ ] Validasi checksum dan offset.
 - [ ] Build image deterministik.
 
@@ -99,8 +101,8 @@ tanpa rebuild kernel.
 
 Tujuan: kernel menyerahkan kebijakan ke user space.
 
-- [ ] `/System/Boot/init` sebagai PID 1.
-- [ ] Init memasang `/System`, `/Applications`, dan `/Data`.
+- [ ] `/system/boot/init` sebagai PID 1.
+- [ ] Init memasang `/etc`, `/users`, `/var`, dan `/tmp`.
 - [ ] Service manager minimal.
 - [ ] Shell dijalankan oleh init.
 - [ ] Recovery shell jika init gagal.
@@ -115,7 +117,7 @@ menjalankan shell.
 - [ ] Dependency resolver.
 - [ ] PATH dan command lookup.
 - [ ] gemabox multi-call applet.
-- [ ] Aplikasi eksternal di `/Applications`.
+- [ ] Aplikasi eksternal di `/applications`.
 - [ ] Install dan update package.
 - [ ] `ls`, `ps`, `sleep`, dan `clear` di gemabox.
 

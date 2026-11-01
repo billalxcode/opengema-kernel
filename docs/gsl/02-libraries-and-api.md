@@ -86,7 +86,7 @@ int main(int argc, char** argv, char** envp) {
   (void)argv;
   (void)envp;
 
-  auto file = gemapi::fs::open("/System/Config/version");
+  auto file = gemapi::fs::open("/system/config/version");
   if (!file) {
     gemapi::io::error("cannot open version\n");
     return 1;
@@ -125,7 +125,7 @@ Keputusan brainstorming: aplikasi memakai dynamic library langsung.
 - `libgemapi.so` memiliki dependency `libkgema.so`.
 - Kernel memuat executable dan membaca `PT_INTERP`.
 - Dynamic linker user space adalah program statis bernama `ld-gem`.
-- `ld-gem` membaca dependency dari `/System/Libraries`.
+- `ld-gem` membaca dependency dari `/system/libraries`.
 - Simbol diselesaikan dengan versi dan urutan yang jelas.
 
 Yang dibutuhkan:

@@ -273,6 +273,8 @@ Ringkasnya:
 - `libgemapi` memakai `libkgema` secara privat.
 - Binary dan library dynamic berasal dari filesystem.
 - System volume memakai GSLFS read-only.
+- Layout Unix-like lowercase: `/system` read-only, `/users` dan `/etc`
+  writable, `/dev` dan `/proc` virtual.
 - Kernel memuat executable, `ld-gem` memuat library.
 - Kernel menjalankan init, init memasang volume dan menjalankan shell.
 - Setiap layer punya validasi dan batas kegagalan.
@@ -283,5 +285,5 @@ GSL-1 sudah berjalan: `packages/libgemapi` menjadi satu-satunya API
 aplikasi, `libgemapi.a` membawa `_start` dan objek `libkgema` privat, dan
 `libgemapi.so.1` sudah bergantung pada `libkgema.so.1`. Kernel memuat ELF64
 dynamic, `ld-gem` memuat dependency dari ramfs, dan gemabox berjalan
-sebagai aplikasi dynamic. GSLFS, `/System/Libraries`, dan init user belum
+sebagai aplikasi dynamic. GSLFS, `/system/libraries`, dan init user belum
 ada.
