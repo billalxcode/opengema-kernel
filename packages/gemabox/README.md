@@ -20,10 +20,14 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
 ## Isi saat ini
 
 1. `write` ke stdout.
-2. `mmap` satu halaman.
-3. `write` dari halaman hasil pemetaan.
-4. `munmap` halaman tersebut.
-5. `exit`.
+2. `open`, `read`, `stat`, `seek`, dan `close` untuk `/ram/hello`.
+3. `mmap` satu halaman.
+4. `write` dari halaman hasil pemetaan.
+5. `munmap` halaman tersebut.
+6. `spawn` child dengan argv `{"gemabox", "child"}`, lalu `wait`.
+7. `exit`.
+
+Child mendeteksi argv kedua dan hanya mencetak `child ok`.
 
 Hasil yang diharapkan di serial:
 
@@ -31,6 +35,8 @@ Hasil yang diharapkan di serial:
 hello from el0
 file ok
 mmap ok
+child ok
+spawn ok
 user: exit pid: 1
 user: exit status: 0
 ```
@@ -39,5 +45,5 @@ user: exit status: 0
 
 gemabox akan menjadi kumpulan perintah dasar kernel, misalnya `ls`, `cat`,
 `mount`, `ps`, dan `help`, dengan satu titik masuk `_start` yang memilih
-perintah dari argumen. Selama kernel belum punya `exec` dan argumen proses,
-isinya masih berupa program uji tunggal.
+perintah dari argumen. Argv dan spawn sudah ada; `exec` dan input interaktif
+belum.

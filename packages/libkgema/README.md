@@ -25,7 +25,10 @@ menempatkannya tepat di 1 TiB, alamat yang dipakai kernel untuk user space.
 #include "kgema/file.h"
 #include "kgema/io.h"
 
-int main() {
+int main(int argc, char** argv, char** envp) {
+  (void)argc;
+  (void)argv;
+  (void)envp;
   kgema::write("hello from el0\n");
   const kgema::i64 fd = kgema::open("/ram/hello");
   if (fd >= 0) {

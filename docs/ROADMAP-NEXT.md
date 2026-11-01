@@ -57,8 +57,8 @@ Tujuan: satu program user menjadi satu proses nyata, bisa dibuat, ditunggu,
 dan dibersihkan.
 
 Status saat ini: inti fase sudah jalan. Dua proses gemabox berjalan di
-address space berbeda, punya tabel FD sendiri, parent menunggu, dan seluruh
-frame kembali setelah proses selesai.
+address space berbeda, punya tabel FD sendiri, menerima argv, menjalankan
+child, menunggu, dan seluruh frame kembali setelah proses selesai.
 
 - [x] PRC-01 `Process`: PID, address space, state, exit status, parent,
       FD table, dan nama program. Daftar anak dan cwd belum.
@@ -69,21 +69,31 @@ frame kembali setelah proses selesai.
 - [~] PRC-04 Syscall `open`, `close`, `read`, `stat`, `seek`, `getpid`,
       `exit(status)`, dan `waitpid` sudah ada. `write` masih khusus stdout;
       write ke FD berkas belum.
-- [~] PRC-05 Loader flat dari filesystem sudah. ELF64, argv/env, dan stack
-      layout dinamis belum.
+- [~] PRC-05 Loader flat dari filesystem dan argv sudah. ELF64 dan env
+      yang terisi belum.
 - [x] PRC-06 Lifecycle: zombie, wait, reklamasi stack, address space, FD,
       dan slot proses. PID tidak dipakai ulang.
-- [~] PRC-07 `spawn` dan `wait` sudah ada di kernel dan syscall. `exec`
+- [~] PRC-07 `spawn` dengan argv dan `wait` sudah dipakai userland. `exec`
       dan `fork` belum.
-- [x] PRC-08 Uji: dua proses berjalan bersamaan, parent wait, exit status
-      benar, dan jumlah frame bebas kembali ke angka sebelum spawn.
+- [x] PRC-08 Uji: dua proses berjalan bersamaan, masing masing spawn child
+      dengan argv, parent wait, exit status benar, dan jumlah frame bebas
+      kembali ke angka sebelum spawn.
 
 **Selesai bila:** kernel bisa menjalankan dua program berbeda, parent
 menunggu anak, dan tidak ada kebocoran thread, stack, page, atau FD.
 Target itu sudah tercapai untuk dua proses gemabox yang sama.
 
-Langkah berikutnya untuk fase ini: argv/env, ELF64, cwd, daftar anak,
-`write` ke FD, lalu `exec`.
+Catatan implementasi:
+
+1. `SP_EL0` sekarang disimpan per thread. Tanpa itu, preemption antara dua
+   proses EL0 membuat proses kedua memakai stack proses pertama.
+2. Heap kernel sekarang memakai spinlock. Dua proses yang spawn bersamaan
+   sebelumnya merusak free list heap.
+3. argv disusun di stack user sebagai string, array pointer, dan null
+   terminator. `_start` menerima argc, argv, dan envp lewat x0 sampai x2.
+
+Langkah berikutnya untuk fase ini: ELF64, env, cwd, daftar anak, `write`
+ke FD, lalu `exec`.
 
 ## 5. Fase 16 - SDK v2 dan shell gemabox
 
@@ -91,7 +101,7 @@ Tujuan: userland punya API yang layak dan gemabox menjadi shell nyata.
 
 - [~] SDK-01 `libkgema` API berkas: open, read, close, stat, seek sudah.
       Write ke FD berkas belum.
-- [~] SDK-02 API proses: getpid, wait, exit, spawn sudah. argv belum.
+- [x] SDK-02 API proses: getpid, wait, exit, spawn, dan argv sudah.
 - [ ] SDK-03 API waktu dan error yang konsisten, tanpa libc.
 - [ ] SDK-04 Jalankan `.init_array` di `_start`, dukung konstruktor global
       sederhana tanpa exception dan tanpa RTTI.
