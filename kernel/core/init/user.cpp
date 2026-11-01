@@ -2,6 +2,7 @@
 
 #include "og/core/log.h"
 #include "og/core/panic.h"
+#include "og/mem/heap.h"
 #include "og/mem/pmm.h"
 #include "og/process/process.h"
 #include "og/syscall/syscall.h"
@@ -10,6 +11,20 @@ namespace og::boot {
 
 void RunUserSelfTest() noexcept {
   syscall::SyscallInit();
+
+  // gemabox uses the 2048 byte slab. Warm two blocks so concurrent spawns
+  // do not grow the heap after the frame baseline is recorded.
+  const Result<void*> warm_a = mem::HeapAlloc(2048);
+  if (warm_a.is_err()) {
+    Panic("user: heap warm a failed");
+  }
+  const Result<void*> warm_b = mem::HeapAlloc(2048);
+  if (warm_b.is_err()) {
+    (void)mem::HeapFree(warm_a.value());
+    Panic("user: heap warm b failed");
+  }
+  (void)mem::HeapFree(warm_a.value());
+  (void)mem::HeapFree(warm_b.value());
 
   const uint64_t frames_before = mem::PmmFreeFrames();
   const Result<uint32_t> first =

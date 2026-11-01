@@ -17,9 +17,80 @@ sched::WaitQueue g_waiters;
 uint32_t g_next_pid = 1;
 bool g_ready = false;
 
+struct UserStack {
+  uint64_t stack_pointer;
+  uint64_t argv;
+  uint64_t envp;
+  uint32_t argc;
+};
+
+[[nodiscard]] Status BuildUserStack(const mem::AddressSpace& space, const char* path,
+                                    const char* const* argv, uint32_t argc,
+                                    UserStack& out) noexcept {
+  if (argc > kMaxArgs) {
+    return Status::kInvalidArg;
+  }
+
+  const char* values[kMaxArgs];
+  uint32_t count = argc;
+  if (count == 0U) {
+    values[0] = path;
+    count = 1;
+  } else {
+    if (argv == nullptr) {
+      return Status::kInvalidArg;
+    }
+    for (uint32_t index = 0; index < count; ++index) {
+      if (argv[index] == nullptr) {
+        return Status::kInvalidArg;
+      }
+      values[index] = argv[index];
+    }
+  }
+
+  uint64_t cursor = kUserStackVa + kUserStackSize;
+  uint64_t pointers[kMaxArgs + 1U]{};
+  for (uint32_t index = 0; index < count; ++index) {
+    const uint64_t length = mem::Length(values[index]);
+    if (length > kMaxArgLength || (length + 1U) >= (cursor - kUserStackVa)) {
+      return Status::kInvalidArg;
+    }
+    cursor -= (length + 1U);
+    const Status copied = mem::VmmCopyOut(space, cursor, values[index], length + 1U);
+    if (IsErr(copied)) {
+      return copied;
+    }
+    pointers[index] = cursor;
+  }
+
+  cursor &= ~7ULL;
+  const uint64_t zero = 0;
+  cursor -= sizeof(zero);
+  Status status = mem::VmmCopyOut(space, cursor, &zero, sizeof(zero));
+  if (IsErr(status)) {
+    return status;
+  }
+  out.envp = cursor;
+
+  cursor -= (static_cast<uint64_t>(count) + 1U) * sizeof(uint64_t);
+  status = mem::VmmCopyOut(space, cursor, pointers,
+                           (static_cast<uint64_t>(count) + 1U) * sizeof(uint64_t));
+  if (IsErr(status)) {
+    return status;
+  }
+  out.argv = cursor;
+  out.stack_pointer = cursor & ~15ULL;
+  out.argc = count;
+  if (out.stack_pointer < (kUserStackVa + 512U)) {
+    return Status::kNoMem;
+  }
+  return Status::kOk;
+}
+
 void ProcessThreadEntry(void* argument) noexcept {
   auto* process = static_cast<Process*>(argument);
-  arch::aarch64::EnterUserMode(process->entry, process->stack_top);
+  arch::aarch64::EnterUserMode(process->entry, process->stack_top, process->argc,
+                               process->argv, process->envp);
 }
 
 [[nodiscard]] uint32_t NextPidLocked() noexcept {
@@ -123,10 +194,15 @@ Status Init() noexcept {
 }
 
 Result<uint32_t> Spawn(const char* path, uint32_t parent_pid) noexcept {
+  return SpawnWithArgs(path, parent_pid, nullptr, 0);
+}
+
+Result<uint32_t> SpawnWithArgs(const char* path, uint32_t parent_pid,
+                               const char* const* argv, uint32_t argc) noexcept {
   if (!g_ready) {
     return Result<uint32_t>::Err(Status::kNotInit);
   }
-  if (path == nullptr) {
+  if (path == nullptr || argc > kMaxArgs) {
     return Result<uint32_t>::Err(Status::kInvalidArg);
   }
 
@@ -175,6 +251,10 @@ Result<uint32_t> Spawn(const char* path, uint32_t parent_pid) noexcept {
   if (IsOk(status)) {
     status = mem::VmmMapUser(space, kUserStackVa, kUserStackSize, false);
   }
+  UserStack user_stack{};
+  if (IsOk(status)) {
+    status = BuildUserStack(space, path, argv, argc, user_stack);
+  }
   (void)mem::HeapFree(buffer.value());
   if (IsErr(status)) {
     (void)mem::AddressSpaceDestroy(space);
@@ -203,7 +283,10 @@ Result<uint32_t> Spawn(const char* path, uint32_t parent_pid) noexcept {
   slot->used = 1;
   slot->space = space;
   slot->entry = kUserCodeVa;
-  slot->stack_top = kUserStackVa + kUserStackSize;
+  slot->stack_top = user_stack.stack_pointer;
+  slot->argv = user_stack.argv;
+  slot->envp = user_stack.envp;
+  slot->argc = user_stack.argc;
   (void)fs::FileTableInit(slot->files);
   const std::size_t name_length = mem::Length(path);
   const std::size_t name_copy =

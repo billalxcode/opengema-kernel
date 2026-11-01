@@ -22,6 +22,8 @@ constexpr uint64_t kUserCodeVa = mem::kUserSpaceBase;
 constexpr uint64_t kUserStackVa = mem::kUserSpaceBase + 0x100000ULL;
 constexpr uint64_t kUserStackSize = 16384;
 constexpr uint64_t kMaxProgramSize = 65536;
+constexpr uint32_t kMaxArgs = 8;
+constexpr uint64_t kMaxArgLength = 64;
 
 enum class ProcessState : uint32_t {
   kReady = 0,
@@ -40,13 +42,21 @@ struct Process {
   sched::Thread* thread;
   uint64_t entry;
   uint64_t stack_top;
+  uint64_t argv;
+  uint64_t envp;
+  uint32_t argc;
   char name[32];
 };
 
 [[nodiscard]] Status Init() noexcept;
 
 // Loads a flat binary from path and starts it in a new address space.
+// With no argv, argv[0] is set to path.
 [[nodiscard]] Result<uint32_t> Spawn(const char* path, uint32_t parent_pid) noexcept;
+
+[[nodiscard]] Result<uint32_t> SpawnWithArgs(const char* path, uint32_t parent_pid,
+                                             const char* const* argv,
+                                             uint32_t argc) noexcept;
 
 // Waits for any process with this pid and reaps it.
 [[nodiscard]] Result<uint32_t> WaitFor(uint32_t pid, int32_t& status) noexcept;

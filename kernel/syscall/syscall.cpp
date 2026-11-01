@@ -272,18 +272,48 @@ struct UserStat {
   return Status::kOk;
 }
 
-[[nodiscard]] Status DoSpawn(uint64_t user_path, uint64_t& result) noexcept {
+[[nodiscard]] Status DoSpawn(uint64_t user_path, uint64_t user_argv,
+                            uint64_t argc, uint64_t& result) noexcept {
   process::Process* process = CurrentProcess();
   if (process == nullptr) {
     return Status::kNotInit;
   }
   char path[fs::kMaxPath];
-  const Status status =
-    CopyUserString(process->space, user_path, path, sizeof(path));
+  Status status = CopyUserString(process->space, user_path, path, sizeof(path));
   if (IsErr(status)) {
     return status;
   }
-  const Result<uint32_t> child = process::Spawn(path, process->pid);
+  if (argc == 0U) {
+    const Result<uint32_t> child = process::Spawn(path, process->pid);
+    if (child.is_err()) {
+      return child.status();
+    }
+    result = child.value();
+    return Status::kOk;
+  }
+  if (argc > process::kMaxArgs || user_argv == 0U) {
+    return Status::kInvalidArg;
+  }
+
+  char storage[process::kMaxArgs][process::kMaxArgLength];
+  const char* values[process::kMaxArgs];
+  for (uint32_t index = 0; index < argc; ++index) {
+    uint64_t user_string = 0;
+    status = mem::VmmCopyIn(process->space, user_argv + (index * sizeof(uint64_t)),
+                            &user_string, sizeof(user_string));
+    if (IsErr(status)) {
+      return status;
+    }
+    status = CopyUserString(process->space, user_string, storage[index],
+                            process::kMaxArgLength);
+    if (IsErr(status)) {
+      return status;
+    }
+    values[index] = storage[index];
+  }
+
+  const Result<uint32_t> child =
+    process::SpawnWithArgs(path, process->pid, values, static_cast<uint32_t>(argc));
   if (child.is_err()) {
     return child.status();
   }
@@ -344,7 +374,7 @@ struct UserStat {
       status = DoWait(frame->x[0], frame->x[1], result);
       break;
     case kSysSpawn:
-      status = DoSpawn(frame->x[0], result);
+      status = DoSpawn(frame->x[0], frame->x[1], frame->x[2], result);
       break;
     default:
       status = Status::kInvalidArg;

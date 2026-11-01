@@ -14,11 +14,12 @@ u64 getpid() noexcept {
   return static_cast<u64>(syscall::invoke3(syscall::kGetPid, 0, 0, 0));
 }
 
-i64 spawn(const char* path) noexcept {
+i64 spawn(const char* path, const char* const* argv, usize argc) noexcept {
   if (path == nullptr) {
     return -1;
   }
-  return syscall::invoke3(syscall::kSpawn, reinterpret_cast<i64>(path), 0, 0);
+  return syscall::invoke3(syscall::kSpawn, reinterpret_cast<i64>(path),
+                          reinterpret_cast<i64>(argv), static_cast<i64>(argc));
 }
 
 i64 wait(i64 pid, int* status) noexcept {

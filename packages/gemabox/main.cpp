@@ -14,10 +14,27 @@ constexpr char kHello[] = "hello from el0\n";
 constexpr char kFileOk[] = "file ok\n";
 constexpr char kMmapMessage[] = "mmap ok\n";
 constexpr char kMmapFailed[] = "mmap failed\n";
+constexpr char kChildOk[] = "child ok\n";
+constexpr char kSpawnOk[] = "spawn ok\n";
+
+bool same(const char* lhs, const char* rhs) {
+  if (lhs == nullptr || rhs == nullptr) {
+    return false;
+  }
+  while (*lhs != '\0' && *lhs == *rhs) {
+    ++lhs;
+    ++rhs;
+  }
+  return *lhs == *rhs;
+}
 
 }  // namespace
 
-int main() {
+int main(int argc, char** argv, char** /*envp*/) {
+  if (argc > 1 && same(argv[1], "child")) {
+    kgema::write(kChildOk);
+    return 0;
+  }
   if (kgema::getpid() == 0U) {
     return 1;
   }
@@ -58,5 +75,16 @@ int main() {
   if (!kgema::munmap(mapping, kPageSize)) {
     return 1;
   }
+
+  const char* child_argv[] = {"gemabox", "child"};
+  const kgema::i64 child = kgema::spawn("/ram/gemabox", child_argv, 2);
+  if (child <= 0) {
+    return 1;
+  }
+  int child_status = 0;
+  if (kgema::wait(child, &child_status) != child || child_status != 0) {
+    return 1;
+  }
+  kgema::write(kSpawnOk);
   return 0;
 }
