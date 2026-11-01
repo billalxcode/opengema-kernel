@@ -23,6 +23,26 @@ Mau lihat jendela QEMU:
 ./scripts/run-qemu.sh --gui=on
 ```
 
+## Test
+
+Satu perintah untuk semua:
+
+```sh
+./scripts/test.sh
+```
+
+Isinya: cek arsitektur, host unit test, build kernel, siapkan image, lalu
+smoke test QEMU. Smoke test gagal kalau penanda penting tidak muncul atau
+ada panic.
+
+Test lain:
+
+```sh
+./scripts/check-arch.sh   # aturan lapisan dan duplikasi
+./scripts/test-host.sh    # unit test libs/core
+./scripts/test-qemu.sh    # boot dan cek output
+```
+
 ## Status
 
 Sudah boot sampai kernel dengan MMU, memori, GIC, timer, virtio, FAT32,
@@ -71,6 +91,6 @@ user: exit ok
 kernel: halt
 ```
 
-Berikutnya: testing dan hardening.
+Berikutnya: hardening.
 
 Roadmap lengkap ada di `docs/ROADMAP.md`.

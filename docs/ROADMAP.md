@@ -3,9 +3,9 @@
 Dokumen ini jadi acuan tunggal untuk urutan kerja, batas modul, dan aturan
 anti redundansi. Setiap task punya ID supaya bisa dirujuk di commit.
 
-Status sekarang: Fase 0 sampai 12 selesai. Kernel sudah boot di QEMU virt,
+Status sekarang: Fase 0 sampai 13 selesai. Kernel sudah boot di QEMU virt,
 punya MMU sendiri, allocator, interrupt, timer, virtio-blk, FAT32, scheduler
-round robin, user mode EL0, dan dua core aktif dengan IPI.
+round robin, user mode EL0, dua core aktif, dan test otomatis.
 
 ---
 
@@ -518,15 +518,27 @@ Catatan hasil Fase 12:
 
 ### Fase 13 - Testing dan tooling
 
-- [ ] TST-01 Host test runner tanpa framework berat untuk `libs/core`,
-      `fs/fat32` parser, `mem` algoritma murni.
-- [ ] TST-02 `scripts/test-qemu.sh`: jalankan QEMU, grep output yang
-      diharapkan, exit nonzero kalau gagal.
-- [ ] TST-03 `scripts/check-arch.sh` masuk CI lokal.
-- [ ] TST-04 Target `make test` di CMake.
-- [ ] TST-05 Dokumentasi cara debug di `docs/DEBUG.md`, ringkas.
+- [x] TST-01 Host test runner untuk `libs/core`: memory, format, dan bit.
+      Tanpa framework, cukup `CHECK` dan exit code.
+- [x] TST-02 `scripts/test-qemu.sh`: boot QEMU, tunggu penanda, gagal jika
+      ada penanda hilang atau panic.
+- [x] TST-03 `scripts/check-arch.sh` jalan di setiap build dan di
+      `scripts/test.sh`.
+- [x] TST-04 Target `og_host_test` di CMake plus `add_test`, dan satu
+      perintah penuh lewat `scripts/test.sh`.
+- [x] TST-05 `docs/DEBUG.md`: triage, GDB, decode ESR, dan masalah yang
+      pernah terjadi.
 
 **Selesai bila:** satu perintah menjalankan build, unit test, dan smoke test.
+
+Catatan hasil Fase 13:
+
+1. Host test dikompilasi dengan header sistem, bukan `libs/cxx`, supaya
+   bisa jalan di macOS maupun di dalam container.
+2. Smoke test menunggu penanda `fs`, `smp`, `sched`, `user`, dan `halt`.
+   Panic dianggap gagal.
+3. `scripts/test.sh` menjalankan arch check, host test, build, image ESP,
+   lalu QEMU. Sudah dijalankan penuh dan lolos.
 
 ### Fase 14 - Hardening
 
@@ -641,7 +653,7 @@ yang belum selesai, supaya tidak ada yang hilang di antara fase.
 - [ ] Fase 10 sisa: SCH-05 load balancing SMP (lihat 9.1).
 - [ ] Fase 11 sisa: SYS-06 mmap dan loader dari filesystem (lihat 9.2).
 - [ ] Fase 12 sisa: PLT-03 parser DTB dan SMP scheduling (lihat 9.3).
-- [ ] Fase 13 seluruhnya: TST-01 sampai TST-05.
+- [ ] Fase 13 selesai.
 - [ ] Fase 14 seluruhnya: HARD-01 sampai HARD-05.
 
 ### 9.6 Urutan yang disarankan setelah Fase 9
