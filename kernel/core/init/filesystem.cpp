@@ -35,90 +35,111 @@ Status BlockReadAdapter(void* context, uint64_t sector,
   return static_cast<drivers::virtio::Blk*>(context)->read(sector, buffer);
 }
 
-Status SetupWritableFs() noexcept {
+struct WritableTree {
+  fs::Node* etc;
+  fs::Node* users;
+  fs::Node* var;
+  fs::Node* tmp;
+};
+
+Status CreateDirChecked(fs::Node* parent, const char* name) noexcept {
+  const Result<fs::Node*> dir = fs::ramfs::CreateDir(parent, name);
+  return dir.is_err() ? dir.status() : Status::kOk;
+}
+
+Result<WritableTree> CreateWritableTree() noexcept {
   const Result<fs::Node*> ram = fs::ramfs::Create();
   if (ram.is_err()) {
-    return ram.status();
+    return Result<WritableTree>::Err(ram.status());
   }
   const Result<fs::Node*> etc = fs::ramfs::CreateDir(ram.value(), "etc");
   if (etc.is_err()) {
-    return etc.status();
+    return Result<WritableTree>::Err(etc.status());
   }
   const Result<fs::Node*> users = fs::ramfs::CreateDir(ram.value(), "users");
   if (users.is_err()) {
-    return users.status();
+    return Result<WritableTree>::Err(users.status());
   }
   const Result<fs::Node*> var = fs::ramfs::CreateDir(ram.value(), "var");
   if (var.is_err()) {
-    return var.status();
+    return Result<WritableTree>::Err(var.status());
   }
   const Result<fs::Node*> tmp = fs::ramfs::CreateDir(ram.value(), "tmp");
   if (tmp.is_err()) {
-    return tmp.status();
+    return Result<WritableTree>::Err(tmp.status());
   }
 
-  const Result<fs::Node*> demo = fs::ramfs::CreateDir(users.value(), "demo");
-  if (demo.is_err()) {
-    return demo.status();
-  }
-  if (fs::ramfs::CreateDir(var.value(), "log").is_err() ||
-      fs::ramfs::CreateDir(var.value(), "run").is_err() ||
-      fs::ramfs::CreateDir(var.value(), "cache").is_err() ||
-      fs::ramfs::CreateDir(var.value(), "spool").is_err()) {
-    return Status::kNoMem;
+  if (IsErr(CreateDirChecked(users.value(), "demo")) ||
+      IsErr(CreateDirChecked(var.value(), "log")) ||
+      IsErr(CreateDirChecked(var.value(), "run")) ||
+      IsErr(CreateDirChecked(var.value(), "cache")) ||
+      IsErr(CreateDirChecked(var.value(), "spool"))) {
+    return Result<WritableTree>::Err(Status::kNoMem);
   }
   if (fs::ramfs::CreateFile(tmp.value(), "hello", nullptr, 0).is_err() ||
       fs::ramfs::CreateFile(tmp.value(), "writer", nullptr, 0).is_err()) {
-    return Status::kNoMem;
+    return Result<WritableTree>::Err(Status::kNoMem);
   }
 
-  Status status = fs::FsMount(gsl::layout::kEtc, etc.value());
-  if (IsErr(status)) {
-    return status;
-  }
-  status = fs::FsMount(gsl::layout::kUsers, users.value());
-  if (IsErr(status)) {
-    return status;
-  }
-  status = fs::FsMount(gsl::layout::kVar, var.value());
-  if (IsErr(status)) {
-    return status;
-  }
-  status = fs::FsMount(gsl::layout::kTmp, tmp.value());
-  if (IsErr(status)) {
-    return status;
-  }
+  WritableTree tree{};
+  tree.etc = etc.value();
+  tree.users = users.value();
+  tree.var = var.value();
+  tree.tmp = tmp.value();
+  return Result<WritableTree>::Ok(tree);
+}
 
+Status MountWritableTree(const WritableTree& tree) noexcept {
+  Status status = fs::FsMount(gsl::layout::kEtc, tree.etc);
+  if (IsErr(status)) {
+    return status;
+  }
+  status = fs::FsMount(gsl::layout::kUsers, tree.users);
+  if (IsErr(status)) {
+    return status;
+  }
+  status = fs::FsMount(gsl::layout::kVar, tree.var);
+  if (IsErr(status)) {
+    return status;
+  }
+  return fs::FsMount(gsl::layout::kTmp, tree.tmp);
+}
+
+Status SeedEtcConfig(fs::Node* etc) noexcept {
   const Result<uint32_t> source =
     fs::FsOpen(g_boot_files, gsl::layout::kConfigGsl);
-  if (source.is_ok()) {
-    char content[256];
-    uint64_t read = 0;
-    status = fs::FsRead(
-      g_boot_files, source.value(),
-      std::span<uint8_t>(reinterpret_cast<uint8_t*>(content), sizeof(content)),
-      read);
-    (void)fs::FsClose(g_boot_files, source.value());
-    if (IsErr(status)) {
-      return status;
-    }
-    const Result<fs::Node*> copy =
-      fs::ramfs::CreateFile(etc.value(), "gsl.conf", content, read);
-    if (copy.is_err()) {
-      return copy.status();
-    }
-    Log(LogLevel::kInfo, "fs: etc defaults copied\n");
-  } else {
+  if (source.is_err()) {
     Log(LogLevel::kWarn, "fs: gsl.conf default missing\n");
+    return Status::kOk;
   }
 
+  char content[256];
+  uint64_t read = 0;
+  Status status = fs::FsRead(
+    g_boot_files, source.value(),
+    std::span<uint8_t>(reinterpret_cast<uint8_t*>(content), sizeof(content)),
+    read);
+  (void)fs::FsClose(g_boot_files, source.value());
+  if (IsErr(status)) {
+    return status;
+  }
+  const Result<fs::Node*> copy =
+    fs::ramfs::CreateFile(etc, "gsl.conf", content, read);
+  if (copy.is_err()) {
+    return copy.status();
+  }
+  Log(LogLevel::kInfo, "fs: etc defaults copied\n");
+  return Status::kOk;
+}
+
+Status VerifyTmpWrite() noexcept {
   const Result<uint32_t> hello_file = fs::FsOpen(g_boot_files, kHelloPath, 1U);
   if (hello_file.is_err()) {
     return hello_file.status();
   }
   constexpr char kHello[] = "ramfs write ok\n";
   uint64_t written = 0;
-  status = fs::FsWrite(
+  Status status = fs::FsWrite(
     g_boot_files, hello_file.value(),
     std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(kHello),
                              sizeof(kHello) - 1U),
@@ -143,6 +164,26 @@ Status SetupWritableFs() noexcept {
     return Status::kIoError;
   }
   Log(LogLevel::kInfo, "fs: tmpfs write ok\n");
+  return Status::kOk;
+}
+
+Status SetupWritableFs() noexcept {
+  const Result<WritableTree> tree = CreateWritableTree();
+  if (tree.is_err()) {
+    return tree.status();
+  }
+  Status status = MountWritableTree(tree.value());
+  if (IsErr(status)) {
+    return status;
+  }
+  status = SeedEtcConfig(tree.value().etc);
+  if (IsErr(status)) {
+    return status;
+  }
+  status = VerifyTmpWrite();
+  if (IsErr(status)) {
+    return status;
+  }
   Log(LogLevel::kInfo, "fs: writable mounts ok\n");
   return Status::kOk;
 }

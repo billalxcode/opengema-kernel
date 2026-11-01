@@ -18,3 +18,6 @@ CXX="${CXX:-clang++}"
   -o "$BUILD_DIR/host_tests"
 
 "$BUILD_DIR/host_tests"
+
+echo "== gslfs image test =="
+"$ROOT/scripts/test-gslfs.sh"

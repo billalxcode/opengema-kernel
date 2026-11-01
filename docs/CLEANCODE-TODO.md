@@ -84,13 +84,16 @@ Commit: `refactor(core): share endian and linker text helpers`.
 
 Tujuan: fungsi kecil, satu tanggung jawab.
 
-- [ ] Pecah `gslfs::Mount` menjadi `ReadSuperblock`, `LoadNodes`,
-  `ValidateTree`, dan `VerifyData`.
-- [ ] Pecah `SetupWritableFs` menjadi `CreateWritableTree`,
+- [x] Pecah `gslfs::Mount` menjadi `ReadSuperblock`, `LoadNodes`,
+  `ValidateTree`, dan `VerifyNodeData`.
+- [x] Pecah `SetupWritableFs` menjadi `CreateWritableTree`,
   `MountWritableTree`, `SeedEtcConfig`, dan `VerifyTmpWrite`.
 - [ ] Pisahkan FD table dari path resolution di `vfs.cpp` jika aman.
-- [ ] Tambah test host GSLFS dari `mkgslimg`.
-- [ ] Compile-check grup.
+- [x] Tambah test host GSLFS dari `mkgslimg`.
+- [x] Compile-check grup.
+
+Catatan: pemisahan FD table di `vfs.cpp` ditunda karena menyentuh jalur
+syscall dan lebih aman setelah QEMU tersedia.
 
 Commit: `refactor(fs): split gslfs mount and writable setup`.
 

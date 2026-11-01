@@ -228,80 +228,96 @@ const NodeOps kDirectoryOps{&DirLookup, nullptr, nullptr, &DirIterate};
   return ~crc == expected;
 }
 
-}  // namespace
+struct Superblock {
+  uint64_t block_count;
+  uint64_t node_offset;
+  uint64_t name_offset;
+  uint64_t data_offset;
+  uint64_t name_table_size;
+  uint64_t image_bytes;
+  uint32_t node_count;
+  uint32_t root;
+};
 
-Result<Node*> Mount(const BlockDevice& device) noexcept {
-  if (g_ready) {
-    return Result<Node*>::Err(Status::kExists);
-  }
-  if (device.read == nullptr || device.sector_count == 0U) {
-    return Result<Node*>::Err(Status::kInvalidArg);
-  }
-
-  uint8_t superblock[kSuperblockSize];
+[[nodiscard]] Result<Superblock> ReadSuperblock(
+  const BlockDevice& device) noexcept {
+  uint8_t raw[kSuperblockSize];
   Status status = ReadBytes(
-    device, 0, std::span<uint8_t>(superblock, sizeof(superblock)));
+    device, 0, std::span<uint8_t>(raw, sizeof(raw)));
   if (IsErr(status)) {
-    return Result<Node*>::Err(status);
+    return Result<Superblock>::Err(status);
   }
-  if (!mem::Equal(superblock, kMagic, sizeof(kMagic))) {
-    return Result<Node*>::Err(Status::kNoDevice);
+  if (!mem::Equal(raw, kMagic, sizeof(kMagic))) {
+    return Result<Superblock>::Err(Status::kNoDevice);
   }
 
-  const uint32_t version = endian::ReadLe32(superblock + 8);
-  const uint32_t block_size = endian::ReadLe32(superblock + 12);
-  const uint64_t block_count = endian::ReadLe64(superblock + 16);
-  const uint32_t node_count = endian::ReadLe32(superblock + 24);
-  const uint32_t root = endian::ReadLe32(superblock + 28);
-  const uint64_t node_offset = endian::ReadLe64(superblock + 32);
-  const uint64_t name_offset = endian::ReadLe64(superblock + 40);
-  const uint64_t data_offset = endian::ReadLe64(superblock + 48);
-  const uint32_t checksum = endian::ReadLe32(superblock + 56);
+  const uint32_t version = endian::ReadLe32(raw + 8);
+  const uint32_t block_size = endian::ReadLe32(raw + 12);
+  const uint64_t block_count = endian::ReadLe64(raw + 16);
+  const uint32_t node_count = endian::ReadLe32(raw + 24);
+  const uint32_t root = endian::ReadLe32(raw + 28);
+  const uint64_t node_offset = endian::ReadLe64(raw + 32);
+  const uint64_t name_offset = endian::ReadLe64(raw + 40);
+  const uint64_t data_offset = endian::ReadLe64(raw + 48);
+  const uint32_t checksum = endian::ReadLe32(raw + 56);
 
   if (version != kVersion || block_size != kBlockSize) {
-    return Result<Node*>::Err(Status::kUnsupported);
+    return Result<Superblock>::Err(Status::kUnsupported);
   }
-  if (Crc32(superblock, kSuperblockCrcSize) != checksum) {
-    return Result<Node*>::Err(Status::kIoError);
+  if (Crc32(raw, kSuperblockCrcSize) != checksum) {
+    return Result<Superblock>::Err(Status::kIoError);
   }
   if (block_count == 0U ||
       block_count > ((~0ULL) / static_cast<uint64_t>(kBlockSize))) {
-    return Result<Node*>::Err(Status::kInvalidArg);
+    return Result<Superblock>::Err(Status::kInvalidArg);
   }
   const uint64_t image_bytes = block_count * kBlockSize;
   if (device.sector_count > ((~0ULL) / kSectorSize) ||
       image_bytes > (device.sector_count * kSectorSize)) {
-    return Result<Node*>::Err(Status::kInvalidArg);
+    return Result<Superblock>::Err(Status::kInvalidArg);
   }
   if (node_count == 0U || node_count > kMaxNodes || root >= node_count) {
-    return Result<Node*>::Err(Status::kInvalidArg);
+    return Result<Superblock>::Err(Status::kInvalidArg);
   }
   if (node_offset % kBlockSize != 0U ||
       node_offset > image_bytes ||
       (static_cast<uint64_t>(node_count) * kNodeSize) >
         (image_bytes - node_offset)) {
-    return Result<Node*>::Err(Status::kInvalidArg);
+    return Result<Superblock>::Err(Status::kInvalidArg);
   }
   if (name_offset >= data_offset || data_offset > image_bytes ||
       data_offset % kBlockSize != 0U) {
-    return Result<Node*>::Err(Status::kInvalidArg);
+    return Result<Superblock>::Err(Status::kInvalidArg);
   }
-  const uint64_t name_table_size = data_offset - name_offset;
 
+  Superblock super{};
+  super.block_count = block_count;
+  super.node_offset = node_offset;
+  super.name_offset = name_offset;
+  super.data_offset = data_offset;
+  super.name_table_size = data_offset - name_offset;
+  super.image_bytes = image_bytes;
+  super.node_count = node_count;
+  super.root = root;
+  return Result<Superblock>::Ok(super);
+}
+
+[[nodiscard]] Status LoadNodes(const BlockDevice& device,
+                               const Superblock& super) noexcept {
   mem::Zero(g_nodes, sizeof(g_nodes));
-  g_count = node_count;
+  g_count = super.node_count;
   g_device = device;
 
-  for (uint32_t index = 0; index < node_count; ++index) {
+  for (uint32_t index = 0; index < super.node_count; ++index) {
     uint8_t raw[kNodeSize];
-    status = ReadBytes(
-      device, node_offset + (static_cast<uint64_t>(index) * kNodeSize),
+    Status status = ReadBytes(
+      device, super.node_offset + (static_cast<uint64_t>(index) * kNodeSize),
       std::span<uint8_t>(raw, sizeof(raw)));
     if (IsErr(status)) {
-      return Result<Node*>::Err(status);
+      return status;
     }
     if (Crc32(raw, kNodeCrcSize) != endian::ReadLe32(raw + 48U)) {
-      return Result<Node*>::Err(Status::kIoError);
+      return Status::kIoError;
     }
 
     const uint32_t type = endian::ReadLe32(raw);
@@ -313,10 +329,11 @@ Result<Node*> Mount(const BlockDevice& device) noexcept {
     const uint32_t data_checksum = endian::ReadLe32(raw + 52U);
 
     if (type != kNodeTypeFile && type != kNodeTypeDirectory) {
-      return Result<Node*>::Err(Status::kInvalidArg);
+      return Status::kInvalidArg;
     }
-    if (parent >= node_count || (index == root && parent != root)) {
-      return Result<Node*>::Err(Status::kInvalidArg);
+    if (parent >= super.node_count ||
+        (index == super.root && parent != super.root)) {
+      return Status::kInvalidArg;
     }
 
     GslfsNode& node = g_nodes[index];
@@ -328,17 +345,16 @@ Result<Node*> Mount(const BlockDevice& device) noexcept {
                                            : NodeType::kDirectory;
     node.node.size = size;
 
-    if (index == root) {
+    if (index == super.root) {
       node.node.name = "/";
       if (type != kNodeTypeDirectory) {
-        return Result<Node*>::Err(Status::kInvalidArg);
+        return Status::kInvalidArg;
       }
     } else {
-      status = ReadName(device, name_offset, name_table_size, name_entry,
-                        node.name);
+      status = ReadName(device, super.name_offset, super.name_table_size,
+                        name_entry, node.name);
       if (IsErr(status) || node.name[0] == '\0') {
-        return Result<Node*>::Err(
-          IsErr(status) ? status : Status::kInvalidArg);
+        return IsErr(status) ? status : Status::kInvalidArg;
       }
       node.node.name = node.name;
     }
@@ -347,62 +363,98 @@ Result<Node*> Mount(const BlockDevice& device) noexcept {
       node.node.ops = &kFileOps;
       if (size == 0U) {
         if (blocks != 0U) {
-          return Result<Node*>::Err(Status::kInvalidArg);
+          return Status::kInvalidArg;
         }
         node.data_offset = 0;
       } else {
-        if (data_block < (data_offset / kBlockSize) ||
+        if (data_block < (super.data_offset / kBlockSize) ||
             blocks != ((size + kBlockSize - 1U) / kBlockSize) ||
-            blocks > (block_count - data_block)) {
-          return Result<Node*>::Err(Status::kInvalidArg);
+            blocks > (super.block_count - data_block)) {
+          return Status::kInvalidArg;
         }
         node.data_offset = data_block * kBlockSize;
       }
     } else {
       node.node.ops = &kDirectoryOps;
       if (size != 0U || blocks != 0U) {
-        return Result<Node*>::Err(Status::kInvalidArg);
+        return Status::kInvalidArg;
       }
       node.data_offset = 0;
     }
     node.node.fs_data = &node;
   }
+  return Status::kOk;
+}
 
-  for (uint32_t index = 0; index < node_count; ++index) {
-    if (index == root) {
+[[nodiscard]] Status ValidateTree(const Superblock& super) noexcept {
+  for (uint32_t index = 0; index < super.node_count; ++index) {
+    if (index == super.root) {
       continue;
     }
     const uint32_t parent = g_nodes[index].parent;
     if (g_nodes[parent].node.type != NodeType::kDirectory) {
-      return Result<Node*>::Err(Status::kInvalidArg);
+      return Status::kInvalidArg;
     }
     uint32_t cursor = index;
     bool reached_root = false;
-    for (uint32_t depth = 0; depth < node_count; ++depth) {
-      if (cursor == root) {
+    for (uint32_t depth = 0; depth < super.node_count; ++depth) {
+      if (cursor == super.root) {
         reached_root = true;
         break;
       }
       cursor = g_nodes[cursor].parent;
     }
     if (!reached_root) {
-      return Result<Node*>::Err(Status::kInvalidArg);
+      return Status::kInvalidArg;
     }
   }
+  return Status::kOk;
+}
 
-  for (uint32_t index = 0; index < node_count; ++index) {
+[[nodiscard]] Status VerifyNodeData(const Superblock& super) noexcept {
+  for (uint32_t index = 0; index < super.node_count; ++index) {
     if (g_nodes[index].node.type != NodeType::kFile) {
       continue;
     }
     if (!VerifyData(g_nodes[index], g_nodes[index].data_checksum)) {
-      return Result<Node*>::Err(Status::kIoError);
+      return Status::kIoError;
     }
+  }
+  return Status::kOk;
+}
+
+}  // namespace
+
+Result<Node*> Mount(const BlockDevice& device) noexcept {
+  if (g_ready) {
+    return Result<Node*>::Err(Status::kExists);
+  }
+  if (device.read == nullptr || device.sector_count == 0U) {
+    return Result<Node*>::Err(Status::kInvalidArg);
+  }
+
+  const Result<Superblock> super = ReadSuperblock(device);
+  if (super.is_err()) {
+    return Result<Node*>::Err(super.status());
+  }
+
+  Status status = LoadNodes(device, super.value());
+  if (IsErr(status)) {
+    return Result<Node*>::Err(status);
+  }
+  status = ValidateTree(super.value());
+  if (IsErr(status)) {
+    return Result<Node*>::Err(status);
+  }
+  status = VerifyNodeData(super.value());
+  if (IsErr(status)) {
+    return Result<Node*>::Err(status);
   }
 
   g_ready = true;
   LogDec(LogLevel::kInfo, "fs: gslfs nodes",
          static_cast<uint64_t>(g_count));
-  return Result<Node*>::Ok(&g_nodes[root].node);
+  return Result<Node*>::Ok(&g_nodes[super.value().root].node);
 }
 
 uint32_t NodeCount() noexcept { return g_count; }
