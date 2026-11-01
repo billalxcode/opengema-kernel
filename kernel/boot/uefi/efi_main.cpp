@@ -28,6 +28,7 @@ extern "C" EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* system_table)
     return 1;
   }
   og::io::SetConsole(og::drivers::uart::MakeConsole(uart));
+  og::io::SetLogConsole(og::io::ActiveConsole());
   og::drivers::uart::SetActive(&uart);
   og::Log(og::LogLevel::kInfo, "opengema-kernel: uefi entry\n");
 

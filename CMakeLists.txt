@@ -421,6 +421,7 @@ og_add_module(og_io
     kernel/io/mmio.cpp
     kernel/io/console.cpp
     kernel/io/print.cpp
+    kernel/io/tty.cpp
     kernel/io/font.cpp
     kernel/io/framebuffer_console.cpp
     kernel/io/framebuffer_draw.cpp
@@ -460,6 +461,7 @@ og_add_module(og_time
 og_add_module(og_drivers
   SOURCES
     kernel/drivers/device.cpp
+    kernel/drivers/input/hid.cpp
     kernel/drivers/uart/pl011.cpp
     kernel/drivers/irq/gicv3.cpp
     kernel/drivers/rtc/pl031.cpp
@@ -468,6 +470,7 @@ og_add_module(og_drivers
     kernel/drivers/virtio/virtio_queue.cpp
     kernel/drivers/virtio/virtio_blk.cpp
     kernel/drivers/virtio/virtio_gpu.cpp
+    kernel/drivers/virtio/virtio_input.cpp
   DEPS og_events og_time og_dma og_core og_inc_kernel)
 
 og_add_module(og_fs

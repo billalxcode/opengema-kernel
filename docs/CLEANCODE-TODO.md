@@ -254,21 +254,22 @@ Commit: `test(dev): add gslfs endian and list error tests`.
 | 0 Baseline | selesai | `4400e7a` |
 | 1 Shared primitives | selesai | `54ae45b` |
 | 2 Filesystem | selesai | `df4329a` |
-| 3 Process | sebagian | `df4329a` |
-| 4 VMM/scheduler | sebagian | `2f87675` |
-| 5 Driver/platform | sebagian | `e6a9bfa` |
-| 6 Userland | sebagian | `df4329a` |
-| 7 Test/dokumentasi | sebagian | `df4329a` |
+| 3 Process | selesai | `d4aa373` |
+| 4 VMM/scheduler | selesai | `0e3a253` |
+| 5 Driver/platform | selesai | `0e3a253` |
+| 6 Userland | selesai | `a3154c3` |
+| 7 Test/dokumentasi | selesai | `a3154c3` |
 
 Verifikasi yang berjalan di sesi ini:
 
 ```
 python3 scripts/compile-check.py
-compile-check: 98 files OK (1 skipped)
+compile-check: 116 files OK (1 skipped)
 host tests: all passed
 ramfs probe: OK
 procfs probe: OK
 devfs probe: OK
+hid probe: OK
 fat32 probe: OK
 gemapi fs probe: OK
 kgema probe: OK

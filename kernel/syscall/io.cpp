@@ -6,6 +6,7 @@
 #include "og/drivers/uart.h"
 #include "og/fs/vfs.h"
 #include "og/io/print.h"
+#include "og/io/tty.h"
 #include "og/mem/vmm.h"
 #include "og/sched/sched.h"
 
@@ -21,15 +22,17 @@ Status TtyReadLine(const mem::AddressSpace& space, uint64_t user_buffer,
   uint64_t count = 0;
 
   for (;;) {
-    drivers::uart::Pl011* uart = drivers::uart::Active();
-    if (uart == nullptr) {
-      return Status::kNotInit;
-    }
     char value = '\0';
-    const uint32_t received = uart->read(std::span<char>(&value, 1));
-    if (received == 0U) {
-      (void)sched::ThreadSleep(1);
-      continue;
+    if (!io::tty::PopChar(value)) {
+      drivers::uart::Pl011* uart = drivers::uart::Active();
+      if (uart == nullptr) {
+        return Status::kNotInit;
+      }
+      const uint32_t received = uart->read(std::span<char>(&value, 1));
+      if (received == 0U) {
+        (void)sched::ThreadSleep(1);
+        continue;
+      }
     }
     if (value == '\r' || value == '\n') {
       (void)PrintText("\n");

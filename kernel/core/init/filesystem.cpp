@@ -258,8 +258,8 @@ Status MountProcfs() noexcept {
     return read_status;
   }
   text[read] = '\0';
-  (void)PrintText("proc: uptime ");
-  (void)PrintText(text);
+  Log(LogLevel::kInfo, "proc: uptime ");
+  Log(LogLevel::kInfo, text);
   return Status::kOk;
 }
 

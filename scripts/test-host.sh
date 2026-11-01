@@ -42,6 +42,12 @@ CXX="${CXX:-clang++}"
 "$BUILD_DIR/devfs_probe"
 
 "$CXX" -std=c++20 -O1 -Wall -Wextra -Werror \
+  -I kernel/include \
+  tests/host/hid_probe.cpp kernel/drivers/input/hid.cpp \
+  -o "$BUILD_DIR/hid_probe"
+"$BUILD_DIR/hid_probe"
+
+"$CXX" -std=c++20 -O1 -Wall -Wextra -Werror \
   -I libs/core -I kernel/include \
   tests/host/fat32_probe.cpp kernel/fs/fat32.cpp libs/core/memory.cpp \
   -o "$BUILD_DIR/fat32_probe"

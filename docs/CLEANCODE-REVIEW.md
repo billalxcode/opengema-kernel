@@ -209,6 +209,10 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 - `VmmMapDevice` diperbaiki formatting-nya.
 - `Queue` virtio dipisah ke `kernel/drivers/virtio/virtio_queue.cpp`;
   layout descriptor ada di `og/drivers/virtio_internal.h`.
+- HID decoder generik ditambahkan untuk keyboard dan mouse; virtio-input
+  menginisialisasi event queue dan menerjemahkan event evdev ke event HID.
+- Input keyboard masuk ke queue TTY `og/io/tty.h`; `TtyReadLine` membaca
+  queue keyboard dan UART. QEMU test mengetik `hello` dari keyboard.
 - `FramebufferConsole` dipisah menjadi `framebuffer_console.cpp` (console),
   `framebuffer_draw.cpp` (drawing), dan `font.cpp` (font 8x8).
 - `VmmCopyIn`, `VmmCopyOut`, dan `VmmUserContains` dipindah ke
@@ -225,18 +229,18 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 - Thread creation dipindah ke `kernel/sched/thread.cpp`; alokasi slot dan
   ID tetap di `scheduler.cpp` lewat helper internal.
 - Test host baru: endian reader, image GSLFS valid/rusak/siklus/deterministik,
-  driver GSLFS, ramfs, procfs, devfs, FAT32, gemapi fs, gemapi api, kgema,
-  GPT/partition, VFS, VFS FD, ELF parser, dan FDT parser.
+  driver GSLFS, ramfs, procfs, devfs, HID, FAT32, gemapi fs, gemapi api,
+  kgema, GPT/partition, VFS, VFS FD, ELF parser, dan FDT parser.
 - Test QEMU baru: `ls /missing` menghasilkan `ls: list failed`, dan
   perintah `.` yang menunjuk directory menghasilkan `run: spawn failed`.
 
 Verifikasi branch `dev`:
 
-- `python3 scripts/compile-check.py`: 113 file OK, 1 entri lama dilewati.
+- `python3 scripts/compile-check.py`: 116 file OK, 1 entri lama dilewati.
 - `./scripts/build.sh` lewat podman: kernel build dan link OK,
   `arch-check` dan `gsl-check` OK.
-- `./scripts/test-host.sh`: host tests, ramfs, procfs, devfs, FAT32, gemapi
-  fs, gemapi api, kgema, GPT, FDT, VFS, ELF, dan GSLFS probe OK.
+- `./scripts/test-host.sh`: host tests, ramfs, procfs, devfs, HID, FAT32,
+  gemapi fs, gemapi api, kgema, GPT, FDT, VFS, ELF, dan GSLFS probe OK.
 - `./scripts/test-qemu.sh` lewat container arm64: OK.
 - `test.sh` penuh belum dijalankan sebagai satu perintah.
 

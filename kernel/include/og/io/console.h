@@ -38,6 +38,11 @@ class Console {
 void SetConsole(Console console) noexcept;
 [[nodiscard]] Console ActiveConsole() noexcept;
 
+// Dedicated kernel log sink. Usually the serial console, so the graphical
+// display only shows application output and TTY echo.
+void SetLogConsole(Console console) noexcept;
+[[nodiscard]] Console LogConsole() noexcept;
+
 // Instance based helpers.
 [[nodiscard]] Status ConsoleWrite(Console console, std::span<const uint8_t> bytes) noexcept;
 [[nodiscard]] Status ConsoleWriteText(Console console, const char* text) noexcept;

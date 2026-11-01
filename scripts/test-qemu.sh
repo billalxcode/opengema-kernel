@@ -45,6 +45,7 @@ qemu-system-aarch64 \
   -drive if=pflash,format=raw,file="$VARS_TMP" \
   -drive file="$ESP",format=raw,if=virtio \
   -device virtio-gpu-pci \
+  -device virtio-keyboard-pci \
   -serial "unix:$SOCKET,server=on,wait=off" \
   -display none \
   -monitor "unix:$MONITOR,server=on,wait=off" \
@@ -52,7 +53,10 @@ qemu-system-aarch64 \
 QEMU_PID=$!
 
 CLIENT_STATUS=0
+python3 "$ROOT/scripts/hmp_key.py" "$MONITOR" 15 "hello" >/dev/null 2>&1 &
+KEY_PID=$!
 python3 "$ROOT/scripts/uart_test_client.py" "$SOCKET" "$LOG" 120 || CLIENT_STATUS=$?
+wait "$KEY_PID" 2>/dev/null || true
 
 # Give the last framebuffer flush time to land, then capture the scanout.
 sleep 1
@@ -77,6 +81,7 @@ check() {
 
 check "fs: fat32 file read ok"
 check "virtio-gpu: scanout ok"
+check "virtio-input: ready"
 check "hardening: wx attributes ok"
 check "smp: cpus online: 2"
 check "smp: ipi count: 1"

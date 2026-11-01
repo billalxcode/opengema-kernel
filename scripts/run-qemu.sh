@@ -57,14 +57,16 @@ else
   DISK_ARGS="-drive file=fat:rw:$ESP,format=raw,media=disk"
 fi
 
-# The GPU is always attached so headless runs exercise the framebuffer
-# driver too. Only the window and input devices depend on GUI.
+# The input driver currently binds one virtio-input device. Attach the
+# keyboard so the console path is ready; mouse support will join when the
+# driver handles multiple input devices.
+INPUT_ARGS="-device virtio-keyboard-pci"
 if [ "$GUI" -eq 1 ]; then
-  DISPLAY_ARGS="-display cocoa -device virtio-keyboard-pci -device virtio-mouse-pci"
+  DISPLAY_ARGS="-display cocoa"
 else
   DISPLAY_ARGS="-display none"
 fi
-DISPLAY_ARGS="$DISPLAY_ARGS -device virtio-gpu-pci"
+DISPLAY_ARGS="$DISPLAY_ARGS -device virtio-gpu-pci $INPUT_ARGS"
 
 # Copy VARS to a writable temp file so boot does not dirty the repo file.
 VARS_TMP="$(mktemp /tmp/AAVMF_VARS.XXXXXX)"

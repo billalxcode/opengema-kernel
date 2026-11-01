@@ -8,8 +8,11 @@
 #include "og/drivers/rtc.h"
 #include "og/drivers/virtio_blk.h"
 #include "og/drivers/virtio_gpu.h"
+#include "og/drivers/virtio_input.h"
 #include "og/io/console.h"
+#include "og/io/tty.h"
 #include "og/platform/platform.h"
+#include "og/time/timer.h"
 
 namespace og::boot {
 
@@ -19,8 +22,41 @@ constexpr uint64_t kSectorSize = 512;
 
 drivers::virtio::Blk g_block_device;
 drivers::virtio::Gpu g_gpu;
+drivers::virtio::Input g_input;
 drivers::rtc::Pl031 g_rtc;
 io::Tee g_console_tee;
+
+void InputEvent(void* /*context*/,
+                const drivers::hid::Event& event) noexcept {
+  static bool shift = false;
+  static bool caps = false;
+  if (event.type == drivers::hid::EventType::kKey) {
+    if (event.code == 0xE1U || event.code == 0xE5U) {
+      shift = event.value != 0;
+    } else if (event.code == 0x39U) {
+      if (event.value != 0) {
+        caps = !caps;
+      }
+    } else if (event.value != 0) {
+      const char value =
+        drivers::hid::AsciiForKey(event.code, shift, caps);
+      if (value != 0) {
+        io::tty::PushChar(value);
+      }
+    }
+  }
+}
+
+void PollInput(void* /*context*/) noexcept {
+  const Status status = g_input.poll();
+  static bool logged_error = false;
+  if (IsErr(status) && !logged_error) {
+    LogHex(LogLevel::kError, "virtio-input: poll status",
+           static_cast<uint64_t>(status));
+    logged_error = true;
+  }
+  (void)time::ScheduleAfter(10, &PollInput, nullptr);
+}
 
 void InitRtc() noexcept {
   const platform::Platform& board = platform::Current();
@@ -148,11 +184,59 @@ void InitGpu() noexcept {
   Log(LogLevel::kInfo, "virtio-gpu: scanout ok\n");
 }
 
+void InitInput() noexcept {
+  if (!drivers::pci::PciReady()) {
+    Log(LogLevel::kWarn, "virtio-input: pci not ready\n");
+    return;
+  }
+
+  const Result<drivers::pci::Info> info =
+    drivers::pci::FindFirst(&drivers::virtio::IsVirtioInput);
+  if (info.is_err()) {
+    Log(LogLevel::kWarn, "virtio-input: no device on pci\n");
+    return;
+  }
+  LogDec(LogLevel::kInfo, "pci: virtio-input device id",
+         info.value().device_id);
+
+  Status status = drivers::pci::EnableDevice(info.value().address);
+  if (IsErr(status)) {
+    Log(LogLevel::kError, "virtio-input: pci enable failed\n");
+    return;
+  }
+
+  status = g_input.init(info.value(), &InputEvent, nullptr);
+  if (IsErr(status)) {
+    LogHex(LogLevel::kError, "virtio-input: init status",
+           static_cast<uint64_t>(status));
+    return;
+  }
+
+  drivers::Device device{};
+  device.name = "virtio-input0";
+  device.device_class = drivers::DeviceClass::kInput;
+  device.driver_data = &g_input;
+  status = drivers::RegisterDevice(device);
+  if (IsErr(status)) {
+    Log(LogLevel::kError, "virtio-input: register failed\n");
+    return;
+  }
+
+  const Result<time::Timeout*> poll =
+    time::ScheduleAfter(10, &PollInput, nullptr);
+  if (poll.is_err()) {
+    Log(LogLevel::kWarn, "virtio-input: poll timer failed\n");
+    return;
+  }
+  Log(LogLevel::kInfo, "virtio-input: ready\n");
+}
+
 }  // namespace
 
 void InitDevices() noexcept {
   InitBlockDevice();
   InitGpu();
+  InitInput();
   InitRtc();
 }
 

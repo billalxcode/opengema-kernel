@@ -57,7 +57,7 @@ def main(argv):
             log.flush()
             buffer.extend(chunk)
 
-            if not help_sent and b"gemabox> " in buffer:
+            if not help_sent and b"hello from applications" in buffer:
                 client.sendall(b"help\n")
                 help_sent = True
 

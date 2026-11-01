@@ -148,8 +148,13 @@ reboot.
 - [ ] NET-01 Ethernet, ARP, IPv4, ICMP echo.
 - [ ] NET-02 UDP dan socket API minimal.
 - [ ] NET-03 QEMU user networking dan uji echo.
-- [ ] DRV-13 virtio input keyboard dan mouse, event queue.
-- [ ] DRV-14 TTY input dari keyboard, bukan hanya UART.
+- [x] DRV-13a Generic HID boot keyboard/mouse decoder dan host test.
+- [x] DRV-13b Virtio-input transport, event queue, dan translasi evdev.
+- [x] DRV-13c Verifikasi injeksi key QEMU lewat monitor headless.
+- [x] DRV-13 virtio input keyboard dan event queue.
+- [ ] DRV-13d Mouse sebagai device input kedua dan hotplug.
+- [x] DRV-14 TTY input dari keyboard, bukan hanya UART.
+- [x] LOG-01 Log kernel hanya ke serial; display untuk output user dan TTY.
 - [ ] TIME-06 RTC settime, zona waktu, dan waktu dinding.
 - [ ] OPS-01 shutdown/reboot lewat PSCI SYSTEM_OFF dan SYSTEM_RESET.
 
