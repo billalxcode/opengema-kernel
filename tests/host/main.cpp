@@ -273,7 +273,26 @@ og::Status DevLookup(og::fs::Node* /*directory*/, const char* name,
   return og::Status::kNotFound;
 }
 
-const og::fs::NodeOps kRootOps{&RootLookup, nullptr, nullptr, nullptr};
+og::Status RootIterate(og::fs::Node* /*directory*/, uint32_t index,
+                       og::fs::DirEntry& entry, bool& found) noexcept {
+  found = false;
+  if (index > 1U) {
+    return og::Status::kOk;
+  }
+  og::mem::Zero(&entry, sizeof(entry));
+  if (index == 0U) {
+    og::mem::Copy(entry.name, "dev", 4);
+    entry.type = og::fs::NodeType::kDirectory;
+  } else {
+    og::mem::Copy(entry.name, "file", 5);
+    entry.type = og::fs::NodeType::kFile;
+    entry.size = 16;
+  }
+  found = true;
+  return og::Status::kOk;
+}
+
+const og::fs::NodeOps kRootOps{&RootLookup, nullptr, nullptr, &RootIterate};
 const og::fs::NodeOps kDevOps{&DevLookup, nullptr, nullptr, nullptr};
 
 // Exactly 16 payload bytes: the virtual file has no terminating NUL.
@@ -361,6 +380,30 @@ void TestVfs() {
   const auto stat = og::fs::FsStat("/dev/console");
   CHECK(stat.is_ok());
   CHECK(stat.value().type == og::fs::NodeType::kDevice);
+
+  CHECK(og::fs::FsResolve(nullptr).status() == og::Status::kInvalidArg);
+  CHECK(og::fs::FsStat("/missing").status() == og::Status::kNotFound);
+  CHECK(og::fs::FsMount("/bad", &g_file_node) == og::Status::kInvalidArg);
+
+  og::fs::DirEntry entry{};
+  bool found = false;
+  CHECK(og::IsOk(og::fs::FsList("/", 0, entry, found)));
+  CHECK(found);
+  CHECK(og::mem::Same(entry.name, "dev"));
+  CHECK(entry.type == og::fs::NodeType::kDirectory);
+  CHECK(og::IsOk(og::fs::FsList("/", 1, entry, found)));
+  CHECK(found);
+  CHECK(og::mem::Same(entry.name, "file"));
+  CHECK(entry.type == og::fs::NodeType::kFile);
+  CHECK(entry.size == 16U);
+  CHECK(og::IsOk(og::fs::FsList("/", 2, entry, found)));
+  CHECK(!found);
+  CHECK(og::fs::FsList("/file", 0, entry, found) ==
+        og::Status::kInvalidArg);
+  CHECK(og::fs::FsList("/dev", 0, entry, found) ==
+        og::Status::kUnsupported);
+  CHECK(og::fs::FsList("/missing", 0, entry, found) ==
+        og::Status::kNotFound);
 
   og::mem::Copy(g_file_data, "abcdefghijklmnop", sizeof(g_file_data));
   g_file_node.size = sizeof(g_file_data);

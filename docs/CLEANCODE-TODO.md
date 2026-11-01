@@ -175,6 +175,8 @@ Commit: `refactor(core): share endian and linker text helpers`.
 - [x] Tambah test host VFS (`FsMount`, `FsResolve`, `FsStat`, path `..`).
 - [x] Tambah test host VFS FD (`FsOpen`, `FsRead`, `FsWrite`, `FsSeek`,
   `FsClose`, descriptor reuse).
+- [x] Tambah test host `FsList` dan error path (`nullptr`, mount
+  non-directory, directory tanpa iterate).
 - [x] Tambah test host procfs (`uptime`, `threads`, offset, iterate).
 - [x] Tambah test host ELF parser valid dan invalid.
 - [x] Tambah test negative `ls /missing` di test QEMU (menunggu QEMU).
