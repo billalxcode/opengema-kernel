@@ -37,9 +37,11 @@ struct BootInfo {
   uint64_t size;
   uint64_t memory_count;
   uint64_t uart_base;
+  uint64_t ram_base;
+  uint64_t ram_size;
   MemoryRange memory[kMaxMemoryRanges];
 };
 
-static_assert(sizeof(BootInfo) == 1568, "BootInfo layout changed");
+static_assert(sizeof(BootInfo) == 1584, "BootInfo layout changed");
 
 }  // namespace og

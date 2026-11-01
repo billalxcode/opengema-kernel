@@ -1,6 +1,7 @@
 #include "efi_boot.h"
 
 #include "og/bootinfo.h"
+#include "og/memory_map.h"
 
 namespace {
 
@@ -71,6 +72,7 @@ Result<MemoryMapSnapshot> CaptureMemoryMap(
   }
 
   uint64_t count = 0;
+  uint64_t ram_end = og::memmap::kRamBase;
   for (std::size_t offset = 0; offset + descriptor_size <= map_size; offset += descriptor_size) {
     if (count >= kMaxMemoryRanges) {
       break;
@@ -83,12 +85,24 @@ Result<MemoryMapSnapshot> CaptureMemoryMap(
     range.type = MapMemoryType(descriptor->type);
     range.reserved = 0;
     ++count;
+
+    // Device space below RAM stays device. RAM span drives the identity map.
+    if (range.type != og::MemoryType::kMmio) {
+      if (range.base >= og::memmap::kRamBase) {
+        const uint64_t end = range.base + range.size;
+        if (end > ram_end) {
+          ram_end = end;
+        }
+      }
+    }
   }
 
   out->magic = kBootInfoMagic;
   out->version = kBootInfoVersion;
   out->size = sizeof(BootInfo);
   out->memory_count = count;
+  out->ram_base = og::memmap::kRamBase;
+  out->ram_size = ram_end > og::memmap::kRamBase ? (ram_end - og::memmap::kRamBase) : 0;
 
   MemoryMapSnapshot snapshot{};
   snapshot.map_key = map_key;
