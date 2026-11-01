@@ -704,7 +704,8 @@ Status AddressSpaceInit(AddressSpace& space) noexcept {
   if (space.root != 0) {
     return Status::kExists;
   }
-  if (g_next_asid > 255U) {
+  const uint32_t asid = __atomic_fetch_add(&g_next_asid, 1U, __ATOMIC_RELAXED);
+  if (asid == 0U || asid > 255U) {
     return Status::kNoMem;
   }
 
@@ -720,9 +721,8 @@ Status AddressSpaceInit(AddressSpace& space) noexcept {
   mem::Zero(space.regions, sizeof(space.regions));
   space.root = root.value();
   space.mmap_next = kUserSpaceBase + 0x1000000ULL;
-  space.asid = static_cast<uint16_t>(g_next_asid);
+  space.asid = static_cast<uint16_t>(asid);
   space.region_count = 0;
-  ++g_next_asid;
   return Status::kOk;
 }
 
