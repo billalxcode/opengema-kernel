@@ -8,6 +8,12 @@
 #include "og/fs/vfs.h"
 #include "og/mem/heap.h"
 
+namespace {
+
+int g_outstanding = 0;
+
+}  // namespace
+
 namespace og::mem {
 
 Result<void*> HeapAlloc(uint64_t size) noexcept {
@@ -15,11 +21,15 @@ Result<void*> HeapAlloc(uint64_t size) noexcept {
   if (pointer == nullptr) {
     return Result<void*>::Err(Status::kNoMem);
   }
+  ++g_outstanding;
   return Result<void*>::Ok(pointer);
 }
 
 Status HeapFree(void* pointer) noexcept {
-  std::free(pointer);
+  if (pointer != nullptr) {
+    std::free(pointer);
+    --g_outstanding;
+  }
   return Status::kOk;
 }
 
@@ -124,6 +134,9 @@ int main() {
   }
   if (og::fs::FsCreate("/", og::fs::NodeType::kDirectory).is_ok()) {
     return Fail("mount root recreated");
+  }
+  if (g_outstanding != 1) {
+    return Fail("node allocation leak");
   }
 
   std::printf("vfs mutation probe: OK\n");

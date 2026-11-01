@@ -7,7 +7,6 @@ namespace og::fs::ramfs {
 
 namespace {
 
-constexpr uint32_t kMaxNodes = 64;
 constexpr uint32_t kMaxName = 32;
 constexpr uint32_t kMaxChildren = 8;
 
@@ -20,10 +19,7 @@ struct RamNode {
   uint8_t* data;
   uint64_t size;
   uint64_t capacity;
-  bool used;
 };
-
-RamNode g_nodes[kMaxNodes];
 
 [[nodiscard]] RamNode* NodeOf(Node* node) noexcept {
   return node == nullptr ? nullptr : static_cast<RamNode*>(node->fs_data);
@@ -213,7 +209,7 @@ Status DirRemove(Node* directory, Node* node) noexcept {
     dir->children[current] = dir->children[current + 1U];
   }
   --dir->child_count;
-  mem::Zero(target, sizeof(*target));
+  (void)mem::HeapFree(target);
   return Status::kOk;
 }
 
@@ -281,18 +277,12 @@ const NodeOps kDirOps{&DirLookup, nullptr, nullptr, &DirIterate, &DirCreate,
   if (length >= kMaxName) {
     return nullptr;
   }
-  RamNode* node = nullptr;
-  for (uint32_t index = 0; index < kMaxNodes; ++index) {
-    if (!g_nodes[index].used) {
-      node = &g_nodes[index];
-      break;
-    }
-  }
-  if (node == nullptr) {
+  const Result<void*> storage = mem::HeapAlloc(sizeof(RamNode));
+  if (storage.is_err()) {
     return nullptr;
   }
+  RamNode* node = static_cast<RamNode*>(storage.value());
   mem::Zero(node, sizeof(*node));
-  node->used = true;
   node->node.type = type;
   node->node.ops = type == NodeType::kFile ? &kFileOps : &kDirOps;
   node->node.fs_data = node;
@@ -305,10 +295,12 @@ const NodeOps kDirOps{&DirLookup, nullptr, nullptr, &DirIterate, &DirCreate,
 }  // namespace
 
 Result<Node*> Create() noexcept {
-  mem::Zero(g_nodes, sizeof(g_nodes));
-
-  RamNode* root = &g_nodes[0];
-  root->used = true;
+  const Result<void*> storage = mem::HeapAlloc(sizeof(RamNode));
+  if (storage.is_err()) {
+    return Result<Node*>::Err(storage.status());
+  }
+  RamNode* root = static_cast<RamNode*>(storage.value());
+  mem::Zero(root, sizeof(*root));
   root->node.name = "/";
   root->node.type = NodeType::kDirectory;
   root->node.ops = &kDirOps;
@@ -361,7 +353,7 @@ Result<Node*> CreateFile(Node* parent, const char* name, const void* data,
   if (size != 0U) {
     const Result<void*> buffer = mem::HeapAlloc(size);
     if (buffer.is_err()) {
-      mem::Zero(child, sizeof(*child));
+      (void)mem::HeapFree(child);
       return Result<Node*>::Err(buffer.status());
     }
     mem::Copy(buffer.value(), data, size);

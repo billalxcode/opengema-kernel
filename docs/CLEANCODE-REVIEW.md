@@ -243,8 +243,8 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   sebagai ELF64 AArch64 memakai `find_package(gemapi)`.
 - Test FD flags: tulis ditolak pada descriptor read-only dan append menulis
   di akhir berkas.
-- Test VFS mutation: mkdir, unlink, rmdir, rename, duplicate create, dan
-  mount root yang tidak boleh dihapus.
+- Test VFS mutation: mkdir, unlink, rmdir, rename, duplicate create, mount
+  root yang tidak boleh dihapus, dan tidak ada kebocoran alokasi node.
 
 Verifikasi branch `dev`:
 

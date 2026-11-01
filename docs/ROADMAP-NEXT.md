@@ -130,8 +130,7 @@ bisa dijalankan tanpa menyalin kode syscall.
 
 - [x] FS-10 FD dan open flags per proses, termasuk read/write/append.
 - [x] FS-11 Operasi directory: mkdir, rmdir, unlink, rename, lookup.
-- [~] FS-12 ramfs dinamis: node dan data dialokasikan serta dibebaskan.
-      Slot node sudah dipakai ulang; pool masih statis 64 node.
+- [x] FS-12 ramfs dinamis: node dan data dialokasikan serta dibebaskan.
 - [ ] FS-13 Filesystem writable. Pilih satu: FAT32 write atau filesystem
       sederhana dengan journal ringan. Dokumentasikan pilihannya.
 - [ ] FS-14 mount/umount syscall dan mount table per proses atau global
