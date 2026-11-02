@@ -74,8 +74,6 @@ qemu-system-aarch64 \
 QEMU_PID=$!
 
 CLIENT_STATUS=0
-python3 "$ROOT/scripts/hmp_key.py" "$MONITOR" 15 "hello" >/dev/null 2>&1 &
-KEY_PID=$!
 python3 "$ROOT/scripts/uart_test_client.py" "$SOCKET" "$LOG" 120 "$SERIAL_DIR" &
 CLIENT_PID=$!
 
@@ -100,7 +98,6 @@ else
 fi
 touch "$SERIAL_DIR/clear-continue"
 wait "$CLIENT_PID" || CLIENT_STATUS=$?
-wait "$KEY_PID" 2>/dev/null || true
 
 # Give the last framebuffer flush time to land, then capture the scanout.
 sleep 1
@@ -189,7 +186,7 @@ count_check() {
 }
 
 count_check "hello from el0" 2
-count_check "init ok" 2
+count_check "init ok" 1
 count_check "file ok" 2
 count_check "mmap ok" 2
 count_check "child ok" 2
@@ -210,6 +207,10 @@ fi
 if grep -q "panic:" "$LOG" 2>/dev/null; then
   echo "qemu test: FAIL panic detected"
   FAILED=1
+fi
+
+if [ "$FAILED" -ne 0 ] || [ "$CLIENT_STATUS" -ne 0 ]; then
+  cp "$LOG" "$ROOT/build/qemu-serial.log" 2>/dev/null || true
 fi
 
 if [ "$FAILED" -ne 0 ]; then

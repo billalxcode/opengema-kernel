@@ -86,7 +86,7 @@ def main(argv):
                 buffer.extend(chunk)
                 last_data = time.time()
 
-            if not help_sent and b"hello from applications" in buffer:
+            if not help_sent and b"gemabox> " in buffer:
                 send_line(client, b"help\n")
                 help_sent = True
                 buffer.clear()
