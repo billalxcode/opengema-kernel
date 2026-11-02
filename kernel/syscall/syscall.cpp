@@ -103,6 +103,12 @@ constexpr uint64_t kResultError = static_cast<uint64_t>(-1);
     case kSysRename:
       status = DoRename(frame->x[0], frame->x[1], result);
       break;
+    case kSysGetLogLevel:
+      status = DoGetLogLevel(result);
+      break;
+    case kSysSetLogLevel:
+      status = DoSetLogLevel(frame->x[0], result);
+      break;
     default:
       status = Status::kInvalidArg;
       break;

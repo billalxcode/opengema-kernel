@@ -175,6 +175,55 @@ bool split_two(const char* args, gemapi::usize args_length,
   return true;
 }
 
+bool text_equals(const char* text, gemapi::usize length, const char* value) {
+  gemapi::usize index = 0;
+  while (index < length && value[index] != '\0' && text[index] == value[index]) {
+    ++index;
+  }
+  return index == length && value[index] == '\0';
+}
+
+const char* log_level_name(gemapi::system::LogLevel level) {
+  switch (level) {
+    case gemapi::system::LogLevel::error:
+      return "error";
+    case gemapi::system::LogLevel::warn:
+      return "warn";
+    case gemapi::system::LogLevel::info:
+      return "info";
+    case gemapi::system::LogLevel::debug:
+      return "debug";
+    default:
+      return "unknown";
+  }
+}
+
+bool parse_log_level(const char* text, gemapi::usize length,
+                     gemapi::system::LogLevel& level) {
+  if (length == 1U && text[0] >= '0' && text[0] <= '3') {
+    level = static_cast<gemapi::system::LogLevel>(
+      static_cast<gemapi::u64>(text[0] - '0'));
+    return true;
+  }
+  if (text_equals(text, length, "error")) {
+    level = gemapi::system::LogLevel::error;
+    return true;
+  }
+  if (text_equals(text, length, "warn")) {
+    level = gemapi::system::LogLevel::warn;
+    return true;
+  }
+  if (text_equals(text, length, "info")) {
+    level = gemapi::system::LogLevel::info;
+    return true;
+  }
+  if (text_equals(text, length, "debug")) {
+    level = gemapi::system::LogLevel::debug;
+    return true;
+  }
+  return false;
+}
+
 bool finish_path(char* path, gemapi::usize capacity, gemapi::usize cursor) {
   if (cursor >= capacity) {
     return false;
@@ -313,6 +362,38 @@ CommandResult RunPs(const char* /*args*/, gemapi::usize /*args_length*/) {
   return CommandResult::kContinue;
 }
 
+CommandResult RunDmesg(const char* /*args*/, gemapi::usize /*args_length*/) {
+  gemapi::io::write("dmesg:\n");
+  cat_file("/proc/dmesg", "dmesg");
+  return CommandResult::kContinue;
+}
+
+CommandResult RunLogLevel(const char* args, gemapi::usize args_length) {
+  trim(args, args_length);
+  if (args_length != 0U) {
+    gemapi::system::LogLevel level = gemapi::system::LogLevel::info;
+    if (!parse_log_level(args, args_length, level)) {
+      gemapi::io::write("loglevel: expected error, warn, info, debug, or 0-3\n");
+      return CommandResult::kContinue;
+    }
+    if (gemapi::system::set_log_level(level) != gemapi::Status::ok) {
+      gemapi::io::write("loglevel: failed\n");
+      return CommandResult::kContinue;
+    }
+  }
+
+  const gemapi::system::LogLevel level = gemapi::system::log_level();
+  char text[64];
+  gemapi::usize cursor = append_text(text, sizeof(text), 0, "loglevel: ");
+  cursor = append_text(text, sizeof(text), cursor, log_level_name(level));
+  cursor = append_text(text, sizeof(text), cursor, " (");
+  cursor = append_dec(text, sizeof(text), cursor,
+                      static_cast<gemapi::u64>(level));
+  cursor = append_text(text, sizeof(text), cursor, ")\n");
+  gemapi::io::write(text, cursor);
+  return CommandResult::kContinue;
+}
+
 CommandResult RunSleep(const char* args, gemapi::usize args_length) {
   if (args_length == 0U) {
     gemapi::io::write("sleep: missing milliseconds\n");
@@ -402,6 +483,8 @@ constexpr Command kCommands[] = {
   {"uptime", &RunUptime},
   {"sleep", &RunSleep},
   {"ps", &RunPs},
+  {"dmesg", &RunDmesg},
+  {"loglevel", &RunLogLevel},
   {"mkdir", &RunMkdir},
   {"rm", &RunRm},
   {"mv", &RunMv},

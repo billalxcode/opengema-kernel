@@ -432,7 +432,7 @@ og_add_module(og_io
   DEPS og_arch og_inc_kernel)
 
 og_add_module(og_core
-  SOURCES kernel/core/log.cpp kernel/core/panic.cpp
+  SOURCES kernel/core/log.cpp kernel/core/log_ring.cpp kernel/core/panic.cpp
           kernel/core/power.cpp kernel/core/stack_guard.cpp
   DEPS og_io og_inc_kernel)
 
@@ -509,6 +509,7 @@ og_add_module(og_syscall
           kernel/syscall/fs.cpp kernel/syscall/process.cpp
           kernel/syscall/memory.cpp kernel/syscall/helpers.cpp
           kernel/syscall/system.cpp kernel/syscall/time.cpp
+          kernel/syscall/log.cpp
   DEPS og_process og_sched og_events og_mem og_time og_core og_inc_kernel)
 
 og_add_module(og_sync

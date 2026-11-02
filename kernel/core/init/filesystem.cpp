@@ -37,6 +37,14 @@ Status BlockReadAdapter(void* context, uint64_t sector,
   return static_cast<drivers::virtio::Blk*>(context)->read(sector, buffer);
 }
 
+Status BlockWriteAdapter(void* context, uint64_t sector,
+                         std::span<const uint8_t> buffer) noexcept {
+  if (context == nullptr) {
+    return Status::kInvalidArg;
+  }
+  return static_cast<drivers::virtio::Blk*>(context)->write(sector, buffer);
+}
+
 struct WritableTree {
   fs::Node* etc;
   fs::Node* users;
@@ -197,7 +205,8 @@ Status MountFat32(const fs::BlockDevice& disk) noexcept {
   }
   const fs::BlockDevice device{&BlockReadAdapter, disk.context,
                                partition.value().sector_count,
-                               partition.value().start_sector};
+                               partition.value().start_sector,
+                               &BlockWriteAdapter};
   fs::Node* fat_root = nullptr;
   Status status = fs::fat32::Mount(device, &fat_root);
   if (IsErr(status)) {

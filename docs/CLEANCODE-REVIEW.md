@@ -245,10 +245,14 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   di akhir berkas.
 - Test VFS mutation: mkdir, unlink, rmdir, rename, duplicate create, mount
   root yang tidak boleh dihapus, dan tidak ada kebocoran alokasi node.
+- Test dmesg: `/proc/dmesg` dibaca lewat procfs dan command shell.
+- Test loglevel: filter runtime bisa dibaca dan diubah dari shell.
+- Verifikasi manual block write: baca, tulis pola, baca ulang, lalu pulihkan
+  sector terakhir pada salinan `esp.img`.
 
 Verifikasi branch `dev`:
 
-- `python3 scripts/compile-check.py`: 129 file OK, 1 entri lama dilewati.
+- `python3 scripts/compile-check.py`: 131 file OK, 1 entri lama dilewati.
 - `./scripts/build.sh` lewat podman: kernel build dan link OK,
   `arch-check` dan `gsl-check` OK.
 - `./scripts/test-host.sh`: host tests, ramfs, procfs, devfs, HID, ACPI, FAT32,

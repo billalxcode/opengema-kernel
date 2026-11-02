@@ -56,6 +56,10 @@ def main(argv):
     time_seen = False
     ps_sent = False
     ps_seen = False
+    dmesg_sent = False
+    dmesg_seen = False
+    level_sent = False
+    level_seen = False
     fs_sent = False
     fs_seen = False
     clear_sent = False
@@ -88,7 +92,7 @@ def main(argv):
                 buffer.clear()
 
             if (help_sent and not help_seen and
-                    b"commands: help, echo, cat, ls, clear, acpi, uptime, sleep, ps, mkdir, rm, mv, halt, shutdown, reboot" in buffer):
+                    b"commands: help, echo, cat, ls, clear, acpi, uptime, sleep, ps, dmesg, loglevel, mkdir, rm, mv, halt, shutdown, reboot" in buffer):
                 help_seen = True
 
             if (help_seen and not acpi_sent and
@@ -121,7 +125,29 @@ def main(argv):
             if ps_sent and not ps_seen and b"pid ppid" in buffer:
                 ps_seen = True
 
-            if (ps_seen and not fs_sent and
+            if (ps_seen and not dmesg_sent and
+                    time.time() - last_data > 0.5 and
+                    b"gemabox> " in buffer):
+                send_line(client, b"dmesg\n")
+                dmesg_sent = True
+                buffer.clear()
+
+            if dmesg_sent and not dmesg_seen and b"dmesg:" in buffer:
+                dmesg_seen = True
+
+            if (dmesg_seen and not level_sent and
+                    time.time() - last_data > 0.5 and
+                    b"gemabox> " in buffer):
+                send_line(client, b"loglevel\nloglevel debug\nloglevel info\n")
+                level_sent = True
+                buffer.clear()
+
+            if (level_sent and not level_seen and
+                    b"loglevel: debug (3)" in buffer and
+                    b"loglevel: info (2)" in buffer):
+                level_seen = True
+
+            if (level_seen and not fs_sent and
                     time.time() - last_data > 0.5 and
                     b"gemabox> " in buffer):
                 send_line(client, b"mkdir /tmp/d\nmv /tmp/d /tmp/e\nls /tmp\nrm /tmp/e\n")
@@ -134,11 +160,13 @@ def main(argv):
             if (fs_seen and not clear_sent and
                     time.time() - last_data > 0.5 and
                     b"gemabox> " in buffer):
-                send_line(client, b"clear\n")
+                send_line(client, b"clear\necho CLEAR-DONE\n")
                 clear_sent = True
                 buffer.clear()
 
-            if clear_sent and not clear_ready and b"gemabox> " in buffer:
+            if (clear_sent and not clear_ready and
+                    b"CLEAR-DONE" in buffer and
+                    time.time() - last_data > 0.2):
                 if gate_dir is not None:
                     open(os.path.join(gate_dir, "clear-ready"), "w").close()
                 clear_ready = True

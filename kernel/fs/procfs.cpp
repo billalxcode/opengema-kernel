@@ -3,6 +3,7 @@
 #include "format.h"
 #include "memory.h"
 #include "og/acpi/acpi.h"
+#include "og/core/log_ring.h"
 #include "og/time/timer.h"
 
 namespace og::fs::procfs {
@@ -14,6 +15,7 @@ enum class ProcKind : uint32_t {
   kThreads = 1,
   kAcpi = 2,
   kProcesses = 3,
+  kDmesg = 4,
 };
 
 struct ProcFile {
@@ -24,7 +26,7 @@ struct ProcFile {
 
 struct ProcDir {
   Node node;
-  ProcFile files[4];
+  ProcFile files[5];
   uint32_t count;
 };
 
@@ -95,6 +97,8 @@ Status Generate(const ProcFile& file, char* buffer, std::size_t capacity,
         return g_process_text(buffer, capacity, length);
       }
       break;
+    case ProcKind::kDmesg:
+      break;
     default:
       return Status::kInvalidArg;
   }
@@ -114,6 +118,16 @@ Status FileRead(Node* node, uint64_t offset, std::span<uint8_t> buffer,
   auto* file = static_cast<ProcFile*>(node->fs_data);
   if (file == nullptr) {
     return Status::kNotInit;
+  }
+
+  if (file->kind == ProcKind::kDmesg) {
+    const uint32_t capacity =
+      buffer.size() > 0xFFFFFFFFULL
+        ? 0xFFFFFFFFU
+        : static_cast<uint32_t>(buffer.size());
+    out_read = log_ring::Read(
+      offset, reinterpret_cast<char*>(buffer.data()), capacity);
+    return Status::kOk;
   }
 
   char text[1024];
@@ -204,7 +218,8 @@ Result<Node*> Create(ThreadCountFn thread_count,
   AddFile(1, "threads", ProcKind::kThreads);
   AddFile(2, "acpi", ProcKind::kAcpi);
   AddFile(3, "processes", ProcKind::kProcesses);
-  g_root.count = 4;
+  AddFile(4, "dmesg", ProcKind::kDmesg);
+  g_root.count = 5;
   return Result<Node*>::Ok(&g_root.node);
 }
 

@@ -30,6 +30,8 @@ constexpr uint64_t kSysMkdir = 20;
 constexpr uint64_t kSysUnlink = 21;
 constexpr uint64_t kSysRmdir = 22;
 constexpr uint64_t kSysRename = 23;
+constexpr uint64_t kSysGetLogLevel = 24;
+constexpr uint64_t kSysSetLogLevel = 25;
 
 void SyscallInit() noexcept;
 

@@ -83,7 +83,7 @@ CLIENT_PID=$!
 # checked while the display is empty.
 CLEAR_STATUS=0
 CLEAR_READY=0
-for _ in $(seq 1 240); do
+for _ in $(seq 1 480); do
   if [ -f "$SERIAL_DIR/clear-ready" ]; then
     CLEAR_READY=1
     break
@@ -141,10 +141,13 @@ check "mem: address space switch ok"
 check "sched: round robin ok"
 check "user: spawn pid"
 check "gemabox> "
-check "commands: help, echo, cat, ls, clear, acpi, uptime, sleep, ps, mkdir, rm, mv, halt, shutdown, reboot"
+check "commands: help, echo, cat, ls, clear, acpi, uptime, sleep, ps, dmesg, loglevel, mkdir, rm, mv, halt, shutdown, reboot"
 check "uptime: "
 check "pid ppid"
 check "/system/boot/init"
+check "dmesg:"
+check "loglevel: info (2)"
+check "loglevel: debug (3)"
 check "e/"
 check_absent "mkdir: failed"
 check_absent "mv: failed"

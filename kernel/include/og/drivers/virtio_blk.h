@@ -32,7 +32,14 @@ class Blk {
   // and at most 4096 bytes.
   [[nodiscard]] Status read(uint64_t sector, std::span<uint8_t> buffer) noexcept;
 
+  // Writes whole 512 byte sectors with the same size rules as read.
+  [[nodiscard]] Status write(uint64_t sector,
+                             std::span<const uint8_t> buffer) noexcept;
+
  private:
+  [[nodiscard]] Status validate_transfer(uint64_t sector, uint64_t size,
+                                         uint64_t& sectors) noexcept;
+
   PciTransport transport_;
   Queue queue_;
   dma::DmaBuffer request_memory_{};

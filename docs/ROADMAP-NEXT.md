@@ -135,7 +135,8 @@ bisa dijalankan tanpa menyalin kode syscall.
       sederhana dengan journal ringan. Dokumentasikan pilihannya.
 - [ ] FS-14 mount/umount syscall dan mount table per proses atau global
       dengan referensi.
-- [ ] FS-15 Block layer: IRQ/MSI-X, flush, multiple device, partisi.
+- [~] FS-15 Block layer: write path dan adapter selesai; IRQ/MSI-X,
+      flush, multiple device, dan partisi tulis belum.
 - [ ] FS-16 Metadata: permission, uid/gid, timestamp, ukuran.
 - [ ] FS-17 Uji persistensi: buat berkas, tulis, reboot, baca kembali.
 
@@ -214,7 +215,7 @@ bekerja dari shell.
 
 ## 11. Fase 22 - Observability, keamanan, dan CI
 
-- [ ] OBS-01 Ring buffer dmesg dan level log runtime.
+- [x] OBS-01 Ring buffer dmesg dan level log runtime.
 - [ ] OBS-02 Tracepoint, counter, dan statistik scheduler/memori/FS.
 - [ ] OBS-03 Watchdog, panic dump lengkap, dan magic SysRq minimal.
 - [ ] SEC-01 KASLR dan relokasi image.

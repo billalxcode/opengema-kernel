@@ -102,4 +102,8 @@ namespace og::syscall {
 [[nodiscard]] Status DoRename(uint64_t user_old_path, uint64_t user_new_path,
                               uint64_t& result) noexcept;
 
+[[nodiscard]] Status DoGetLogLevel(uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoSetLogLevel(uint64_t level, uint64_t& result) noexcept;
+
 }  // namespace og::syscall

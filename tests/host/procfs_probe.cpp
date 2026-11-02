@@ -13,6 +13,32 @@ uint64_t TimeNowMs() noexcept {
 
 }  // namespace og::time
 
+namespace og::log_ring {
+
+uint32_t Read(uint64_t offset, char* buffer, uint32_t capacity) noexcept {
+  constexpr char kText[] = "dmesg line\n";
+  constexpr uint32_t kSize = sizeof(kText) - 1U;
+  if (buffer == nullptr || capacity == 0U || offset >= kSize) {
+    return 0;
+  }
+  uint32_t count = kSize - static_cast<uint32_t>(offset);
+  if (count > capacity) {
+    count = capacity;
+  }
+  for (uint32_t index = 0; index < count; ++index) {
+    buffer[index] = kText[offset + index];
+  }
+  return count;
+}
+
+uint32_t Size() noexcept {
+  return 11U;
+}
+
+void Append(const char* /*text*/, uint32_t /*length*/) noexcept {}
+
+}  // namespace og::log_ring
+
 namespace {
 
 uint32_t ThreadCount() noexcept {
@@ -117,6 +143,18 @@ int main() {
     return 1;
   }
 
+  og::fs::Node* dmesg = nullptr;
+  if (og::IsErr(root.value()->ops->lookup(root.value(), "dmesg", &dmesg)) ||
+      dmesg == nullptr) {
+    std::printf("procfs probe: dmesg lookup failed\n");
+    return 1;
+  }
+  if (!ReadAll(dmesg, 0, text, sizeof(text), read) || read != 11U ||
+      text[0] != 'd' || text[10] != '\n') {
+    std::printf("procfs probe: dmesg content mismatch\n");
+    return 1;
+  }
+
   if (root.value()->ops->lookup(root.value(), "missing", &threads) !=
       og::Status::kNotFound) {
     std::printf("procfs probe: missing lookup was not rejected\n");
@@ -146,6 +184,11 @@ int main() {
     return 1;
   }
   if (og::IsErr(root.value()->ops->iterate(root.value(), 4, entry, found)) ||
+      !found || entry.name[0] != 'd') {
+    std::printf("procfs probe: iterate fifth entry failed\n");
+    return 1;
+  }
+  if (og::IsErr(root.value()->ops->iterate(root.value(), 5, entry, found)) ||
       found) {
     std::printf("procfs probe: iterate past end failed\n");
     return 1;
