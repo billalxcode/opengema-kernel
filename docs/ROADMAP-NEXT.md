@@ -131,14 +131,15 @@ bisa dijalankan tanpa menyalin kode syscall.
 - [x] FS-10 FD dan open flags per proses, termasuk read/write/append.
 - [x] FS-11 Operasi directory: mkdir, rmdir, unlink, rename, lookup.
 - [x] FS-12 ramfs dinamis: node dan data dialokasikan serta dibebaskan.
-- [ ] FS-13 Filesystem writable. Pilih satu: FAT32 write atau filesystem
-      sederhana dengan journal ringan. Dokumentasikan pilihannya.
+- [~] FS-13 Filesystem writable: FAT32 write, create file, dan mkdir,
+      termasuk alokasi cluster dan update direktori. Delete, rename,
+      truncate, dan long name belum.
 - [ ] FS-14 mount/umount syscall dan mount table per proses atau global
       dengan referensi.
-- [~] FS-15 Block layer: write path dan adapter selesai; IRQ/MSI-X,
-      flush, multiple device, dan partisi tulis belum.
+- [~] FS-15 Block layer: write path, adapter, dan flush selesai;
+      IRQ/MSI-X, multiple device, dan partisi tulis belum.
 - [ ] FS-16 Metadata: permission, uid/gid, timestamp, ukuran.
-- [ ] FS-17 Uji persistensi: buat berkas, tulis, reboot, baca kembali.
+- [x] FS-17 Uji persistensi: buat berkas, tulis, reboot, baca kembali.
 
 **Selesai bila:** berkas bisa dibuat dan diubah, lalu tetap ada setelah
 reboot.

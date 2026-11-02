@@ -45,6 +45,12 @@ struct FatNode {
   Node node;
   char name[kMaxName];
   uint32_t first_cluster;
+  uint32_t dir_cluster;
+};
+
+struct ParsedEntry {
+  DirEntry entry;
+  uint32_t first_cluster;
 };
 
 struct Visitor {
@@ -61,9 +67,17 @@ Status IterateDirectory(Node* directory, uint32_t index, DirEntry& entry,
                         bool& found) noexcept;
 Status FileRead(Node* node, uint64_t offset, std::span<uint8_t> buffer,
                 uint64_t& out_read) noexcept;
+Status FileWrite(Node* node, uint64_t offset, std::span<const uint8_t> buffer,
+                 uint64_t& out_written) noexcept;
+Status DirCreate(Node* directory, const char* name, NodeType type,
+                 Node** out) noexcept;
+[[nodiscard]] Result<bool> ParseEntry(const uint8_t* raw, char* long_name,
+                                      bool& long_name_active,
+                                      ParsedEntry& out) noexcept;
 
-const NodeOps kFileOps{nullptr, &FileRead, nullptr, nullptr};
-const NodeOps kDirectoryOps{&Lookup, nullptr, nullptr, &IterateDirectory};
+const NodeOps kFileOps{nullptr, &FileRead, &FileWrite, nullptr};
+const NodeOps kDirectoryOps{&Lookup, nullptr, nullptr, &IterateDirectory,
+                            &DirCreate};
 
 [[nodiscard]] char ToUpper(char value) noexcept {
   if (value >= 'a' && value <= 'z') {
@@ -115,6 +129,39 @@ const NodeOps kDirectoryOps{&Lookup, nullptr, nullptr, &IterateDirectory};
     done += chunk;
   }
   return Status::kOk;
+}
+
+Status WriteSectors(uint64_t sector, const void* buffer, uint32_t count) noexcept {
+  if (count == 0U || g_volume.device.write == nullptr) {
+    return Status::kUnsupported;
+  }
+  const auto* bytes = static_cast<const uint8_t*>(buffer);
+  const uint32_t chunk_sectors = kReadChunkBytes / kSectorSize;
+  uint32_t done = 0;
+  while (done < count) {
+    uint32_t chunk = count - done;
+    if (chunk > chunk_sectors) {
+      chunk = chunk_sectors;
+    }
+    const std::span<const uint8_t> source(
+      bytes + (static_cast<std::size_t>(done) * kSectorSize),
+      static_cast<std::size_t>(chunk) * kSectorSize);
+    const Status status = g_volume.device.write(
+      g_volume.device.context, sector + done + g_volume.device.sector_offset,
+      source);
+    if (IsErr(status)) {
+      return status;
+    }
+    done += chunk;
+  }
+  return Status::kOk;
+}
+
+[[nodiscard]] Status FlushVolume() noexcept {
+  if (g_volume.device.flush == nullptr) {
+    return Status::kUnsupported;
+  }
+  return g_volume.device.flush(g_volume.device.context);
 }
 
 [[nodiscard]] Result<uint32_t> NextCluster(uint32_t cluster) noexcept {
@@ -180,6 +227,239 @@ const NodeOps kDirectoryOps{&Lookup, nullptr, nullptr, &IterateDirectory};
   return ReadSectors(sector, buffer, g_volume.sectors_per_cluster);
 }
 
+[[nodiscard]] Status WriteCluster(uint32_t cluster, const uint8_t* buffer) noexcept {
+  if (!ValidCluster(cluster)) {
+    return Status::kInvalidArg;
+  }
+  const uint64_t sector = static_cast<uint64_t>(g_volume.data_start) +
+                          (static_cast<uint64_t>(cluster - 2U) *
+                           static_cast<uint64_t>(g_volume.sectors_per_cluster));
+  return WriteSectors(sector, buffer, g_volume.sectors_per_cluster);
+}
+
+[[nodiscard]] Result<uint32_t> FatEntryValue(uint32_t cluster) noexcept {
+  if (!ValidCluster(cluster)) {
+    return Result<uint32_t>::Err(Status::kInvalidArg);
+  }
+  uint8_t sector[kSectorSize];
+  const uint64_t fat_offset = static_cast<uint64_t>(cluster) * 4U;
+  const uint64_t fat_sector = static_cast<uint64_t>(g_volume.reserved_sectors) +
+                              (fat_offset / kSectorSize);
+  const uint32_t offset = static_cast<uint32_t>(fat_offset % kSectorSize);
+  const Status status = ReadSectors(fat_sector, sector, 1);
+  if (IsErr(status)) {
+    return Result<uint32_t>::Err(status);
+  }
+  uint32_t value = static_cast<uint32_t>(sector[offset]);
+  value |= static_cast<uint32_t>(sector[offset + 1U]) << 8U;
+  value |= static_cast<uint32_t>(sector[offset + 2U]) << 16U;
+  value |= static_cast<uint32_t>(sector[offset + 3U]) << 24U;
+  return Result<uint32_t>::Ok(value & 0x0FFFFFFFU);
+}
+
+[[nodiscard]] Status SetFatEntry(uint32_t cluster, uint32_t value) noexcept {
+  if (!ValidCluster(cluster)) {
+    return Status::kInvalidArg;
+  }
+  const uint64_t fat_offset = static_cast<uint64_t>(cluster) * 4U;
+  const uint32_t offset = static_cast<uint32_t>(fat_offset % kSectorSize);
+  const uint32_t base_sector =
+    g_volume.reserved_sectors + static_cast<uint32_t>(fat_offset / kSectorSize);
+  uint8_t sector[kSectorSize];
+  for (uint32_t copy = 0; copy < g_volume.num_fats; ++copy) {
+    const uint32_t sector_index = base_sector + (copy * g_volume.fat_sectors);
+    Status status = ReadSectors(sector_index, sector, 1);
+    if (IsErr(status)) {
+      return status;
+    }
+    sector[offset] = static_cast<uint8_t>(value & 0xFFU);
+    sector[offset + 1U] = static_cast<uint8_t>((value >> 8U) & 0xFFU);
+    sector[offset + 2U] = static_cast<uint8_t>((value >> 16U) & 0xFFU);
+    sector[offset + 3U] = static_cast<uint8_t>((value >> 24U) & 0xFFU);
+    status = WriteSectors(sector_index, sector, 1);
+    if (IsErr(status)) {
+      return status;
+    }
+  }
+  return Status::kOk;
+}
+
+[[nodiscard]] Result<uint32_t> AllocateCluster() noexcept {
+  for (uint32_t cluster = 2U; cluster < (g_volume.total_clusters + 2U);
+       ++cluster) {
+    const Result<uint32_t> value = FatEntryValue(cluster);
+    if (value.is_err()) {
+      return value;
+    }
+    if (value.value() != 0U) {
+      continue;
+    }
+    Status status = SetFatEntry(cluster, kClusterEnd);
+    if (IsErr(status)) {
+      return Result<uint32_t>::Err(status);
+    }
+    mem::Zero(g_volume.cluster_buffer, g_volume.cluster_bytes);
+    status = WriteCluster(cluster, g_volume.cluster_buffer);
+    if (IsErr(status)) {
+      return Result<uint32_t>::Err(status);
+    }
+    return Result<uint32_t>::Ok(cluster);
+  }
+  return Result<uint32_t>::Err(Status::kNoMem);
+}
+
+[[nodiscard]] Status EnsureClusterCount(FatNode* file,
+                                        uint32_t required) noexcept {
+  if (file == nullptr || required == 0U) {
+    return Status::kInvalidArg;
+  }
+  uint32_t count = 0;
+  uint32_t last = 0;
+  uint32_t cluster = file->first_cluster;
+  while (ValidCluster(cluster) && count < required) {
+    last = cluster;
+    ++count;
+    const Result<uint32_t> next = NextCluster(cluster);
+    if (next.is_err()) {
+      return next.status();
+    }
+    if (next.value() == kClusterEnd) {
+      break;
+    }
+    cluster = next.value();
+  }
+
+  if (file->first_cluster == 0U) {
+    const Result<uint32_t> first = AllocateCluster();
+    if (first.is_err()) {
+      return first.status();
+    }
+    file->first_cluster = first.value();
+    last = first.value();
+    count = 1U;
+  }
+
+  while (count < required) {
+    const Result<uint32_t> next = AllocateCluster();
+    if (next.is_err()) {
+      return next.status();
+    }
+    const Status status = SetFatEntry(last, next.value());
+    if (IsErr(status)) {
+      return status;
+    }
+    last = next.value();
+    ++count;
+  }
+  return Status::kOk;
+}
+
+[[nodiscard]] Status UpdateDirectoryEntry(FatNode* file) noexcept {
+  if (file == nullptr || !ValidCluster(file->dir_cluster)) {
+    return Status::kNotFound;
+  }
+  uint32_t cluster = file->dir_cluster;
+  uint32_t guard = 0;
+  char long_name[kMaxName];
+  mem::Zero(long_name, sizeof(long_name));
+  bool long_name_active = false;
+
+  while (ValidCluster(cluster)) {
+    Status status = ReadCluster(cluster, g_volume.cluster_buffer);
+    if (IsErr(status)) {
+      return status;
+    }
+    for (uint32_t offset = 0; (offset + 32U) <= g_volume.cluster_bytes;
+         offset += 32U) {
+      uint8_t* entry = g_volume.cluster_buffer + offset;
+      if (entry[0] == 0x00U) {
+        return Status::kNotFound;
+      }
+      ParsedEntry parsed{};
+      const Result<bool> emit =
+        ParseEntry(entry, long_name, long_name_active, parsed);
+      if (emit.is_err()) {
+        return emit.status();
+      }
+      if (!emit.value() || !NameEquals(parsed.entry.name, file->name)) {
+        continue;
+      }
+      const uint32_t first = file->first_cluster;
+      entry[20] = static_cast<uint8_t>((first >> 16U) & 0xFFU);
+      entry[21] = static_cast<uint8_t>((first >> 24U) & 0xFFU);
+      entry[26] = static_cast<uint8_t>(first & 0xFFU);
+      entry[27] = static_cast<uint8_t>((first >> 8U) & 0xFFU);
+      const uint32_t size = static_cast<uint32_t>(file->node.size);
+      entry[28] = static_cast<uint8_t>(size & 0xFFU);
+      entry[29] = static_cast<uint8_t>((size >> 8U) & 0xFFU);
+      entry[30] = static_cast<uint8_t>((size >> 16U) & 0xFFU);
+      entry[31] = static_cast<uint8_t>((size >> 24U) & 0xFFU);
+      return WriteCluster(cluster, g_volume.cluster_buffer);
+    }
+    const Result<uint32_t> next = NextCluster(cluster);
+    if (next.is_err()) {
+      return next.status();
+    }
+    if (next.value() == kClusterEnd) {
+      return Status::kNotFound;
+    }
+    cluster = next.value();
+    ++guard;
+    if (guard > g_volume.total_clusters) {
+      return Status::kIoError;
+    }
+  }
+  return Status::kNotFound;
+}
+
+[[nodiscard]] Status BuildShortEntry(const char* name, uint8_t* entry) noexcept {
+  if (name == nullptr || entry == nullptr) {
+    return Status::kInvalidArg;
+  }
+  mem::Zero(entry, 32);
+  for (uint32_t index = 0; index < 11U; ++index) {
+    entry[index] = ' ';
+  }
+  uint32_t base_length = 0;
+  uint32_t extension_length = 0;
+  bool in_extension = false;
+  for (std::size_t index = 0; name[index] != '\0'; ++index) {
+    char value = name[index];
+    if (value == '.') {
+      if (in_extension) {
+        return Status::kInvalidArg;
+      }
+      in_extension = true;
+      continue;
+    }
+    if (value >= 'a' && value <= 'z') {
+      value = static_cast<char>(value - 'a' + 'A');
+    }
+    if (!((value >= 'A' && value <= 'Z') || (value >= '0' && value <= '9') ||
+          value == '_' || value == '-')) {
+      return Status::kInvalidArg;
+    }
+    if (in_extension) {
+      if (extension_length >= 3U) {
+        return Status::kInvalidArg;
+      }
+      entry[8U + extension_length] = static_cast<uint8_t>(value);
+      ++extension_length;
+    } else {
+      if (base_length >= 8U) {
+        return Status::kInvalidArg;
+      }
+      entry[base_length] = static_cast<uint8_t>(value);
+      ++base_length;
+    }
+  }
+  if (base_length == 0U) {
+    return Status::kInvalidArg;
+  }
+  entry[11] = 0x20U;
+  return Status::kOk;
+}
+
 [[nodiscard]] FatNode* AllocateNode() noexcept {
   if (g_node_count >= kMaxNodes) {
     return nullptr;
@@ -188,6 +468,126 @@ const NodeOps kDirectoryOps{&Lookup, nullptr, nullptr, &IterateDirectory};
   ++g_node_count;
   mem::Zero(node, sizeof(*node));
   return node;
+}
+
+void SetEntryCluster(uint8_t* entry, uint32_t cluster) noexcept {
+  entry[20] = static_cast<uint8_t>((cluster >> 16U) & 0xFFU);
+  entry[21] = static_cast<uint8_t>((cluster >> 24U) & 0xFFU);
+  entry[26] = static_cast<uint8_t>(cluster & 0xFFU);
+  entry[27] = static_cast<uint8_t>((cluster >> 8U) & 0xFFU);
+}
+
+void BuildDotEntry(uint8_t* entry, const char* name,
+                   uint32_t cluster) noexcept {
+  mem::Zero(entry, 32);
+  for (uint32_t index = 0; index < 11U; ++index) {
+    entry[index] = ' ';
+  }
+  for (uint32_t index = 0; name[index] != '\0'; ++index) {
+    entry[index] = static_cast<uint8_t>(name[index]);
+  }
+  entry[11] = 0x10U;
+  SetEntryCluster(entry, cluster);
+}
+
+Status DirCreate(Node* directory, const char* name, NodeType type,
+                 Node** out) noexcept {
+  if (out == nullptr) {
+    return Status::kInvalidArg;
+  }
+  *out = nullptr;
+  if (directory == nullptr || directory->type != NodeType::kDirectory ||
+      name == nullptr || name[0] == '\0' ||
+      (type != NodeType::kFile && type != NodeType::kDirectory)) {
+    return Status::kUnsupported;
+  }
+  if (g_volume.device.write == nullptr) {
+    return Status::kUnsupported;
+  }
+
+  auto* parent = reinterpret_cast<FatNode*>(directory);
+  uint8_t entry[32];
+  Status status = BuildShortEntry(name, entry);
+  if (IsErr(status)) {
+    return status;
+  }
+
+  uint32_t child_cluster = 0;
+  if (type == NodeType::kDirectory) {
+    const Result<uint32_t> allocated = AllocateCluster();
+    if (allocated.is_err()) {
+      return allocated.status();
+    }
+    child_cluster = allocated.value();
+    mem::Zero(g_volume.cluster_buffer, g_volume.cluster_bytes);
+    BuildDotEntry(g_volume.cluster_buffer, ".", child_cluster);
+    BuildDotEntry(g_volume.cluster_buffer + 32U, "..",
+                  parent->first_cluster);
+    status = WriteCluster(child_cluster, g_volume.cluster_buffer);
+    if (IsErr(status)) {
+      return status;
+    }
+    entry[11] = 0x10U;
+  } else {
+    entry[11] = 0x20U;
+  }
+  SetEntryCluster(entry, child_cluster);
+  uint32_t cluster = parent->first_cluster;
+  uint32_t guard = 0;
+  while (ValidCluster(cluster)) {
+    status = ReadCluster(cluster, g_volume.cluster_buffer);
+    if (IsErr(status)) {
+      return status;
+    }
+    for (uint32_t offset = 0; (offset + 32U) <= g_volume.cluster_bytes;
+         offset += 32U) {
+      uint8_t* slot = g_volume.cluster_buffer + offset;
+      if (slot[0] != 0x00U && slot[0] != 0xE5U) {
+        continue;
+      }
+      mem::Copy(slot, entry, sizeof(entry));
+      status = WriteCluster(cluster, g_volume.cluster_buffer);
+      if (IsErr(status)) {
+        return status;
+      }
+      status = FlushVolume();
+      if (IsErr(status)) {
+        return status;
+      }
+
+      FatNode* node = AllocateNode();
+      if (node == nullptr) {
+        return Status::kNoMem;
+      }
+      const std::size_t length = mem::Length(name);
+      if (length >= kMaxName) {
+        return Status::kInvalidArg;
+      }
+      mem::Copy(node->name, name, length + 1U);
+      node->node.name = node->name;
+      node->node.type = type;
+      node->node.size = 0;
+      node->node.ops = type == NodeType::kDirectory ? &kDirectoryOps
+                                                    : &kFileOps;
+      node->first_cluster = child_cluster;
+      node->dir_cluster = parent->first_cluster;
+      *out = &node->node;
+      return Status::kOk;
+    }
+    const Result<uint32_t> next = NextCluster(cluster);
+    if (next.is_err()) {
+      return next.status();
+    }
+    if (next.value() == kClusterEnd) {
+      break;
+    }
+    cluster = next.value();
+    ++guard;
+    if (guard > g_volume.total_clusters) {
+      return Status::kIoError;
+    }
+  }
+  return Status::kNoMem;
 }
 
 void BuildShortName(const uint8_t* entry, char* out) noexcept {
@@ -252,11 +652,6 @@ void AccumulateLongName(const uint8_t* entry, char* text, bool& active) noexcept
     text[position] = static_cast<char>(code & 0xFFU);
   }
 }
-
-struct ParsedEntry {
-  DirEntry entry;
-  uint32_t first_cluster;
-};
 
 // Parses one 32-byte directory slot. Returns false for slots that do not
 // produce a node, such as deleted entries, long-name fragments, and volume
@@ -432,6 +827,8 @@ Status Lookup(Node* directory, const char* name, Node** out) noexcept {
   node->node.size = context.entry.size;
   node->node.ops = (context.entry.type == NodeType::kDirectory) ? &kDirectoryOps : &kFileOps;
   node->first_cluster = context.first_cluster;
+  const auto* parent = reinterpret_cast<const FatNode*>(directory);
+  node->dir_cluster = parent->first_cluster;
   *out = &node->node;
   return Status::kOk;
 }
@@ -497,6 +894,91 @@ Status FileRead(Node* node, uint64_t offset, std::span<uint8_t> buffer,
   }
 
   return Status::kOk;
+}
+
+Status FileWrite(Node* node, uint64_t offset,
+                 std::span<const uint8_t> buffer,
+                 uint64_t& out_written) noexcept {
+  out_written = 0;
+  if (node == nullptr) {
+    return Status::kInvalidArg;
+  }
+  if (buffer.empty()) {
+    return Status::kInvalidArg;
+  }
+  const uint64_t end = offset + buffer.size();
+  if (end < offset) {
+    return Status::kInvalidArg;
+  }
+  if (g_volume.device.write == nullptr) {
+    return Status::kUnsupported;
+  }
+
+  auto* fat_node = reinterpret_cast<FatNode*>(node);
+  const uint64_t required =
+    (end + g_volume.cluster_bytes - 1U) / g_volume.cluster_bytes;
+  if (required > g_volume.total_clusters) {
+    return Status::kNoMem;
+  }
+  Status ensure = EnsureClusterCount(fat_node, static_cast<uint32_t>(required));
+  if (IsErr(ensure)) {
+    return ensure;
+  }
+
+  const uint64_t cluster_index = offset / g_volume.cluster_bytes;
+  if (cluster_index > g_volume.total_clusters) {
+    return Status::kInvalidArg;
+  }
+  const Result<uint32_t> start =
+    SeekCluster(fat_node->first_cluster, cluster_index);
+  if (start.is_err()) {
+    return start.status();
+  }
+  uint32_t cluster = start.value();
+
+  uint64_t within = offset % g_volume.cluster_bytes;
+  uint64_t remaining = buffer.size();
+  const uint8_t* in = buffer.data();
+
+  while (remaining > 0U) {
+    if (!ValidCluster(cluster)) {
+      return Status::kIoError;
+    }
+    const Status read_status = ReadCluster(cluster, g_volume.cluster_buffer);
+    if (IsErr(read_status)) {
+      return read_status;
+    }
+    uint64_t chunk = g_volume.cluster_bytes - within;
+    if (chunk > remaining) {
+      chunk = remaining;
+    }
+    mem::Copy(g_volume.cluster_buffer + within, in, chunk);
+    const Status write_status = WriteCluster(cluster, g_volume.cluster_buffer);
+    if (IsErr(write_status)) {
+      return write_status;
+    }
+    out_written += chunk;
+    in += chunk;
+    remaining -= chunk;
+    within = 0;
+
+    if (remaining > 0U) {
+      const Result<uint32_t> next = AdvanceCluster(cluster);
+      if (next.is_err()) {
+        return next.status();
+      }
+      cluster = next.value();
+    }
+  }
+
+  if (end > node->size) {
+    node->size = end;
+  }
+  const Status update = UpdateDirectoryEntry(fat_node);
+  if (IsErr(update)) {
+    return update;
+  }
+  return FlushVolume();
 }
 
 Status IterateDirectory(Node* directory, uint32_t index, DirEntry& entry,

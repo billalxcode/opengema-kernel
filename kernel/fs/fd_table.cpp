@@ -24,10 +24,18 @@ Result<uint32_t> FsOpen(FileTable& table, const char* path,
   if ((flags & ~kKnownFlags) != 0U) {
     return Result<uint32_t>::Err(Status::kInvalidArg);
   }
-  if ((flags & (kOpenCreate | kOpenTruncate)) != 0U) {
+  if ((flags & kOpenTruncate) != 0U) {
     return Result<uint32_t>::Err(Status::kUnsupported);
   }
   Result<Node*> node = FsResolve(path);
+  if (node.is_err() && (flags & kOpenCreate) != 0U &&
+      node.status() == Status::kNotFound) {
+    const Result<Node*> created = FsCreate(path, NodeType::kFile);
+    if (created.is_err()) {
+      return Result<uint32_t>::Err(created.status());
+    }
+    node = FsResolve(path);
+  }
   if (node.is_err()) {
     return Result<uint32_t>::Err(node.status());
   }

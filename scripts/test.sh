@@ -23,6 +23,9 @@ pkill -f qemu-system-aarch64 2>/dev/null || true
 sleep 1
 ./scripts/make-esp.sh
 
+echo "== persistence test =="
+./scripts/test-persist.sh
+
 echo "== qemu smoke test =="
 ./scripts/test-qemu.sh
 

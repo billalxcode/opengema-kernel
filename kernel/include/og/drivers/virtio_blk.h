@@ -36,6 +36,9 @@ class Blk {
   [[nodiscard]] Status write(uint64_t sector,
                              std::span<const uint8_t> buffer) noexcept;
 
+  // Flushes the device write cache.
+  [[nodiscard]] Status flush() noexcept;
+
  private:
   [[nodiscard]] Status validate_transfer(uint64_t sector, uint64_t size,
                                          uint64_t& sectors) noexcept;

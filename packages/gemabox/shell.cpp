@@ -2,6 +2,7 @@
 
 #include "gemapi/fs.h"
 #include "gemapi/io.h"
+#include "gemapi/paths.h"
 #include "gemapi/process.h"
 #include "gemapi/system.h"
 #include "gemapi/time.h"
@@ -394,6 +395,93 @@ CommandResult RunLogLevel(const char* args, gemapi::usize args_length) {
   return CommandResult::kContinue;
 }
 
+CommandResult RunPersist(const char* args, gemapi::usize args_length) {
+  trim(args, args_length);
+  char path[96];
+  char path2[96];
+  char path3[96];
+  gemapi::usize cursor =
+    append_text(path, sizeof(path), 0, gemapi::paths::kBootVolume);
+  cursor = append_text(path, sizeof(path), cursor, "/persist.bin");
+  if (!finish_path(path, sizeof(path), cursor)) {
+    gemapi::io::write("persist: path too long\n");
+    return CommandResult::kContinue;
+  }
+  cursor = append_text(path2, sizeof(path2), 0, gemapi::paths::kBootVolume);
+  cursor = append_text(path2, sizeof(path2), cursor, "/persist2.bin");
+  if (!finish_path(path2, sizeof(path2), cursor)) {
+    gemapi::io::write("persist: path too long\n");
+    return CommandResult::kContinue;
+  }
+  cursor = append_text(path3, sizeof(path3), 0, gemapi::paths::kBootVolume);
+  cursor = append_text(path3, sizeof(path3), cursor, "/testdir");
+  if (!finish_path(path3, sizeof(path3), cursor)) {
+    gemapi::io::write("persist: path too long\n");
+    return CommandResult::kContinue;
+  }
+
+  constexpr char kMessage[] = "persist ok\n";
+  if (text_equals(args, args_length, "write") ||
+      text_equals(args, args_length, "create")) {
+    const bool create = text_equals(args, args_length, "create");
+    const char* target = create ? path2 : path;
+    auto file = gemapi::fs::File::open(
+      target, gemapi::fs::kOpenWrite | (create ? gemapi::fs::kOpenCreate : 0));
+    if (!file) {
+      gemapi::io::write("persist: open failed\n");
+      return CommandResult::kContinue;
+    }
+    if (file.value().write(kMessage, sizeof(kMessage) - 1U) !=
+        gemapi::Status::ok) {
+      gemapi::io::write("persist: write failed\n");
+      return CommandResult::kContinue;
+    }
+    if (create) {
+      gemapi::io::write("persist: create ok\n");
+    } else {
+      gemapi::io::write("persist: write ok\n");
+    }
+    return CommandResult::kContinue;
+  }
+
+  if (text_equals(args, args_length, "read") ||
+      text_equals(args, args_length, "read2")) {
+    const bool created = text_equals(args, args_length, "read2");
+    const char* target = created ? path2 : path;
+    auto file = gemapi::fs::File::open(target);
+    if (!file) {
+      gemapi::io::write("persist: open failed\n");
+      return CommandResult::kContinue;
+    }
+    char buffer[16]{};
+    auto count = file.value().read(buffer, sizeof(buffer));
+    if (!count || count.value() < (sizeof(kMessage) - 1U) ||
+        !text_equals(buffer, sizeof(kMessage) - 1U, kMessage)) {
+      gemapi::io::write("persist: read failed\n");
+      return CommandResult::kContinue;
+    }
+    if (created) {
+      gemapi::io::write("persist: read2 ok\n");
+    } else {
+      gemapi::io::write("persist: read ok\n");
+    }
+    return CommandResult::kContinue;
+  }
+
+  if (text_equals(args, args_length, "mkdir")) {
+    if (gemapi::fs::mkdir(path3) != gemapi::Status::ok) {
+      gemapi::io::write("persist: mkdir failed\n");
+      return CommandResult::kContinue;
+    }
+    gemapi::io::write("persist: mkdir ok\n");
+    return CommandResult::kContinue;
+  }
+
+  gemapi::io::write(
+    "persist: usage: persist write|read|create|read2|mkdir\n");
+  return CommandResult::kContinue;
+}
+
 CommandResult RunSleep(const char* args, gemapi::usize args_length) {
   if (args_length == 0U) {
     gemapi::io::write("sleep: missing milliseconds\n");
@@ -485,6 +573,7 @@ constexpr Command kCommands[] = {
   {"ps", &RunPs},
   {"dmesg", &RunDmesg},
   {"loglevel", &RunLogLevel},
+  {"persist", &RunPersist},
   {"mkdir", &RunMkdir},
   {"rm", &RunRm},
   {"mv", &RunMv},
@@ -497,7 +586,7 @@ constexpr gemapi::usize kCommandCount =
   sizeof(kCommands) / sizeof(kCommands[0]);
 
 CommandResult RunHelp(const char* /*args*/, gemapi::usize /*args_length*/) {
-  char text[128];
+  char text[192];
   gemapi::usize cursor = append_text(text, sizeof(text), 0, "commands: ");
   for (gemapi::usize index = 0; index < kCommandCount; ++index) {
     if (index != 0U) {

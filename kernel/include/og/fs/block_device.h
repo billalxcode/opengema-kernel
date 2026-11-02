@@ -23,6 +23,9 @@ struct BlockDevice {
   uint64_t sector_offset;
   // Optional. Null for read-only volumes.
   WriteFn write = nullptr;
+  // Optional. Flushes the device write cache.
+  using FlushFn = Status (*)(void* context);
+  FlushFn flush = nullptr;
 };
 
 }  // namespace og::fs

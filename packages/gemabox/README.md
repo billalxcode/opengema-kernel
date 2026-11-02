@@ -37,16 +37,20 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
    seek, read, lalu cetak `write ok`.
 8. Mode `shell`: prompt `gemabox>`, baca input UART dan keyboard,
    jalankan `help`, `echo`, `cat`, `ls`, `clear`, `acpi`, `uptime`,
-   `sleep`, `ps`, `dmesg`, `loglevel`, `mkdir`, `rm`, `mv`, `halt`,
-   `shutdown`, dan `reboot`.
+   `sleep`, `ps`, `dmesg`, `loglevel`, `persist`, `mkdir`, `rm`, `mv`,
+   `halt`, `shutdown`, dan `reboot`.
 9. Command di luar applet dicari di `/commands/<name>`, lalu
    `/applications/<name>/<name>`.
 10. `acpi` membaca ringkasan tabel dari `/proc/acpi`. `uptime` mencetak
     waktu sejak boot, `sleep` menunggu dalam milidetik, `ps`
     menampilkan daftar proses dari `/proc/processes`, `dmesg`
     membaca ring log kernel dari `/proc/dmesg`, dan `loglevel`
-    menampilkan atau mengubah filter level log. `mkdir`, `rm`, dan
-    `mv` mengubah isi filesystem writable. `halt`
+    menampilkan atau mengubah filter level log. `persist write` dan
+    `persist read` menguji berkas `/volumes/boot/persist.bin`, sedangkan
+    `persist create` dan `persist read2` menguji pembuatan
+    `/volumes/boot/persist2.bin`. `persist mkdir` membuat
+    `/volumes/boot/testdir`.
+    `mkdir`, `rm`, dan `mv` mengubah isi filesystem writable. `halt`
     menghentikan shell dan init sehingga kernel menyelesaikan self test
     lalu berhenti. `shutdown` dan `reboot` memakai ACPI/PSCI untuk
     mematikan atau me-reboot mesin.
@@ -63,7 +67,7 @@ child ok
 spawn ok
 write ok
 gemabox> help
-commands: help, echo, cat, ls, clear, acpi, uptime, sleep, ps, dmesg, loglevel, mkdir, rm, mv, halt, shutdown, reboot
+commands: help, echo, cat, ls, clear, acpi, uptime, sleep, ps, dmesg, loglevel, persist, mkdir, rm, mv, halt, shutdown, reboot
 gemabox> acpi
 ACPI revision 2
 gemabox> uptime
@@ -79,6 +83,8 @@ kernel: kmain entered
 ...
 gemabox> loglevel
 loglevel: info (2)
+gemabox> persist write
+persist: write ok
 gemabox> mkdir /tmp/demo
 gemabox> mv /tmp/demo /tmp/demo2
 gemabox> rm /tmp/demo2

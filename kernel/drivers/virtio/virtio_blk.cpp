@@ -17,6 +17,7 @@ constexpr uint64_t kRequestMemorySize = 8192;
 
 constexpr uint32_t kRequestTypeIn = 0;
 constexpr uint32_t kRequestTypeOut = 1;
+constexpr uint32_t kRequestTypeFlush = 4;
 
 constexpr uint16_t kVirtioDeviceIdLegacyBlock = 0x1001;
 constexpr uint16_t kVirtioDeviceIdModernBlock = 0x1042;
@@ -185,6 +186,38 @@ Status Blk::write(uint64_t sector,
   };
 
   Status status = queue_.submit(buffers, 3);
+  if (IsErr(status)) {
+    return status;
+  }
+  status = queue_.wait();
+  if (IsErr(status)) {
+    return status;
+  }
+  return request_base[kRequestStatusOffset] == 0U ? Status::kOk
+                                                  : Status::kIoError;
+}
+
+Status Blk::flush() noexcept {
+  if (!ready_) {
+    return Status::kNotInit;
+  }
+
+  arch::aarch64::LockGuard<arch::aarch64::IrqSpinlock> guard(lock_);
+  auto* request_base = static_cast<uint8_t*>(request_memory_.cpu_address);
+  auto* header = reinterpret_cast<RequestHeader*>(request_base);
+  header->type = kRequestTypeFlush;
+  header->reserved = 0;
+  header->sector = 0;
+  request_base[kRequestStatusOffset] = 0xFFU;
+
+  const QueueBuffer buffers[2] = {
+    QueueBuffer{request_base, request_memory_.device_address,
+                static_cast<uint32_t>(kRequestHeaderSize), false},
+    QueueBuffer{request_base + kRequestStatusOffset,
+                request_memory_.device_address + kRequestStatusOffset, 1, true},
+  };
+
+  Status status = queue_.submit(buffers, 2);
   if (IsErr(status)) {
     return status;
   }

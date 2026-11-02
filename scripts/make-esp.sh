@@ -37,6 +37,7 @@ if [ -n \"\$LOOP\" ]; then
   mount \"\$LOOP\" /mnt/esp
   mkdir -p /mnt/esp/EFI/BOOT
   cp esp/EFI/BOOT/BOOTAA64.EFI /mnt/esp/EFI/BOOT/
+  dd if=/dev/zero of=/mnt/esp/persist.bin bs=4096 count=1 status=none
   printf '%s\r\n' 'FS0:\EFI\BOOT\BOOTAA64.EFI' > /mnt/esp/startup.nsh
   umount /mnt/esp
   losetup -d \"\$LOOP\" || true
@@ -47,6 +48,8 @@ else
   mmd -i esp.img@@\$OFFSET1 ::/EFI
   mmd -i esp.img@@\$OFFSET1 ::/EFI/BOOT
   mcopy -i esp.img@@\$OFFSET1 esp/EFI/BOOT/BOOTAA64.EFI ::/EFI/BOOT/BOOTAA64.EFI
+  dd if=/dev/zero of=/tmp/persist.bin bs=4096 count=1 status=none
+  mcopy -i esp.img@@\$OFFSET1 /tmp/persist.bin ::/persist.bin
   printf '%s\r\n' 'FS0:\EFI\BOOT\BOOTAA64.EFI' > /tmp/startup.nsh
   mcopy -i esp.img@@\$OFFSET1 /tmp/startup.nsh ::/startup.nsh
   mdir -i esp.img@@\$OFFSET1 ::/EFI/BOOT
