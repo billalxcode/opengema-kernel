@@ -400,6 +400,7 @@ CommandResult RunPersist(const char* args, gemapi::usize args_length) {
   char path[96];
   char path2[96];
   char path3[96];
+  char path4[96];
   gemapi::usize cursor =
     append_text(path, sizeof(path), 0, gemapi::paths::kBootVolume);
   cursor = append_text(path, sizeof(path), cursor, "/persist.bin");
@@ -416,6 +417,12 @@ CommandResult RunPersist(const char* args, gemapi::usize args_length) {
   cursor = append_text(path3, sizeof(path3), 0, gemapi::paths::kBootVolume);
   cursor = append_text(path3, sizeof(path3), cursor, "/testdir");
   if (!finish_path(path3, sizeof(path3), cursor)) {
+    gemapi::io::write("persist: path too long\n");
+    return CommandResult::kContinue;
+  }
+  cursor = append_text(path4, sizeof(path4), 0, gemapi::paths::kBootVolume);
+  cursor = append_text(path4, sizeof(path4), cursor, "/renamed.bin");
+  if (!finish_path(path4, sizeof(path4), cursor)) {
     gemapi::io::write("persist: path too long\n");
     return CommandResult::kContinue;
   }
@@ -477,8 +484,61 @@ CommandResult RunPersist(const char* args, gemapi::usize args_length) {
     return CommandResult::kContinue;
   }
 
+  if (text_equals(args, args_length, "delete")) {
+    const auto info = gemapi::fs::stat(path3);
+    if (!info) {
+      gemapi::io::write("persist: delete failed\n");
+      return CommandResult::kContinue;
+    }
+    const gemapi::Status status =
+      info.value().kind == gemapi::fs::Kind::directory
+        ? gemapi::fs::rmdir(path3)
+        : gemapi::fs::unlink(path3);
+    if (status != gemapi::Status::ok) {
+      gemapi::io::write("persist: delete failed\n");
+      return CommandResult::kContinue;
+    }
+    gemapi::io::write("persist: delete ok\n");
+    return CommandResult::kContinue;
+  }
+
+  if (text_equals(args, args_length, "rename")) {
+    if (gemapi::fs::rename(path2, path4) != gemapi::Status::ok) {
+      gemapi::io::write("persist: rename failed\n");
+      return CommandResult::kContinue;
+    }
+    gemapi::io::write("persist: rename ok\n");
+    return CommandResult::kContinue;
+  }
+
+  if (text_equals(args, args_length, "truncate")) {
+    auto file = gemapi::fs::File::open(
+      path, gemapi::fs::kOpenWrite | gemapi::fs::kOpenTruncate);
+    if (!file) {
+      gemapi::io::write("persist: truncate failed\n");
+      return CommandResult::kContinue;
+    }
+    const auto info = gemapi::fs::stat(path);
+    if (!info || info.value().size != 0U) {
+      gemapi::io::write("persist: truncate failed\n");
+      return CommandResult::kContinue;
+    }
+    gemapi::io::write("persist: truncate ok\n");
+    return CommandResult::kContinue;
+  }
+
+  if (text_equals(args, args_length, "empty")) {
+    const auto info = gemapi::fs::stat(path);
+    if (!info || info.value().size != 0U) {
+      gemapi::io::write("persist: empty failed\n");
+      return CommandResult::kContinue;
+    }
+    gemapi::io::write("persist: empty ok\n");
+    return CommandResult::kContinue;
+  }
+
   gemapi::io::write(
-    "persist: usage: persist write|read|create|read2|mkdir\n");
+    "persist: usage: persist write|read|create|read2|mkdir|delete|rename|truncate|empty\n");
   return CommandResult::kContinue;
 }
 

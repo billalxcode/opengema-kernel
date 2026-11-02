@@ -360,4 +360,21 @@ Status FsRename(const char* old_path, const char* new_path) noexcept {
     old_directory, node, new_directory, new_parent.value().name);
 }
 
+Status FsTruncate(const char* path, uint64_t size) noexcept {
+  if (path == nullptr) {
+    return Status::kInvalidArg;
+  }
+  const Result<Node*> node = FsResolve(path);
+  if (node.is_err()) {
+    return node.status();
+  }
+  if (node.value()->type != NodeType::kFile) {
+    return Status::kInvalidArg;
+  }
+  if (node.value()->ops == nullptr || node.value()->ops->truncate == nullptr) {
+    return Status::kUnsupported;
+  }
+  return node.value()->ops->truncate(node.value(), size);
+}
+
 }  // namespace og::fs

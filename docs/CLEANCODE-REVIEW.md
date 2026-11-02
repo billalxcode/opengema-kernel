@@ -249,9 +249,10 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 - Test loglevel: filter runtime bisa dibaca dan diubah dari shell.
 - Verifikasi manual block write: baca, tulis pola, baca ulang, lalu pulihkan
   sector terakhir pada salinan `esp.img`.
-- Test persistensi: `persist write`/`create`/`mkdir` lalu reboot dan
-  `persist read`/`read2` dari salinan image yang sama tanpa cache
-  `writethrough`, sehingga flush virtio-blk ikut teruji.
+- Test persistensi: `persist write`/`create`/`mkdir`/`delete`/`rename`/
+  `truncate` lalu reboot dan `persist read`/`read2`/`empty` dari salinan
+  image yang sama tanpa cache `writethrough`, sehingga flush virtio-blk
+  ikut teruji.
 
 Verifikasi branch `dev`:
 

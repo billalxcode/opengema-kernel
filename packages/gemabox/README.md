@@ -48,8 +48,9 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
     menampilkan atau mengubah filter level log. `persist write` dan
     `persist read` menguji berkas `/volumes/boot/persist.bin`, sedangkan
     `persist create` dan `persist read2` menguji pembuatan
-    `/volumes/boot/persist2.bin`. `persist mkdir` membuat
-    `/volumes/boot/testdir`.
+    `/volumes/boot/persist2.bin`. `persist mkdir`, `persist delete`,
+    `persist rename`, `persist truncate`, dan `persist empty` menguji
+    directory, rename, dan truncate di `/volumes/boot`.
     `mkdir`, `rm`, dan `mv` mengubah isi filesystem writable. `halt`
     menghentikan shell dan init sehingga kernel menyelesaikan self test
     lalu berhenti. `shutdown` dan `reboot` memakai ACPI/PSCI untuk

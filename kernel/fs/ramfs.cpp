@@ -99,6 +99,27 @@ Status FileWrite(Node* node, uint64_t offset, std::span<const uint8_t> buffer,
   return Status::kOk;
 }
 
+Status FileTruncate(Node* node, uint64_t size) noexcept {
+  if (node == nullptr) {
+    return Status::kInvalidArg;
+  }
+  RamNode* file = NodeOf(node);
+  if (file == nullptr) {
+    return Status::kNotInit;
+  }
+  if (size > file->size) {
+    return Status::kInvalidArg;
+  }
+  if (size == 0U && file->data != nullptr) {
+    (void)mem::HeapFree(file->data);
+    file->data = nullptr;
+    file->capacity = 0;
+  }
+  file->size = size;
+  file->node.size = size;
+  return Status::kOk;
+}
+
 Status DirLookup(Node* directory, const char* name, Node** out) noexcept {
   if (out == nullptr) {
     return Status::kInvalidArg;
@@ -264,7 +285,7 @@ Status DirRename(Node* directory, Node* node, Node* new_directory,
 }
 
 const NodeOps kFileOps{nullptr, &FileRead, &FileWrite, nullptr, nullptr,
-                       nullptr, nullptr};
+                       nullptr, nullptr, &FileTruncate};
 const NodeOps kDirOps{&DirLookup, nullptr, nullptr, &DirIterate, &DirCreate,
                       &DirRemove, &DirRename};
 

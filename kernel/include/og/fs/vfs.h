@@ -39,6 +39,7 @@ struct NodeOps {
   Status (*remove)(Node* directory, Node* node) noexcept = nullptr;
   Status (*rename)(Node* directory, Node* node, Node* new_directory,
                    const char* new_name) noexcept = nullptr;
+  Status (*truncate)(Node* node, uint64_t size) noexcept = nullptr;
 };
 
 struct Node {
@@ -107,5 +108,6 @@ struct FileTable {
 [[nodiscard]] Status FsRemove(const char* path, NodeType type) noexcept;
 [[nodiscard]] Status FsRename(const char* old_path,
                               const char* new_path) noexcept;
+[[nodiscard]] Status FsTruncate(const char* path, uint64_t size) noexcept;
 
 }  // namespace og::fs

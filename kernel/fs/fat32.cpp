@@ -53,6 +53,11 @@ struct ParsedEntry {
   uint32_t first_cluster;
 };
 
+struct EntryLocation {
+  uint32_t cluster;
+  uint32_t offset;
+};
+
 struct Visitor {
   bool (*visit)(void* context, const DirEntry& entry, uint32_t first_cluster) noexcept;
   void* context;
@@ -69,15 +74,22 @@ Status FileRead(Node* node, uint64_t offset, std::span<uint8_t> buffer,
                 uint64_t& out_read) noexcept;
 Status FileWrite(Node* node, uint64_t offset, std::span<const uint8_t> buffer,
                  uint64_t& out_written) noexcept;
+Status FileTruncate(Node* node, uint64_t size) noexcept;
 Status DirCreate(Node* directory, const char* name, NodeType type,
                  Node** out) noexcept;
+Status DirRemove(Node* directory, Node* node) noexcept;
+Status DirRename(Node* directory, Node* node, Node* new_directory,
+                 const char* new_name) noexcept;
 [[nodiscard]] Result<bool> ParseEntry(const uint8_t* raw, char* long_name,
                                       bool& long_name_active,
                                       ParsedEntry& out) noexcept;
+[[nodiscard]] Result<EntryLocation> FindEntry(FatNode* directory,
+                                              const char* name) noexcept;
 
-const NodeOps kFileOps{nullptr, &FileRead, &FileWrite, nullptr};
+const NodeOps kFileOps{nullptr, &FileRead, &FileWrite, nullptr, nullptr,
+                       nullptr, nullptr, &FileTruncate};
 const NodeOps kDirectoryOps{&Lookup, nullptr, nullptr, &IterateDirectory,
-                            &DirCreate};
+                            &DirCreate, &DirRemove, &DirRename};
 
 [[nodiscard]] char ToUpper(char value) noexcept {
   if (value >= 'a' && value <= 'z') {
@@ -590,6 +602,153 @@ Status DirCreate(Node* directory, const char* name, NodeType type,
   return Status::kNoMem;
 }
 
+[[nodiscard]] bool DirectoryEmpty(FatNode* directory) noexcept {
+  if (directory == nullptr || !ValidCluster(directory->first_cluster)) {
+    return true;
+  }
+  uint32_t cluster = directory->first_cluster;
+  uint32_t guard = 0;
+  while (ValidCluster(cluster)) {
+    const Status status = ReadCluster(cluster, g_volume.cluster_buffer);
+    if (IsErr(status)) {
+      return false;
+    }
+    for (uint32_t offset = 0; (offset + 32U) <= g_volume.cluster_bytes;
+         offset += 32U) {
+      const uint8_t* entry = g_volume.cluster_buffer + offset;
+      if (entry[0] == 0x00U) {
+        return true;
+      }
+      if (entry[0] == 0xE5U) {
+        continue;
+      }
+      if (entry[0] == '.' &&
+          (entry[1] == ' ' || (entry[1] == '.' && entry[2] == ' '))) {
+        continue;
+      }
+      return false;
+    }
+    const Result<uint32_t> next = NextCluster(cluster);
+    if (next.is_err() || next.value() == kClusterEnd) {
+      return true;
+    }
+    cluster = next.value();
+    ++guard;
+    if (guard > g_volume.total_clusters) {
+      return false;
+    }
+  }
+  return true;
+}
+
+[[nodiscard]] Status FreeChain(FatNode* node) noexcept {
+  if (node == nullptr) {
+    return Status::kInvalidArg;
+  }
+  uint32_t cluster = node->first_cluster;
+  uint32_t guard = 0;
+  while (ValidCluster(cluster)) {
+    const Result<uint32_t> next = NextCluster(cluster);
+    if (next.is_err()) {
+      return next.status();
+    }
+    const Status status = SetFatEntry(cluster, 0);
+    if (IsErr(status)) {
+      return status;
+    }
+    if (next.value() == kClusterEnd) {
+      break;
+    }
+    cluster = next.value();
+    ++guard;
+    if (guard > g_volume.total_clusters) {
+      return Status::kIoError;
+    }
+  }
+  node->first_cluster = 0;
+  node->node.size = 0;
+  return Status::kOk;
+}
+
+Status DirRemove(Node* directory, Node* node) noexcept {
+  if (directory == nullptr || node == nullptr) {
+    return Status::kInvalidArg;
+  }
+  auto* parent = reinterpret_cast<FatNode*>(directory);
+  auto* target = reinterpret_cast<FatNode*>(node);
+  const Result<EntryLocation> location = FindEntry(parent, target->name);
+  if (location.is_err()) {
+    return location.status();
+  }
+  if (target->node.type == NodeType::kDirectory &&
+      !DirectoryEmpty(target)) {
+    return Status::kBusy;
+  }
+  Status status = FreeChain(target);
+  if (IsErr(status)) {
+    return status;
+  }
+  status = ReadCluster(location.value().cluster, g_volume.cluster_buffer);
+  if (IsErr(status)) {
+    return status;
+  }
+  g_volume.cluster_buffer[location.value().offset] = 0xE5U;
+  status = WriteCluster(location.value().cluster, g_volume.cluster_buffer);
+  if (IsErr(status)) {
+    return status;
+  }
+  return FlushVolume();
+}
+
+Status DirRename(Node* directory, Node* node, Node* new_directory,
+                 const char* new_name) noexcept {
+  if (directory == nullptr || node == nullptr || new_directory == nullptr ||
+      new_name == nullptr || new_name[0] == '\0') {
+    return Status::kInvalidArg;
+  }
+  if (directory != new_directory) {
+    return Status::kUnsupported;
+  }
+  auto* parent = reinterpret_cast<FatNode*>(directory);
+  auto* target = reinterpret_cast<FatNode*>(node);
+  const Result<EntryLocation> location = FindEntry(parent, target->name);
+  if (location.is_err()) {
+    return location.status();
+  }
+  const Result<EntryLocation> existing = FindEntry(parent, new_name);
+  if (existing.is_ok()) {
+    return Status::kExists;
+  }
+  if (existing.status() != Status::kNotFound) {
+    return existing.status();
+  }
+
+  uint8_t entry[32];
+  Status status = BuildShortEntry(new_name, entry);
+  if (IsErr(status)) {
+    return status;
+  }
+  status = ReadCluster(location.value().cluster, g_volume.cluster_buffer);
+  if (IsErr(status)) {
+    return status;
+  }
+  mem::Copy(g_volume.cluster_buffer + location.value().offset, entry, 11U);
+  status = WriteCluster(location.value().cluster, g_volume.cluster_buffer);
+  if (IsErr(status)) {
+    return status;
+  }
+  status = FlushVolume();
+  if (IsErr(status)) {
+    return status;
+  }
+  const std::size_t length = mem::Length(new_name);
+  if (length >= kMaxName) {
+    return Status::kInvalidArg;
+  }
+  mem::Copy(target->name, new_name, length + 1U);
+  return Status::kOk;
+}
+
 void BuildShortName(const uint8_t* entry, char* out) noexcept {
   std::size_t length = 0;
   for (uint32_t index = 0; index < 8U; ++index) {
@@ -701,6 +860,55 @@ void AccumulateLongName(const uint8_t* entry, char* text, bool& active) noexcept
                      ? NodeType::kDirectory
                      : NodeType::kFile;
   return Result<bool>::Ok(true);
+}
+
+[[nodiscard]] Result<EntryLocation> FindEntry(FatNode* directory,
+                                              const char* name) noexcept {
+  if (directory == nullptr || name == nullptr) {
+    return Result<EntryLocation>::Err(Status::kInvalidArg);
+  }
+  uint32_t cluster = directory->first_cluster;
+  uint32_t guard = 0;
+  char long_name[kMaxName];
+  mem::Zero(long_name, sizeof(long_name));
+  bool long_name_active = false;
+
+  while (ValidCluster(cluster)) {
+    const Status read_status = ReadCluster(cluster, g_volume.cluster_buffer);
+    if (IsErr(read_status)) {
+      return Result<EntryLocation>::Err(read_status);
+    }
+    for (uint32_t offset = 0; (offset + 32U) <= g_volume.cluster_bytes;
+         offset += 32U) {
+      const uint8_t* entry = g_volume.cluster_buffer + offset;
+      if (entry[0] == 0x00U) {
+        return Result<EntryLocation>::Err(Status::kNotFound);
+      }
+      ParsedEntry parsed{};
+      const Result<bool> emit =
+        ParseEntry(entry, long_name, long_name_active, parsed);
+      if (emit.is_err()) {
+        return Result<EntryLocation>::Err(emit.status());
+      }
+      if (emit.value() && NameEquals(parsed.entry.name, name)) {
+        return Result<EntryLocation>::Ok(
+          EntryLocation{cluster, offset});
+      }
+    }
+    const Result<uint32_t> next = NextCluster(cluster);
+    if (next.is_err()) {
+      return Result<EntryLocation>::Err(next.status());
+    }
+    if (next.value() == kClusterEnd) {
+      break;
+    }
+    cluster = next.value();
+    ++guard;
+    if (guard > g_volume.total_clusters) {
+      return Result<EntryLocation>::Err(Status::kIoError);
+    }
+  }
+  return Result<EntryLocation>::Err(Status::kNotFound);
 }
 
 [[nodiscard]] Status WalkDirectory(Node* directory, const Visitor& visitor) noexcept {
@@ -977,6 +1185,25 @@ Status FileWrite(Node* node, uint64_t offset,
   const Status update = UpdateDirectoryEntry(fat_node);
   if (IsErr(update)) {
     return update;
+  }
+  return FlushVolume();
+}
+
+Status FileTruncate(Node* node, uint64_t size) noexcept {
+  if (node == nullptr) {
+    return Status::kInvalidArg;
+  }
+  if (size != 0U) {
+    return Status::kUnsupported;
+  }
+  auto* fat_node = reinterpret_cast<FatNode*>(node);
+  Status status = FreeChain(fat_node);
+  if (IsErr(status)) {
+    return status;
+  }
+  status = UpdateDirectoryEntry(fat_node);
+  if (IsErr(status)) {
+    return status;
   }
   return FlushVolume();
 }
