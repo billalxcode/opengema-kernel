@@ -472,6 +472,135 @@ Status WriteSectors(uint64_t sector, const void* buffer, uint32_t count) noexcep
   return Status::kOk;
 }
 
+[[nodiscard]] uint8_t ShortNameChecksum(const uint8_t* entry) noexcept {
+  uint8_t sum = 0;
+  for (uint32_t index = 0; index < 11U; ++index) {
+    sum = static_cast<uint8_t>(((sum & 1U) << 7U) + (sum >> 1U) + entry[index]);
+  }
+  return sum;
+}
+
+[[nodiscard]] Status BuildShortAlias(const char* name, uint32_t index,
+                                     uint8_t* entry) noexcept {
+  if (name == nullptr || entry == nullptr || index == 0U || index > 9U) {
+    return Status::kInvalidArg;
+  }
+  mem::Zero(entry, 32);
+  for (uint32_t position = 0; position < 11U; ++position) {
+    entry[position] = ' ';
+  }
+  uint32_t base_length = 0;
+  uint32_t extension_length = 0;
+  bool in_extension = false;
+  for (std::size_t position = 0; name[position] != '\0'; ++position) {
+    char value = name[position];
+    if (value == '.') {
+      in_extension = true;
+      continue;
+    }
+    if (value >= 'a' && value <= 'z') {
+      value = static_cast<char>(value - 'a' + 'A');
+    }
+    if (!((value >= 'A' && value <= 'Z') || (value >= '0' && value <= '9') ||
+          value == '_' || value == '-')) {
+      continue;
+    }
+    if (in_extension) {
+      if (extension_length < 3U) {
+        entry[8U + extension_length] = static_cast<uint8_t>(value);
+        ++extension_length;
+      }
+    } else if (base_length < 6U) {
+      entry[base_length] = static_cast<uint8_t>(value);
+      ++base_length;
+    }
+  }
+  if (base_length == 0U) {
+    return Status::kInvalidArg;
+  }
+  entry[base_length] = '~';
+  entry[base_length + 1U] = static_cast<uint8_t>('0' + index);
+  entry[11] = 0x20U;
+  return Status::kOk;
+}
+
+[[nodiscard]] bool ShortNameExists(FatNode* directory,
+                                   const uint8_t* entry) noexcept {
+  if (directory == nullptr || entry == nullptr) {
+    return false;
+  }
+  uint32_t cluster = directory->first_cluster;
+  uint32_t guard = 0;
+  while (ValidCluster(cluster)) {
+    const Status status = ReadCluster(cluster, g_volume.cluster_buffer);
+    if (IsErr(status)) {
+      return true;
+    }
+    for (uint32_t offset = 0; (offset + 32U) <= g_volume.cluster_bytes;
+         offset += 32U) {
+      const uint8_t* slot = g_volume.cluster_buffer + offset;
+      if (slot[0] == 0x00U) {
+        return false;
+      }
+      if (slot[0] == 0xE5U || slot[11] == kAttributeLongName) {
+        continue;
+      }
+      bool same = true;
+      for (uint32_t index = 0; index < 11U; ++index) {
+        if (slot[index] != entry[index]) {
+          same = false;
+          break;
+        }
+      }
+      if (same) {
+        return true;
+      }
+    }
+    const Result<uint32_t> next = NextCluster(cluster);
+    if (next.is_err() || next.value() == kClusterEnd) {
+      return false;
+    }
+    cluster = next.value();
+    ++guard;
+    if (guard > g_volume.total_clusters) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void BuildLongEntries(const char* name, uint32_t length,
+                      const uint8_t* short_entry,
+                      uint8_t entries[][32],
+                      uint32_t count) noexcept {
+  constexpr uint32_t kOffsets[13] = {1, 3, 5, 7, 9, 14, 16, 18, 20,
+                                      22, 24, 28, 30};
+  const uint8_t checksum = ShortNameChecksum(short_entry);
+  for (uint32_t sequence = count; sequence > 0U; --sequence) {
+    uint8_t* entry = entries[count - sequence];
+    mem::Zero(entry, 32);
+    entry[0] = static_cast<uint8_t>(sequence);
+    if (sequence == count) {
+      entry[0] = static_cast<uint8_t>(entry[0] | 0x40U);
+    }
+    entry[11] = kAttributeLongName;
+    entry[13] = checksum;
+    const uint32_t base = (sequence - 1U) * 13U;
+    for (uint32_t index = 0; index < 13U; ++index) {
+      const uint32_t position = base + index;
+      uint16_t code = 0xFFFFU;
+      if (position < length) {
+        code = static_cast<uint16_t>(
+          static_cast<uint8_t>(name[position]));
+      } else if (position == length) {
+        code = 0U;
+      }
+      entry[kOffsets[index]] = static_cast<uint8_t>(code & 0xFFU);
+      entry[kOffsets[index] + 1U] = static_cast<uint8_t>(code >> 8U);
+    }
+  }
+}
+
 [[nodiscard]] FatNode* AllocateNode() noexcept {
   if (g_node_count >= kMaxNodes) {
     return nullptr;
@@ -519,9 +648,33 @@ Status DirCreate(Node* directory, const char* name, NodeType type,
 
   auto* parent = reinterpret_cast<FatNode*>(directory);
   uint8_t entry[32];
+  uint8_t long_entries[3][32]{};
+  uint32_t long_count = 0;
   Status status = BuildShortEntry(name, entry);
   if (IsErr(status)) {
-    return status;
+    const std::size_t name_length = mem::Length(name);
+    if (name_length >= kMaxName) {
+      return Status::kInvalidArg;
+    }
+    long_count = static_cast<uint32_t>((name_length + 12U) / 13U);
+    if (long_count == 0U || long_count > 3U) {
+      return Status::kInvalidArg;
+    }
+    bool alias_found = false;
+    for (uint32_t index = 1U; index <= 9U; ++index) {
+      if (IsErr(BuildShortAlias(name, index, entry))) {
+        continue;
+      }
+      if (!ShortNameExists(parent, entry)) {
+        alias_found = true;
+        break;
+      }
+    }
+    if (!alias_found) {
+      return Status::kNoMem;
+    }
+    BuildLongEntries(name, static_cast<uint32_t>(name_length), entry,
+                     long_entries, long_count);
   }
 
   uint32_t child_cluster = 0;
@@ -544,6 +697,7 @@ Status DirCreate(Node* directory, const char* name, NodeType type,
     entry[11] = 0x20U;
   }
   SetEntryCluster(entry, child_cluster);
+  const uint32_t required = long_count + 1U;
   uint32_t cluster = parent->first_cluster;
   uint32_t guard = 0;
   while (ValidCluster(cluster)) {
@@ -551,13 +705,27 @@ Status DirCreate(Node* directory, const char* name, NodeType type,
     if (IsErr(status)) {
       return status;
     }
-    for (uint32_t offset = 0; (offset + 32U) <= g_volume.cluster_bytes;
+    for (uint32_t offset = 0;
+         (offset + (required * 32U)) <= g_volume.cluster_bytes;
          offset += 32U) {
-      uint8_t* slot = g_volume.cluster_buffer + offset;
-      if (slot[0] != 0x00U && slot[0] != 0xE5U) {
+      bool free_run = true;
+      for (uint32_t slot = 0; slot < required; ++slot) {
+        const uint8_t* candidate =
+          g_volume.cluster_buffer + offset + (slot * 32U);
+        if (candidate[0] != 0x00U && candidate[0] != 0xE5U) {
+          free_run = false;
+          break;
+        }
+      }
+      if (!free_run) {
         continue;
       }
-      mem::Copy(slot, entry, sizeof(entry));
+      for (uint32_t slot = 0; slot < long_count; ++slot) {
+        mem::Copy(g_volume.cluster_buffer + offset + (slot * 32U),
+                  long_entries[slot], 32U);
+      }
+      mem::Copy(g_volume.cluster_buffer + offset + (long_count * 32U),
+                entry, 32U);
       status = WriteCluster(cluster, g_volume.cluster_buffer);
       if (IsErr(status)) {
         return status;
@@ -692,6 +860,16 @@ Status DirRemove(Node* directory, Node* node) noexcept {
   if (IsErr(status)) {
     return status;
   }
+  uint32_t clear_offset = location.value().offset;
+  while (clear_offset >= 32U) {
+    uint8_t* previous =
+      g_volume.cluster_buffer + clear_offset - 32U;
+    if (previous[11] != kAttributeLongName) {
+      break;
+    }
+    previous[0] = 0xE5U;
+    clear_offset -= 32U;
+  }
   g_volume.cluster_buffer[location.value().offset] = 0xE5U;
   status = WriteCluster(location.value().cluster, g_volume.cluster_buffer);
   if (IsErr(status)) {
@@ -726,11 +904,21 @@ Status DirRename(Node* directory, Node* node, Node* new_directory,
   uint8_t entry[32];
   Status status = BuildShortEntry(new_name, entry);
   if (IsErr(status)) {
-    return status;
+    return Status::kUnsupported;
   }
   status = ReadCluster(location.value().cluster, g_volume.cluster_buffer);
   if (IsErr(status)) {
     return status;
+  }
+  uint32_t clear_offset = location.value().offset;
+  while (clear_offset >= 32U) {
+    uint8_t* previous =
+      g_volume.cluster_buffer + clear_offset - 32U;
+    if (previous[11] != kAttributeLongName) {
+      break;
+    }
+    previous[0] = 0xE5U;
+    clear_offset -= 32U;
   }
   mem::Copy(g_volume.cluster_buffer + location.value().offset, entry, 11U);
   status = WriteCluster(location.value().cluster, g_volume.cluster_buffer);

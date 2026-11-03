@@ -131,9 +131,9 @@ bisa dijalankan tanpa menyalin kode syscall.
 - [x] FS-10 FD dan open flags per proses, termasuk read/write/append.
 - [x] FS-11 Operasi directory: mkdir, rmdir, unlink, rename, lookup.
 - [x] FS-12 ramfs dinamis: node dan data dialokasikan serta dibebaskan.
-- [~] FS-13 Filesystem writable: FAT32 write, create file, mkdir, delete,
-      rename, dan truncate, termasuk alokasi/free cluster, update direktori,
-      dan flush. Long name belum.
+- [x] FS-13 Filesystem writable: FAT32 write, create file, mkdir, delete,
+      rename, truncate, long name create/read, serta cleanup entry LFN saat
+      rename/delete. Catatan: rename ke nama panjang baru belum didukung.
 - [ ] FS-14 mount/umount syscall dan mount table per proses atau global
       dengan referensi.
 - [~] FS-15 Block layer: write path, adapter, dan flush selesai;

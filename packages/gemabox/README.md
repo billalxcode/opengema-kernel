@@ -50,7 +50,9 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
     `persist create` dan `persist read2` menguji pembuatan
     `/volumes/boot/persist2.bin`. `persist mkdir`, `persist delete`,
     `persist rename`, `persist truncate`, dan `persist empty` menguji
-    directory, rename, dan truncate di `/volumes/boot`.
+    directory, rename, dan truncate. `persist long`, `persist readlong`,
+    `persist renamelong`, dan `persist deletelong` menguji nama panjang
+    beserta cleanup entry LFN.
     `mkdir`, `rm`, dan `mv` mengubah isi filesystem writable. `halt`
     menghentikan shell dan init sehingga kernel menyelesaikan self test
     lalu berhenti. `shutdown` dan `reboot` memakai ACPI/PSCI untuk

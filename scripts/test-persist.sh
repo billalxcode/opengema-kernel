@@ -59,14 +59,13 @@ run_boot() {
   return 0
 }
 
-run_boot "persist write" "persist: write ok"
-run_boot "persist create" "persist: create ok"
-run_boot "persist read" "persist: read ok"
-run_boot "persist read2" "persist: read2 ok"
-run_boot "persist mkdir" "persist: mkdir ok"
-run_boot "persist delete" "persist: delete ok"
-run_boot "persist rename" "persist: rename ok"
-run_boot "ls /volumes/boot" "RENAMED.BIN"
+run_boot $'persist write\npersist create' "persist: create ok"
+run_boot $'persist read\npersist read2' "persist: read2 ok"
+run_boot $'persist mkdir\npersist delete' "persist: delete ok"
+run_boot $'persist rename\nls /volumes/boot' "RENAMED.BIN"
 run_boot "persist truncate" "persist: truncate ok"
 run_boot "persist empty" "persist: empty ok"
+run_boot "persist long" "persist: long ok"
+run_boot "persist readlong" "persist: readlong ok"
+run_boot $'persist renamelong\npersist deletelong' "persist: deletelong ok"
 echo "persist probe: OK"

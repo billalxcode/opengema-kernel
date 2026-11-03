@@ -401,6 +401,8 @@ CommandResult RunPersist(const char* args, gemapi::usize args_length) {
   char path2[96];
   char path3[96];
   char path4[96];
+  char path5[96];
+  char path6[96];
   gemapi::usize cursor =
     append_text(path, sizeof(path), 0, gemapi::paths::kBootVolume);
   cursor = append_text(path, sizeof(path), cursor, "/persist.bin");
@@ -423,6 +425,19 @@ CommandResult RunPersist(const char* args, gemapi::usize args_length) {
   cursor = append_text(path4, sizeof(path4), 0, gemapi::paths::kBootVolume);
   cursor = append_text(path4, sizeof(path4), cursor, "/renamed.bin");
   if (!finish_path(path4, sizeof(path4), cursor)) {
+    gemapi::io::write("persist: path too long\n");
+    return CommandResult::kContinue;
+  }
+  cursor = append_text(path5, sizeof(path5), 0, gemapi::paths::kBootVolume);
+  cursor = append_text(path5, sizeof(path5), cursor,
+                       "/persist long name.txt");
+  if (!finish_path(path5, sizeof(path5), cursor)) {
+    gemapi::io::write("persist: path too long\n");
+    return CommandResult::kContinue;
+  }
+  cursor = append_text(path6, sizeof(path6), 0, gemapi::paths::kBootVolume);
+  cursor = append_text(path6, sizeof(path6), cursor, "/long2.txt");
+  if (!finish_path(path6, sizeof(path6), cursor)) {
     gemapi::io::write("persist: path too long\n");
     return CommandResult::kContinue;
   }
@@ -537,8 +552,62 @@ CommandResult RunPersist(const char* args, gemapi::usize args_length) {
     return CommandResult::kContinue;
   }
 
+  if (text_equals(args, args_length, "long")) {
+    auto file = gemapi::fs::File::open(
+      path5, gemapi::fs::kOpenWrite | gemapi::fs::kOpenCreate);
+    if (!file) {
+      gemapi::io::write("persist: long failed\n");
+      return CommandResult::kContinue;
+    }
+    if (file.value().write(kMessage, sizeof(kMessage) - 1U) !=
+        gemapi::Status::ok) {
+      gemapi::io::write("persist: long failed\n");
+      return CommandResult::kContinue;
+    }
+    gemapi::io::write("persist: long ok\n");
+    return CommandResult::kContinue;
+  }
+
+  if (text_equals(args, args_length, "readlong")) {
+    auto file = gemapi::fs::File::open(path5);
+    if (!file) {
+      gemapi::io::write("persist: readlong failed\n");
+      return CommandResult::kContinue;
+    }
+    char buffer[16]{};
+    auto count = file.value().read(buffer, sizeof(buffer));
+    if (!count || count.value() < (sizeof(kMessage) - 1U) ||
+        !text_equals(buffer, sizeof(kMessage) - 1U, kMessage)) {
+      gemapi::io::write("persist: readlong failed\n");
+      return CommandResult::kContinue;
+    }
+    gemapi::io::write("persist: readlong ok\n");
+    return CommandResult::kContinue;
+  }
+
+  if (text_equals(args, args_length, "renamelong")) {
+    if (gemapi::fs::rename(path5, path6) != gemapi::Status::ok ||
+        gemapi::fs::stat(path5) ||
+        !gemapi::fs::stat(path6)) {
+      gemapi::io::write("persist: renamelong failed\n");
+      return CommandResult::kContinue;
+    }
+    gemapi::io::write("persist: renamelong ok\n");
+    return CommandResult::kContinue;
+  }
+
+  if (text_equals(args, args_length, "deletelong")) {
+    if (gemapi::fs::unlink(path6) != gemapi::Status::ok ||
+        gemapi::fs::stat(path6)) {
+      gemapi::io::write("persist: deletelong failed\n");
+      return CommandResult::kContinue;
+    }
+    gemapi::io::write("persist: deletelong ok\n");
+    return CommandResult::kContinue;
+  }
+
   gemapi::io::write(
-    "persist: usage: persist write|read|create|read2|mkdir|delete|rename|truncate|empty\n");
+    "persist: usage: persist write|read|create|read2|mkdir|delete|rename|truncate|empty|long|readlong|renamelong|deletelong\n");
   return CommandResult::kContinue;
 }
 
