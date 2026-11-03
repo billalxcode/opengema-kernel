@@ -149,30 +149,37 @@ void trim(const char*& text, gemapi::usize& length) {
   }
 }
 
-bool split_two(const char* args, gemapi::usize args_length,
-               const char*& first, gemapi::usize& first_length,
-               const char*& second, gemapi::usize& second_length) {
-  trim(args, args_length);
-  if (args_length == 0U) {
+bool next_token(const char*& cursor, const char* end, char* out,
+                gemapi::usize capacity, gemapi::usize& length) {
+  while (cursor < end && *cursor == ' ') {
+    ++cursor;
+  }
+  if (cursor >= end) {
     return false;
   }
-  gemapi::usize split = 0;
-  while (split < args_length && args[split] != ' ') {
-    ++split;
+  bool quoted = false;
+  gemapi::usize count = 0;
+  while (cursor < end) {
+    const char value = *cursor;
+    if (value == '"') {
+      quoted = !quoted;
+      ++cursor;
+      continue;
+    }
+    if (!quoted && value == ' ') {
+      break;
+    }
+    if ((count + 1U) < capacity) {
+      out[count] = value;
+      ++count;
+    }
+    ++cursor;
   }
-  if (split >= args_length) {
+  if (quoted) {
     return false;
   }
-  first = args;
-  first_length = split;
-  const char* rest = args + split;
-  gemapi::usize rest_length = args_length - split;
-  trim(rest, rest_length);
-  if (rest_length == 0U) {
-    return false;
-  }
-  second = rest;
-  second_length = rest_length;
+  out[count] = '\0';
+  length = count;
   return true;
 }
 
@@ -395,6 +402,9 @@ CommandResult RunLogLevel(const char* args, gemapi::usize args_length) {
   return CommandResult::kContinue;
 }
 
+// Diagnostic command for FAT32 write and persistence tests. This is not a
+// production shell feature: move it to a test application once the shell
+// covers quoted paths and file creation directly.
 CommandResult RunPersist(const char* args, gemapi::usize args_length) {
   trim(args, args_length);
   char path[96];
@@ -628,32 +638,52 @@ CommandResult RunSleep(const char* args, gemapi::usize args_length) {
 }
 
 CommandResult RunMkdir(const char* args, gemapi::usize args_length) {
-  trim(args, args_length);
-  if (args_length == 0U) {
-    gemapi::io::write("mkdir: missing path\n");
+  char path[128];
+  gemapi::usize length = 0;
+  const char* cursor = args;
+  const char* end = args + args_length;
+  if (!next_token(cursor, end, path, sizeof(path), length) ||
+      length >= (sizeof(path) - 1U)) {
+    gemapi::io::write("mkdir: missing or invalid path\n");
     return CommandResult::kContinue;
   }
-  if (gemapi::fs::mkdir(args) != gemapi::Status::ok) {
+  char extra[2];
+  gemapi::usize extra_length = 0;
+  if (next_token(cursor, end, extra, sizeof(extra), extra_length)) {
+    gemapi::io::write("mkdir: usage: mkdir <path>\n");
+    return CommandResult::kContinue;
+  }
+  if (gemapi::fs::mkdir(path) != gemapi::Status::ok) {
     gemapi::io::write("mkdir: failed\n");
   }
   return CommandResult::kContinue;
 }
 
 CommandResult RunRm(const char* args, gemapi::usize args_length) {
-  trim(args, args_length);
-  if (args_length == 0U) {
-    gemapi::io::write("rm: missing path\n");
+  char path[128];
+  gemapi::usize length = 0;
+  const char* cursor = args;
+  const char* end = args + args_length;
+  if (!next_token(cursor, end, path, sizeof(path), length) ||
+      length >= (sizeof(path) - 1U)) {
+    gemapi::io::write("rm: missing or invalid path\n");
     return CommandResult::kContinue;
   }
-  const auto info = gemapi::fs::stat(args);
+  char extra[2];
+  gemapi::usize extra_length = 0;
+  if (next_token(cursor, end, extra, sizeof(extra), extra_length)) {
+    gemapi::io::write("rm: usage: rm <path>\n");
+    return CommandResult::kContinue;
+  }
+  const auto info = gemapi::fs::stat(path);
   if (!info) {
     gemapi::io::write("rm: failed\n");
     return CommandResult::kContinue;
   }
   const gemapi::Status status =
     info.value().kind == gemapi::fs::Kind::directory
-      ? gemapi::fs::rmdir(args)
-      : gemapi::fs::unlink(args);
+      ? gemapi::fs::rmdir(path)
+      : gemapi::fs::unlink(path);
   if (status != gemapi::Status::ok) {
     gemapi::io::write("rm: failed\n");
   }
@@ -661,30 +691,26 @@ CommandResult RunRm(const char* args, gemapi::usize args_length) {
 }
 
 CommandResult RunMv(const char* args, gemapi::usize args_length) {
-  const char* old_path = nullptr;
-  const char* new_path = nullptr;
+  char old_path[128];
+  char new_path[128];
   gemapi::usize old_length = 0;
   gemapi::usize new_length = 0;
-  if (!split_two(args, args_length, old_path, old_length, new_path,
-                 new_length)) {
+  const char* cursor = args;
+  const char* end = args + args_length;
+  if (!next_token(cursor, end, old_path, sizeof(old_path), old_length) ||
+      !next_token(cursor, end, new_path, sizeof(new_path), new_length) ||
+      old_length >= (sizeof(old_path) - 1U) ||
+      new_length >= (sizeof(new_path) - 1U)) {
     gemapi::io::write("mv: usage: mv <old> <new>\n");
     return CommandResult::kContinue;
   }
-  char old_buffer[128];
-  char new_buffer[128];
-  if (old_length >= sizeof(old_buffer) || new_length >= sizeof(new_buffer)) {
-    gemapi::io::write("mv: path too long\n");
+  char extra[2];
+  gemapi::usize extra_length = 0;
+  if (next_token(cursor, end, extra, sizeof(extra), extra_length)) {
+    gemapi::io::write("mv: usage: mv <old> <new>\n");
     return CommandResult::kContinue;
   }
-  for (gemapi::usize index = 0; index < old_length; ++index) {
-    old_buffer[index] = old_path[index];
-  }
-  old_buffer[old_length] = '\0';
-  for (gemapi::usize index = 0; index < new_length; ++index) {
-    new_buffer[index] = new_path[index];
-  }
-  new_buffer[new_length] = '\0';
-  if (gemapi::fs::rename(old_buffer, new_buffer) != gemapi::Status::ok) {
+  if (gemapi::fs::rename(old_path, new_path) != gemapi::Status::ok) {
     gemapi::io::write("mv: failed\n");
   }
   return CommandResult::kContinue;

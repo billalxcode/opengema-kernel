@@ -150,7 +150,7 @@ def main(argv):
             if (level_seen and not fs_sent and
                     time.time() - last_data > 0.5 and
                     b"gemabox> " in buffer):
-                send_line(client, b"mkdir /tmp/d\nmv /tmp/d /tmp/e\nls /tmp\nrm /tmp/e\n")
+                send_line(client, b"mkdir /tmp/d\nmv /tmp/d /tmp/e\nls /tmp\nrm /tmp/e\nmkdir \"/tmp/quoted dir\"\nrm \"/tmp/quoted dir\"\n")
                 fs_sent = True
                 buffer.clear()
 

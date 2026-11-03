@@ -253,6 +253,8 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   `truncate`/`long`/`renamelong`/`deletelong` lalu reboot dan `persist
   read`/`read2`/`empty`/`readlong` dari salinan image yang sama tanpa cache
   `writethrough`, sehingga flush virtio-blk ikut teruji.
+- Test shell quoting: `mkdir` dan `rm` menerima path dengan spasi di dalam
+  tanda kutip ganda.
 
 Verifikasi branch `dev`:
 

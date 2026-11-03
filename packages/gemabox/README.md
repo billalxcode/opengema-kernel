@@ -53,6 +53,8 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
     directory, rename, dan truncate. `persist long`, `persist readlong`,
     `persist renamelong`, dan `persist deletelong` menguji nama panjang
     beserta cleanup entry LFN.
+11. Path dengan spasi bisa ditulis di dalam tanda kutip ganda, misalnya
+    `mkdir "/tmp/quoted dir"`.
     `mkdir`, `rm`, dan `mv` mengubah isi filesystem writable. `halt`
     menghentikan shell dan init sehingga kernel menyelesaikan self test
     lalu berhenti. `shutdown` dan `reboot` memakai ACPI/PSCI untuk
