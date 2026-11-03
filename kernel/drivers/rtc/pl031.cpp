@@ -39,4 +39,14 @@ Result<uint64_t> Pl031::read_unix_seconds() noexcept {
   return Result<uint64_t>::Ok(value.value());
 }
 
+Status Pl031::write_unix_seconds(uint64_t seconds) noexcept {
+  if (!ready_) {
+    return Status::kNotInit;
+  }
+  if (seconds > 0xFFFFFFFFULL) {
+    return Status::kInvalidArg;
+  }
+  return registers_.Write32(kDataRegister, static_cast<uint32_t>(seconds));
+}
+
 }  // namespace og::drivers::rtc

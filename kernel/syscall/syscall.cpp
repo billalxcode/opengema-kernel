@@ -115,6 +115,12 @@ constexpr uint64_t kResultError = static_cast<uint64_t>(-1);
     case kSysUmount:
       status = DoUmount(frame->x[0], result);
       break;
+    case kSysWallTime:
+      status = DoWallTime(result);
+      break;
+    case kSysSetWallTime:
+      status = DoSetWallTime(frame->x[0], result);
+      break;
     default:
       status = Status::kInvalidArg;
       break;

@@ -34,6 +34,8 @@ constexpr uint64_t kSysGetLogLevel = 24;
 constexpr uint64_t kSysSetLogLevel = 25;
 constexpr uint64_t kSysMount = 26;
 constexpr uint64_t kSysUmount = 27;
+constexpr uint64_t kSysWallTime = 28;
+constexpr uint64_t kSysSetWallTime = 29;
 
 void SyscallInit() noexcept;
 

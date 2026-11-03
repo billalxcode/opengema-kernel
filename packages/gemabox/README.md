@@ -45,12 +45,13 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
     waktu sejak boot, `sleep` menunggu dalam milidetik, `ps`
     menampilkan daftar proses dari `/proc/processes`, `dmesg`
     membaca ring log kernel dari `/proc/dmesg`, dan `loglevel`
-    menampilkan atau mengubah filter level log. `mkdir`, `rm`, dan `mv`
-    mengubah isi filesystem writable. `mount ramfs <path>` memasang ramfs
-    baru dengan referensi global, dan `umount <path>` melepas referensi
-    proses tersebut. `cat /proc/block` menampilkan nama dan kapasitas
-    device blok. Pengujian persistensi FAT32 ada di aplikasi terpisah
-    `/applications/fstest/fstest`, bukan command shell.
+    menampilkan atau mengubah filter level log. `date` mencetak waktu UTC
+    dari RTC, dan `date <unix-seconds>` menyetel RTC. `mkdir`, `rm`, dan
+    `mv` mengubah isi filesystem writable. `mount ramfs <path>` memasang
+    ramfs baru dengan referensi global, dan `umount <path>` melepas
+    referensi proses tersebut. `cat /proc/block` menampilkan nama dan
+    kapasitas device blok. Pengujian persistensi FAT32 ada di aplikasi
+    terpisah `/applications/fstest/fstest`, bukan command shell.
     `halt` menghentikan shell dan init sehingga kernel menyelesaikan self
     test lalu berhenti. `shutdown` dan `reboot` memakai ACPI/PSCI untuk
     mematikan atau me-reboot mesin.
@@ -69,7 +70,7 @@ child ok
 spawn ok
 write ok
 gemabox> help
-commands: help, echo, cat, ls, clear, acpi, uptime, sleep, ps, dmesg, loglevel, mkdir, rm, mv, mount, umount, halt, shutdown, reboot
+commands: help, echo, cat, ls, clear, acpi, uptime, date, sleep, ps, dmesg, loglevel, mkdir, rm, mv, mount, umount, halt, shutdown, reboot
 gemabox> acpi
 ACPI revision 2
 gemabox> uptime
@@ -85,6 +86,8 @@ kernel: kmain entered
 ...
 gemabox> loglevel
 loglevel: info (2)
+gemabox> date 1700000000
+2023-11-14 22:13:20 UTC
 gemabox> mkdir /tmp/demo
 gemabox> mv /tmp/demo /tmp/demo2
 gemabox> rm /tmp/demo2

@@ -65,6 +65,8 @@ def main(argv):
     dmesg_seen = False
     level_sent = False
     level_seen = False
+    date_sent = False
+    date_seen = False
     fs_sent = False
     fs_seen = False
     fs_batch = 0
@@ -108,7 +110,7 @@ def main(argv):
                 buffer.clear()
 
             if (help_sent and not help_seen and
-                    b"commands: help, echo, cat, ls, clear, acpi, uptime, sleep, ps, dmesg, loglevel, mkdir, rm, mv, mount, umount, halt, shutdown, reboot" in buffer):
+                    b"commands: help, echo, cat, ls, clear, acpi, uptime, date, sleep, ps, dmesg, loglevel, mkdir, rm, mv, mount, umount, halt, shutdown, reboot" in buffer):
                 help_seen = True
 
             if (help_seen and not acpi_sent and
@@ -163,7 +165,18 @@ def main(argv):
                     b"loglevel: info (2)" in buffer):
                 level_seen = True
 
-            if (level_seen and not fs_sent and
+            if (level_seen and not date_sent and
+                    time.time() - last_data > 0.5 and
+                    b"gemabox> " in buffer):
+                send_line(client, b"date 1700000000\ndate\n")
+                date_sent = True
+                buffer.clear()
+
+            if (date_sent and not date_seen and
+                    b"2023-11-14 22:13:" in buffer):
+                date_seen = True
+
+            if (date_seen and not fs_sent and
                     time.time() - last_data > 0.5 and
                     b"gemabox> " in buffer):
                 send_line(client, fs_batches[0])

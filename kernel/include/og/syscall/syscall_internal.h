@@ -112,4 +112,9 @@ namespace og::syscall {
 [[nodiscard]] Status DoUmount(uint64_t user_target,
                               uint64_t& result) noexcept;
 
+[[nodiscard]] Status DoWallTime(uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoSetWallTime(uint64_t seconds,
+                                   uint64_t& result) noexcept;
+
 }  // namespace og::syscall

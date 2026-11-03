@@ -17,6 +17,24 @@ Status DoTime(uint64_t& result) noexcept {
   return Status::kOk;
 }
 
+Status DoWallTime(uint64_t& result) noexcept {
+  const Result<uint64_t> seconds = time::WallTimeSeconds();
+  if (seconds.is_err()) {
+    return seconds.status();
+  }
+  result = seconds.value();
+  return Status::kOk;
+}
+
+Status DoSetWallTime(uint64_t seconds, uint64_t& result) noexcept {
+  const Status status = time::SetWallTimeSeconds(seconds);
+  if (IsErr(status)) {
+    return status;
+  }
+  result = 0;
+  return Status::kOk;
+}
+
 Status DoSleep(uint64_t milliseconds, uint64_t& result) noexcept {
   if (milliseconds > kMaxSleepMs) {
     return Status::kInvalidArg;

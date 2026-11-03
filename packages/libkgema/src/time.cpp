@@ -14,4 +14,18 @@ bool sleep_ms(u64 milliseconds) noexcept {
                           static_cast<i64>(milliseconds), 0, 0) == 0;
 }
 
+bool wall_seconds(u64& seconds) noexcept {
+  const i64 result = syscall::invoke3(syscall::kWallTime, 0, 0, 0);
+  if (result < 0) {
+    return false;
+  }
+  seconds = static_cast<u64>(result);
+  return true;
+}
+
+bool set_wall_seconds(u64 seconds) noexcept {
+  return syscall::invoke3(syscall::kSetWallTime,
+                          static_cast<i64>(seconds), 0, 0) == 0;
+}
+
 }  // namespace kgema

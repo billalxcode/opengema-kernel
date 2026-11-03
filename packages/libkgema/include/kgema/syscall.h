@@ -34,6 +34,8 @@ constexpr i64 kGetLogLevel = 24;
 constexpr i64 kSetLogLevel = 25;
 constexpr i64 kMount = 26;
 constexpr i64 kUmount = 27;
+constexpr i64 kWallTime = 28;
+constexpr i64 kSetWallTime = 29;
 
 // Number in x8, arguments in x0..x2, result in x0.
 [[nodiscard]] i64 invoke3(i64 number, i64 arg0, i64 arg1, i64 arg2) noexcept;

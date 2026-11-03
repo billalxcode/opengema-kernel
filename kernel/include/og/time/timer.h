@@ -40,4 +40,13 @@ void TimerSetTickCallback(TickCallback callback, void* context) noexcept;
                                             void* context) noexcept;
 [[nodiscard]] Status CancelTimeout(Timeout* timeout) noexcept;
 
+// Wall clock source, normally the PL031 RTC. The kernel registers it during
+// boot so syscalls do not depend on the driver directly.
+using WallClockReadFn = Result<uint64_t> (*)(void* context) noexcept;
+using WallClockWriteFn = Status (*)(void* context, uint64_t seconds) noexcept;
+void SetWallClock(WallClockReadFn read, WallClockWriteFn write,
+                  void* context) noexcept;
+[[nodiscard]] Result<uint64_t> WallTimeSeconds() noexcept;
+[[nodiscard]] Status SetWallTimeSeconds(uint64_t seconds) noexcept;
+
 }  // namespace og::time

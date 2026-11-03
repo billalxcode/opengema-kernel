@@ -166,7 +166,9 @@ reboot.
 - [ ] DRV-13d Mouse sebagai device input kedua dan hotplug.
 - [x] DRV-14 TTY input dari keyboard, bukan hanya UART.
 - [x] LOG-01 Log kernel hanya ke serial; display untuk output user dan TTY.
-- [ ] TIME-06 RTC settime, zona waktu, dan waktu dinding.
+- [~] TIME-06 RTC settime dan waktu dinding UTC selesai lewat syscall
+      `wall_time`/`set_wall_time` serta command `date`. Zona waktu dan
+      konversi lokal belum.
 - [x] OPS-01 shutdown/reboot lewat ACPI FADT dan PSCI SYSTEM_OFF/SYSTEM_RESET.
 
 **Selesai bila:** kernel menjawab ping/UDP dari host dan menerima input

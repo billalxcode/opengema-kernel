@@ -13,4 +13,8 @@ namespace gemapi::time {
 // Blocks the calling program for the requested duration.
 [[nodiscard]] Status sleep_ms(u64 milliseconds) noexcept;
 
+// Wall clock in Unix seconds. Fails with not_supported without an RTC.
+[[nodiscard]] Result<u64> wall_seconds() noexcept;
+[[nodiscard]] Status set_wall_seconds(u64 seconds) noexcept;
+
 }  // namespace gemapi::time

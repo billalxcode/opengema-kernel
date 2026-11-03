@@ -118,6 +118,80 @@ gemapi::usize append_dec(char* out, gemapi::usize capacity,
   return cursor;
 }
 
+gemapi::usize append_padded(char* out, gemapi::usize capacity,
+                            gemapi::usize cursor, gemapi::u64 value,
+                            gemapi::usize width) {
+  char digits[20];
+  gemapi::usize count = 0;
+  do {
+    digits[count] = static_cast<char>('0' + (value % 10U));
+    ++count;
+    value /= 10U;
+  } while (value > 0U && count < sizeof(digits));
+  while (count < width && count < sizeof(digits)) {
+    digits[count] = '0';
+    ++count;
+  }
+  while (count > 0U) {
+    if (cursor >= capacity) {
+      return capacity;
+    }
+    --count;
+    out[cursor] = digits[count];
+    ++cursor;
+  }
+  return cursor;
+}
+
+gemapi::usize format_unix_time(char* out, gemapi::usize capacity,
+                               gemapi::u64 seconds) {
+  const gemapi::u64 days = seconds / 86400U;
+  const gemapi::u64 clock = seconds % 86400U;
+  const gemapi::u64 hour = clock / 3600U;
+  const gemapi::u64 minute = (clock % 3600U) / 60U;
+  const gemapi::u64 second = clock % 60U;
+
+  const gemapi::i64 shifted =
+    static_cast<gemapi::i64>(days) + static_cast<gemapi::i64>(719468);
+  const gemapi::i64 era =
+    (shifted >= 0 ? shifted : shifted - 146096) / 146097;
+  const gemapi::u64 day_of_era =
+    static_cast<gemapi::u64>(shifted - era * 146097);
+  const gemapi::u64 year_of_era =
+    (day_of_era - (day_of_era / 1460U) + (day_of_era / 36524U) -
+     (day_of_era / 146096U)) /
+    365U;
+  gemapi::i64 year =
+    static_cast<gemapi::i64>(year_of_era) + era * 400;
+  const gemapi::u64 day_of_year =
+    day_of_era - (365U * year_of_era + year_of_era / 4U -
+                  year_of_era / 100U);
+  const gemapi::u64 month_part = (5U * day_of_year + 2U) / 153U;
+  const gemapi::u64 day =
+    day_of_year - (153U * month_part + 2U) / 5U + 1U;
+  const gemapi::u64 month =
+    month_part < 10U ? month_part + 3U : month_part - 9U;
+  if (month <= 2U) {
+    ++year;
+  }
+
+  gemapi::usize cursor = 0;
+  cursor = append_padded(out, capacity, cursor,
+                         static_cast<gemapi::u64>(year), 4);
+  cursor = append_text(out, capacity, cursor, "-");
+  cursor = append_padded(out, capacity, cursor, month, 2);
+  cursor = append_text(out, capacity, cursor, "-");
+  cursor = append_padded(out, capacity, cursor, day, 2);
+  cursor = append_text(out, capacity, cursor, " ");
+  cursor = append_padded(out, capacity, cursor, hour, 2);
+  cursor = append_text(out, capacity, cursor, ":");
+  cursor = append_padded(out, capacity, cursor, minute, 2);
+  cursor = append_text(out, capacity, cursor, ":");
+  cursor = append_padded(out, capacity, cursor, second, 2);
+  cursor = append_text(out, capacity, cursor, " UTC\n");
+  return cursor;
+}
+
 bool parse_u64(const char* text, gemapi::usize length, gemapi::u64& value) {
   if (text == nullptr || length == 0U) {
     return false;
@@ -364,6 +438,33 @@ CommandResult RunUptime(const char* /*args*/, gemapi::usize /*args_length*/) {
   return CommandResult::kContinue;
 }
 
+CommandResult RunDate(const char* args, gemapi::usize args_length) {
+  trim(args, args_length);
+  gemapi::u64 seconds = 0;
+  if (args_length == 0U) {
+    const auto now = gemapi::time::wall_seconds();
+    if (!now) {
+      gemapi::io::write("date: unavailable\n");
+      return CommandResult::kContinue;
+    }
+    seconds = now.value();
+  } else {
+    if (!parse_u64(args, args_length, seconds)) {
+      gemapi::io::write("date: usage: date [unix-seconds]\n");
+      return CommandResult::kContinue;
+    }
+    if (gemapi::time::set_wall_seconds(seconds) != gemapi::Status::ok) {
+      gemapi::io::write("date: set failed\n");
+      return CommandResult::kContinue;
+    }
+  }
+  char text[40];
+  const gemapi::usize cursor =
+    format_unix_time(text, sizeof(text), seconds);
+  gemapi::io::write(text, cursor);
+  return CommandResult::kContinue;
+}
+
 CommandResult RunPs(const char* /*args*/, gemapi::usize /*args_length*/) {
   cat_file("/proc/processes", "ps");
   return CommandResult::kContinue;
@@ -557,6 +658,7 @@ constexpr Command kCommands[] = {
   {"clear", &RunClear},
   {"acpi", &RunAcpi},
   {"uptime", &RunUptime},
+  {"date", &RunDate},
   {"sleep", &RunSleep},
   {"ps", &RunPs},
   {"dmesg", &RunDmesg},

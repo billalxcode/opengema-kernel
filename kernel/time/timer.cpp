@@ -30,6 +30,9 @@ uint64_t g_ticks = 0;
 bool g_ready = false;
 TickCallback g_tick_callback = nullptr;
 void* g_tick_context = nullptr;
+WallClockReadFn g_wall_read = nullptr;
+WallClockWriteFn g_wall_write = nullptr;
+void* g_wall_context = nullptr;
 
 constexpr uint64_t kCntpCtlEnable = 1ULL << 0U;
 constexpr uint64_t kCntpCtlMask = 1ULL << 1U;
@@ -190,6 +193,27 @@ void TimerSetTickCallback(TickCallback callback, void* context) noexcept {
 
 uint64_t TimerFrequency() noexcept {
   return g_frequency;
+}
+
+void SetWallClock(WallClockReadFn read, WallClockWriteFn write,
+                  void* context) noexcept {
+  g_wall_read = read;
+  g_wall_write = write;
+  g_wall_context = context;
+}
+
+Result<uint64_t> WallTimeSeconds() noexcept {
+  if (g_wall_read == nullptr) {
+    return Result<uint64_t>::Err(Status::kNotInit);
+  }
+  return g_wall_read(g_wall_context);
+}
+
+Status SetWallTimeSeconds(uint64_t seconds) noexcept {
+  if (g_wall_write == nullptr) {
+    return Status::kNotInit;
+  }
+  return g_wall_write(g_wall_context, seconds);
 }
 
 }  // namespace og::time

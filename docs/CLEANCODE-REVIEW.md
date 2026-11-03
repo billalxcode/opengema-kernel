@@ -251,6 +251,8 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   root sampai ditutup, lalu node dibebaskan.
 - Test dmesg: `/proc/dmesg` dibaca lewat procfs dan command shell.
 - Test loglevel: filter runtime bisa dibaca dan diubah dari shell.
+- Test wall clock: `date <unix-seconds>` menyetel RTC PL031 dan `date`
+  mencetak waktu UTC dengan format `YYYY-MM-DD HH:MM:SS UTC`.
 - Verifikasi manual block write: baca, tulis pola, baca ulang, lalu pulihkan
   sector terakhir pada salinan `esp.img`.
 - Test persistensi: aplikasi `/applications/fstest/fstest` menjalankan

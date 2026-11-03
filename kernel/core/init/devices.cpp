@@ -63,6 +63,20 @@ void PollInput(void* /*context*/) noexcept {
   (void)time::ScheduleAfter(10, &PollInput, nullptr);
 }
 
+Result<uint64_t> ReadWallClock(void* context) noexcept {
+  if (context == nullptr) {
+    return Result<uint64_t>::Err(Status::kInvalidArg);
+  }
+  return static_cast<drivers::rtc::Pl031*>(context)->read_unix_seconds();
+}
+
+Status WriteWallClock(void* context, uint64_t seconds) noexcept {
+  if (context == nullptr) {
+    return Status::kInvalidArg;
+  }
+  return static_cast<drivers::rtc::Pl031*>(context)->write_unix_seconds(seconds);
+}
+
 void InitRtc() noexcept {
   const platform::Platform& board = platform::Current();
   const Status status = g_rtc.init(board.rtc.base, board.rtc.size);
@@ -76,6 +90,7 @@ void InitRtc() noexcept {
     return;
   }
   LogDec(LogLevel::kInfo, "rtc: unix seconds", seconds.value());
+  time::SetWallClock(&ReadWallClock, &WriteWallClock, &g_rtc);
 
   drivers::Device device{};
   device.name = "pl031";
