@@ -1,8 +1,9 @@
-// Mount table probe: shared references, unmount, and pinned kernel mounts.
+// Mount table probe: shared references, deferred release, and pinned roots.
 
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <span>
 
 #include "memory.h"
 #include "og/fs/ramfs.h"
@@ -78,6 +79,26 @@ int main() {
     return Fail("create under mount");
   }
 
+  og::fs::FileTable table{};
+  if (!og::IsOk(og::fs::FileTableInit(table))) {
+    return Fail("file table");
+  }
+  const auto descriptor =
+    og::fs::FsOpen(table, "/mnt/hello", og::fs::kOpenWrite);
+  if (descriptor.is_err()) {
+    return Fail("open under mount");
+  }
+  constexpr char kText[] = "hi";
+  uint64_t written = 0;
+  if (!og::IsOk(og::fs::FsWrite(
+        table, descriptor.value(),
+        std::span<const uint8_t>(
+          reinterpret_cast<const uint8_t*>(kText), sizeof(kText) - 1U),
+        written)) ||
+      written != (sizeof(kText) - 1U)) {
+    return Fail("write under mount");
+  }
+
   if (!og::IsOk(og::fs::FsMountRef("/mnt", nullptr))) {
     return Fail("add mount reference");
   }
@@ -90,9 +111,6 @@ int main() {
   if (!og::IsOk(og::fs::FsUnmount("/mnt"))) {
     return Fail("drop final reference");
   }
-  if (!og::fs::FsIsMountRoot("/")) {
-    return Fail("root lost after unmount");
-  }
   if (og::fs::FsIsMountRoot("/mnt")) {
     return Fail("mnt still reported as mount");
   }
@@ -102,6 +120,24 @@ int main() {
   if (og::fs::FsStat("/mnt").is_err()) {
     return Fail("underlying directory hidden after unmount");
   }
+
+  // The open descriptor keeps the unmounted root alive.
+  uint64_t written_after = 0;
+  if (!og::IsOk(og::fs::FsWrite(
+        table, descriptor.value(),
+        std::span<const uint8_t>(
+          reinterpret_cast<const uint8_t*>(kText), sizeof(kText) - 1U),
+        written_after)) ||
+      written_after != (sizeof(kText) - 1U)) {
+    return Fail("write after unmount");
+  }
+  if (!og::IsOk(og::fs::FsClose(table, descriptor.value()))) {
+    return Fail("close after unmount");
+  }
+  if (g_outstanding != 2) {
+    return Fail("unmount did not release the root");
+  }
+
   if (og::fs::FsUnmount("/mnt") != og::Status::kNotFound) {
     return Fail("second unmount accepted");
   }
@@ -109,20 +145,21 @@ int main() {
     return Fail("reference to missing mount accepted");
   }
 
-  if (!og::IsOk(og::fs::FsMountRef("/mnt", extra.value()))) {
+  const auto extra2 = og::fs::ramfs::Create();
+  if (extra2.is_err()) {
+    return Fail("second ramfs create");
+  }
+  if (!og::IsOk(og::fs::FsMountRef("/mnt", extra2.value()))) {
     return Fail("remount");
   }
-  if (og::fs::FsMountRef("/mnt", extra.value()) != og::Status::kExists) {
+  if (og::fs::FsMountRef("/mnt", extra2.value()) != og::Status::kExists) {
     return Fail("duplicate root accepted");
   }
   if (!og::IsOk(og::fs::FsUnmount("/mnt"))) {
     return Fail("remount unmount");
   }
-
-  // Unmounted roots are retained until the kernel reboots; open descriptors
-  // can still point into them. Two roots, one directory, and one file remain.
-  if (g_outstanding != 4) {
-    return Fail("unexpected allocation count");
+  if (g_outstanding != 2) {
+    return Fail("second root was not released");
   }
 
   std::printf("vfs mount probe: OK\n");

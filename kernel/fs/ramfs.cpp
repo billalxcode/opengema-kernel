@@ -284,10 +284,27 @@ Status DirRename(Node* directory, Node* node, Node* new_directory,
   return Status::kOk;
 }
 
+void ReleaseTree(RamNode* node) noexcept {
+  if (node == nullptr) {
+    return;
+  }
+  for (uint32_t index = 0; index < node->child_count; ++index) {
+    ReleaseTree(node->children[index]);
+  }
+  if (node->data != nullptr) {
+    (void)mem::HeapFree(node->data);
+  }
+  (void)mem::HeapFree(node);
+}
+
+void ReleaseRoot(Node* root) noexcept {
+  ReleaseTree(NodeOf(root));
+}
+
 const NodeOps kFileOps{nullptr, &FileRead, &FileWrite, nullptr, nullptr,
-                       nullptr, nullptr, &FileTruncate};
+                       nullptr, nullptr, &FileTruncate, nullptr};
 const NodeOps kDirOps{&DirLookup, nullptr, nullptr, &DirIterate, &DirCreate,
-                      &DirRemove, &DirRename};
+                      &DirRemove, &DirRename, nullptr, &ReleaseRoot};
 
 [[nodiscard]] RamNode* AllocateNode(NodeType type, const char* name,
                                     RamNode* parent) noexcept {

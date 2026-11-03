@@ -247,7 +247,8 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   root yang tidak boleh dihapus, dan tidak ada kebocoran alokasi node.
 - Test mount table: mount `ramfs` berrefcount, unmount melepas entry terakhir,
   root kernel yang pinned tidak bisa di-unmount, dan direktori di bawah mount
-  kembali terlihat setelah unmount.
+  kembali terlihat setelah unmount. Descriptor yang masih terbuka menahan
+  root sampai ditutup, lalu node dibebaskan.
 - Test dmesg: `/proc/dmesg` dibaca lewat procfs dan command shell.
 - Test loglevel: filter runtime bisa dibaca dan diubah dari shell.
 - Verifikasi manual block write: baca, tulis pola, baca ulang, lalu pulihkan

@@ -15,7 +15,9 @@ struct MountEntry {
   char path[kMaxPath];
   Node* root;
   uint32_t refs;
+  uint32_t open_files;
   bool used;
+  bool mounted;
   bool pinned;
 };
 
@@ -63,6 +65,37 @@ class LockGuard {
 MountEntry g_mounts[kMaxMounts];
 VfsLock g_lock;
 bool g_ready = false;
+uint32_t g_operations = 0;
+
+// Releases roots whose mount name and open descriptors are both gone. The
+// VFS lock is dropped before calling into a filesystem, keeping it a leaf.
+void ReleasePending() noexcept {
+  Node* roots[kMaxMounts]{};
+  uint32_t count = 0;
+  {
+    LockGuard guard(g_lock);
+    if (g_operations != 0U) {
+      return;
+    }
+    for (uint32_t index = 0; index < kMaxMounts; ++index) {
+      MountEntry& entry = g_mounts[index];
+      if (!entry.used || entry.mounted || entry.refs != 0U ||
+          entry.open_files != 0U) {
+        continue;
+      }
+      roots[count] = entry.root;
+      ++count;
+      mem::Zero(&entry, sizeof(entry));
+    }
+  }
+  for (uint32_t index = 0; index < count; ++index) {
+    Node* root = roots[index];
+    if (root != nullptr && root->ops != nullptr &&
+        root->ops->release != nullptr) {
+      root->ops->release(root);
+    }
+  }
+}
 
 [[nodiscard]] bool IsSeparator(char value) noexcept {
   return value == '/';
@@ -115,7 +148,8 @@ bool g_ready = false;
   std::size_t best_length = 0;
   bool found = false;
   for (uint32_t index = 0; index < kMaxMounts; ++index) {
-    if (!g_mounts[index].used || !IsMountPrefix(path, g_mounts[index].path)) {
+    if (!g_mounts[index].used || !g_mounts[index].mounted ||
+        !IsMountPrefix(path, g_mounts[index].path)) {
       continue;
     }
     const std::size_t length = mem::Length(g_mounts[index].path);
@@ -134,7 +168,8 @@ bool g_ready = false;
 [[nodiscard]] bool FindMountByPathLocked(const char* path,
                                          uint32_t& out_index) noexcept {
   for (uint32_t index = 0; index < kMaxMounts; ++index) {
-    if (g_mounts[index].used && Equals(g_mounts[index].path, path)) {
+    if (g_mounts[index].used && g_mounts[index].mounted &&
+        Equals(g_mounts[index].path, path)) {
       out_index = index;
       return true;
     }
@@ -257,6 +292,75 @@ struct ParentPath {
 
 }  // namespace
 
+OperationGuard::OperationGuard() noexcept {
+  LockGuard guard(g_lock);
+  ++g_operations;
+}
+
+OperationGuard::~OperationGuard() noexcept {
+  {
+    LockGuard guard(g_lock);
+    if (g_operations > 0U) {
+      --g_operations;
+    }
+  }
+  ReleasePending();
+}
+
+Result<Node*> ResolveForOpen(const char* path,
+                             uint32_t& mount_index) noexcept {
+  if (path == nullptr) {
+    return Result<Node*>::Err(Status::kInvalidArg);
+  }
+
+  Node* root = nullptr;
+  const char* suffix = nullptr;
+  uint32_t index = 0;
+  {
+    LockGuard guard(g_lock);
+    if (!g_ready) {
+      return Result<Node*>::Err(Status::kNotInit);
+    }
+    if (!FindBestMountLocked(path, index)) {
+      return Result<Node*>::Err(Status::kNotFound);
+    }
+    root = g_mounts[index].root;
+    suffix = path + mem::Length(g_mounts[index].path);
+  }
+
+  Result<Node*> result = ResolveSegments(root, suffix);
+  if (result.is_ok()) {
+    mount_index = index;
+  }
+  return result;
+}
+
+Status TrackOpen(uint32_t mount_index) noexcept {
+  LockGuard guard(g_lock);
+  if (!g_ready || mount_index >= kMaxMounts) {
+    return Status::kInvalidArg;
+  }
+  MountEntry& entry = g_mounts[mount_index];
+  if (!entry.used) {
+    return Status::kInvalidArg;
+  }
+  ++entry.open_files;
+  return Status::kOk;
+}
+
+void UntrackOpen(uint32_t mount_index) noexcept {
+  {
+    LockGuard guard(g_lock);
+    if (mount_index < kMaxMounts) {
+      MountEntry& entry = g_mounts[mount_index];
+      if (entry.used && entry.open_files > 0U) {
+        --entry.open_files;
+      }
+    }
+  }
+  ReleasePending();
+}
+
 bool IsReady() noexcept {
   return g_ready;
 }
@@ -264,6 +368,7 @@ bool IsReady() noexcept {
 Status FsInit() noexcept {
   LockGuard guard(g_lock);
   mem::Zero(g_mounts, sizeof(g_mounts));
+  g_operations = 0;
   g_ready = true;
   return Status::kOk;
 }
@@ -294,7 +399,9 @@ Status FsMount(const char* path, Node* root) noexcept {
   }
   g_mounts[slot].root = root;
   g_mounts[slot].refs = 1;
+  g_mounts[slot].open_files = 0;
   g_mounts[slot].used = true;
+  g_mounts[slot].mounted = true;
   g_mounts[slot].pinned = true;
   return Status::kOk;
 }
@@ -337,7 +444,9 @@ Status FsMountRef(const char* path, Node* root) noexcept {
   }
   g_mounts[slot].root = root;
   g_mounts[slot].refs = 1;
+  g_mounts[slot].open_files = 0;
   g_mounts[slot].used = true;
+  g_mounts[slot].mounted = true;
   g_mounts[slot].pinned = false;
   return Status::kOk;
 }
@@ -347,26 +456,30 @@ Status FsUnmount(const char* path) noexcept {
     return Status::kInvalidArg;
   }
 
-  LockGuard guard(g_lock);
-  if (!g_ready) {
-    return Status::kNotInit;
-  }
-  uint32_t index = 0;
-  if (!FindMountByPathLocked(path, index)) {
-    return Status::kNotFound;
-  }
-  if (g_mounts[index].pinned) {
-    return Status::kBusy;
-  }
-  if (g_mounts[index].refs > 1U) {
-    --g_mounts[index].refs;
-    return Status::kOk;
+  {
+    LockGuard guard(g_lock);
+    if (!g_ready) {
+      return Status::kNotInit;
+    }
+    uint32_t index = 0;
+    if (!FindMountByPathLocked(path, index)) {
+      return Status::kNotFound;
+    }
+    if (g_mounts[index].pinned) {
+      return Status::kBusy;
+    }
+    if (g_mounts[index].refs > 1U) {
+      --g_mounts[index].refs;
+      return Status::kOk;
+    }
+
+    // Hide the name now. The root stays alive until the last open
+    // descriptor is closed; ReleasePending frees it after that.
+    g_mounts[index].refs = 0;
+    g_mounts[index].mounted = false;
   }
 
-  // The mount name is gone. The root nodes stay allocated because open
-  // descriptors may still point into the tree; node reclamation needs a
-  // separate reference count and is tracked as follow-up work.
-  mem::Zero(&g_mounts[index], sizeof(g_mounts[index]));
+  ReleasePending();
   return Status::kOk;
 }
 
@@ -380,28 +493,13 @@ bool FsIsMountRoot(const char* path) noexcept {
 }
 
 Result<Node*> FsResolve(const char* path) noexcept {
-  if (path == nullptr) {
-    return Result<Node*>::Err(Status::kInvalidArg);
-  }
-
-  Node* root = nullptr;
-  const char* suffix = nullptr;
-  {
-    LockGuard guard(g_lock);
-    if (!g_ready) {
-      return Result<Node*>::Err(Status::kNotInit);
-    }
-    uint32_t index = 0;
-    if (!FindBestMountLocked(path, index)) {
-      return Result<Node*>::Err(Status::kNotFound);
-    }
-    root = g_mounts[index].root;
-    suffix = path + mem::Length(g_mounts[index].path);
-  }
-  return ResolveSegments(root, suffix);
+  OperationGuard guard;
+  uint32_t mount_index = 0;
+  return ResolveForOpen(path, mount_index);
 }
 
 Result<Stat> FsStat(const char* path) noexcept {
+  OperationGuard guard;
   Result<Node*> node = FsResolve(path);
   if (node.is_err()) {
     return Result<Stat>::Err(node.status());
@@ -413,6 +511,7 @@ Result<Stat> FsStat(const char* path) noexcept {
 }
 
 Status FsList(const char* path, uint32_t index, DirEntry& entry, bool& found) noexcept {
+  OperationGuard guard;
   found = false;
   Result<Node*> node = FsResolve(path);
   if (node.is_err()) {
@@ -428,6 +527,7 @@ Status FsList(const char* path, uint32_t index, DirEntry& entry, bool& found) no
 }
 
 Result<Node*> FsCreate(const char* path, NodeType type) noexcept {
+  OperationGuard guard;
   if (path == nullptr || FsIsMountRoot(path)) {
     return Result<Node*>::Err(Status::kBusy);
   }
@@ -452,6 +552,7 @@ Result<Node*> FsCreate(const char* path, NodeType type) noexcept {
 }
 
 Status FsRemove(const char* path, NodeType type) noexcept {
+  OperationGuard guard;
   if (path == nullptr || FsIsMountRoot(path)) {
     return Status::kBusy;
   }
@@ -480,6 +581,7 @@ Status FsRemove(const char* path, NodeType type) noexcept {
 }
 
 Status FsRename(const char* old_path, const char* new_path) noexcept {
+  OperationGuard guard;
   if (old_path == nullptr || new_path == nullptr ||
       FsIsMountRoot(old_path) || FsIsMountRoot(new_path)) {
     return Status::kBusy;
@@ -513,6 +615,7 @@ Status FsRename(const char* old_path, const char* new_path) noexcept {
 }
 
 Status FsTruncate(const char* path, uint64_t size) noexcept {
+  OperationGuard guard;
   if (path == nullptr) {
     return Status::kInvalidArg;
   }

@@ -16,6 +16,7 @@ Status FileTableInit(FileTable& table) noexcept {
 
 Result<uint32_t> FsOpen(FileTable& table, const char* path,
                         uint32_t flags) noexcept {
+  OperationGuard guard;
   if (!IsReady()) {
     return Result<uint32_t>::Err(Status::kNotInit);
   }
@@ -24,14 +25,15 @@ Result<uint32_t> FsOpen(FileTable& table, const char* path,
   if ((flags & ~kKnownFlags) != 0U) {
     return Result<uint32_t>::Err(Status::kInvalidArg);
   }
-  Result<Node*> node = FsResolve(path);
+  uint32_t mount_index = 0;
+  Result<Node*> node = ResolveForOpen(path, mount_index);
   if (node.is_err() && (flags & kOpenCreate) != 0U &&
       node.status() == Status::kNotFound) {
     const Result<Node*> created = FsCreate(path, NodeType::kFile);
     if (created.is_err()) {
       return Result<uint32_t>::Err(created.status());
     }
-    node = FsResolve(path);
+    node = ResolveForOpen(path, mount_index);
   }
   if (node.is_err()) {
     return Result<uint32_t>::Err(node.status());
@@ -50,13 +52,20 @@ Result<uint32_t> FsOpen(FileTable& table, const char* path,
     table.entries[index].node = node.value();
     table.entries[index].offset = 0;
     table.entries[index].flags = flags;
+    table.entries[index].mount = mount_index;
     table.entries[index].in_use = true;
+    const Status tracked = TrackOpen(mount_index);
+    if (IsErr(tracked)) {
+      table.entries[index] = FileEntry{};
+      return Result<uint32_t>::Err(tracked);
+    }
     return Result<uint32_t>::Ok(index);
   }
   return Result<uint32_t>::Err(Status::kNoMem);
 }
 
 Status FsClose(FileTable& table, uint32_t descriptor) noexcept {
+  OperationGuard guard;
   if (!IsReady()) {
     return Status::kNotInit;
   }
@@ -69,15 +78,15 @@ Status FsClose(FileTable& table, uint32_t descriptor) noexcept {
   if (!table.entries[descriptor].in_use) {
     return Status::kNotFound;
   }
-  table.entries[descriptor].node = nullptr;
-  table.entries[descriptor].offset = 0;
-  table.entries[descriptor].flags = 0;
-  table.entries[descriptor].in_use = false;
+  const uint32_t mount_index = table.entries[descriptor].mount;
+  table.entries[descriptor] = FileEntry{};
+  UntrackOpen(mount_index);
   return Status::kOk;
 }
 
 Status FsRead(FileTable& table, uint32_t descriptor, std::span<uint8_t> buffer,
               uint64_t& out_read) noexcept {
+  OperationGuard guard;
   out_read = 0;
   if (!IsReady()) {
     return Status::kNotInit;
@@ -110,6 +119,7 @@ Status FsRead(FileTable& table, uint32_t descriptor, std::span<uint8_t> buffer,
 
 Status FsWrite(FileTable& table, uint32_t descriptor,
                std::span<const uint8_t> buffer, uint64_t& out_written) noexcept {
+  OperationGuard guard;
   out_written = 0;
   if (!IsReady()) {
     return Status::kNotInit;
@@ -149,6 +159,7 @@ Status FsWrite(FileTable& table, uint32_t descriptor,
 }
 
 Status FsSeek(FileTable& table, uint32_t descriptor, uint64_t offset) noexcept {
+  OperationGuard guard;
   if (!IsReady()) {
     return Status::kNotInit;
   }

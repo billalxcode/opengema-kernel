@@ -40,6 +40,9 @@ struct NodeOps {
   Status (*rename)(Node* directory, Node* node, Node* new_directory,
                    const char* new_name) noexcept = nullptr;
   Status (*truncate)(Node* node, uint64_t size) noexcept = nullptr;
+  // Called when the last mount reference and the last open descriptor are
+  // gone. Filesystems that own dynamic nodes use this to free the tree.
+  void (*release)(Node* root) noexcept = nullptr;
 };
 
 struct Node {
@@ -60,6 +63,7 @@ struct FileEntry {
   Node* node;
   uint64_t offset;
   uint32_t flags;
+  uint32_t mount;
   bool in_use;
 };
 
@@ -92,8 +96,9 @@ struct FileTable {
 // table is global; references keep an entry alive until the last release.
 [[nodiscard]] Status FsMountRef(const char* path, Node* root) noexcept;
 
-// Drops one shared reference. The entry is removed when its count reaches
-// zero. Pinned kernel mounts return kBusy.
+// Drops one shared reference. The mount name disappears when the count
+// reaches zero; the root is released after the last open descriptor closes.
+// Pinned kernel mounts return kBusy.
 [[nodiscard]] Status FsUnmount(const char* path) noexcept;
 
 [[nodiscard]] bool FsIsMountRoot(const char* path) noexcept;

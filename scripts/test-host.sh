@@ -63,7 +63,7 @@ CXX="${CXX:-clang++}"
 "$CXX" -std=c++20 -O1 -Wall -Wextra -Werror -DOG_HOST_TEST \
   -I libs/core -I kernel/include \
   tests/host/vfs_mount_probe.cpp kernel/fs/vfs.cpp \
-  kernel/fs/ramfs.cpp libs/core/memory.cpp \
+  kernel/fs/fd_table.cpp kernel/fs/ramfs.cpp libs/core/memory.cpp \
   -o "$BUILD_DIR/vfs_mount_probe"
 "$BUILD_DIR/vfs_mount_probe"
 

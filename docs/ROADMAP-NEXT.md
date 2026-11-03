@@ -136,9 +136,9 @@ bisa dijalankan tanpa menyalin kode syscall.
       rename/delete. Catatan: rename ke nama panjang baru belum didukung.
 - [x] FS-14 mount/umount syscall dan mount table global berrefcount.
       Mount hanya mendukung `ramfs`, tiap proses mencatat referensinya, dan
-      entry dilepas saat proses keluar. Root node yang sudah di-unmount
-      ditahan sampai reboot karena descriptor lama masih bisa menunjuk ke
-      sana; reklamasi node menunggu refcount per node.
+      entry dilepas saat proses keluar. Unmount menyembunyikan nama mount
+      lebih dulu, lalu root ramfs dibebaskan setelah descriptor terakhir
+      ditutup dan tidak ada operasi VFS yang sedang memakai node tersebut.
 - [~] FS-15 Block layer: write path, adapter, dan flush selesai;
       IRQ/MSI-X, multiple device, dan partisi tulis belum.
 - [ ] FS-16 Metadata: permission, uid/gid, timestamp, ukuran.
