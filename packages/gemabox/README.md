@@ -50,9 +50,9 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
     `persist create` dan `persist read2` menguji pembuatan
     `/volumes/boot/persist2.bin`. `persist mkdir`, `persist delete`,
     `persist rename`, `persist truncate`, dan `persist empty` menguji
-    directory, rename, dan truncate. `persist long`, `persist readlong`,
-    `persist renamelong`, dan `persist deletelong` menguji nama panjang
-    beserta cleanup entry LFN.
+    directory, rename, dan truncate. `persist long` dan `persist readlong`
+    menguji nama panjang. Rename dan delete nama panjang memakai `mv` dan
+    `rm` dengan path berkutip.
 11. Path dengan spasi bisa ditulis di dalam tanda kutip ganda, misalnya
     `mkdir "/tmp/quoted dir"`.
     `mkdir`, `rm`, dan `mv` mengubah isi filesystem writable. `halt`

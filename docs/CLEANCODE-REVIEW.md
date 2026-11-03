@@ -250,9 +250,9 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 - Verifikasi manual block write: baca, tulis pola, baca ulang, lalu pulihkan
   sector terakhir pada salinan `esp.img`.
 - Test persistensi: `persist write`/`create`/`mkdir`/`delete`/`rename`/
-  `truncate`/`long`/`renamelong`/`deletelong` lalu reboot dan `persist
-  read`/`read2`/`empty`/`readlong` dari salinan image yang sama tanpa cache
-  `writethrough`, sehingga flush virtio-blk ikut teruji.
+  `truncate`/`long` lalu reboot dan `persist read`/`read2`/`empty`/
+  `readlong` dari salinan image yang sama tanpa cache `writethrough`.
+  Rename dan delete nama panjang memakai `mv`/`rm` berkutip.
 - Test shell quoting: `mkdir` dan `rm` menerima path dengan spasi di dalam
   tanda kutip ganda.
 
