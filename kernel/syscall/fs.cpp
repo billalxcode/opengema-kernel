@@ -1,6 +1,7 @@
 #include "og/syscall/syscall_internal.h"
 
 #include "memory.h"
+#include "og/fs/ramfs.h"
 #include "og/fs/vfs.h"
 #include "og/mem/vmm.h"
 
@@ -210,6 +211,78 @@ Status DoRename(uint64_t user_old_path, uint64_t user_new_path,
   if (IsErr(status)) {
     return status;
   }
+  result = 0;
+  return Status::kOk;
+}
+
+Status DoMount(uint64_t user_type, uint64_t user_target,
+               uint64_t& result) noexcept {
+  process::Process* process = CurrentProcess();
+  if (process == nullptr) {
+    return Status::kNotInit;
+  }
+  char type[16];
+  char target[fs::kMaxPath];
+  Status status =
+    CopyUserString(process->space, user_type, type, sizeof(type));
+  if (IsErr(status)) {
+    return status;
+  }
+  status = CopyUserPath(*process, user_target, target);
+  if (IsErr(status)) {
+    return status;
+  }
+  if (!mem::Same(type, "ramfs")) {
+    return Status::kUnsupported;
+  }
+  const Result<fs::Stat> info = fs::FsStat(target);
+  if (info.is_err()) {
+    return info.status();
+  }
+  if (info.value().type != fs::NodeType::kDirectory) {
+    return Status::kInvalidArg;
+  }
+
+  if (fs::FsIsMountRoot(target)) {
+    status = fs::FsMountRef(target, nullptr);
+  } else {
+    const Result<fs::Node*> root = fs::ramfs::Create();
+    if (root.is_err()) {
+      return root.status();
+    }
+    status = fs::FsMountRef(target, root.value());
+  }
+  if (IsErr(status)) {
+    return status;
+  }
+
+  status = process::RecordMount(*process, target);
+  if (IsErr(status)) {
+    (void)fs::FsUnmount(target);
+    return status;
+  }
+  result = 0;
+  return Status::kOk;
+}
+
+Status DoUmount(uint64_t user_target, uint64_t& result) noexcept {
+  process::Process* process = CurrentProcess();
+  if (process == nullptr) {
+    return Status::kNotInit;
+  }
+  char target[fs::kMaxPath];
+  Status status = CopyUserPath(*process, user_target, target);
+  if (IsErr(status)) {
+    return status;
+  }
+  if (!process::HasMount(*process, target)) {
+    return Status::kNotFound;
+  }
+  status = fs::FsUnmount(target);
+  if (IsErr(status)) {
+    return status;
+  }
+  process::ForgetMount(*process, target);
   result = 0;
   return Status::kOk;
 }

@@ -92,7 +92,7 @@ def main(argv):
                 buffer.clear()
 
             if (help_sent and not help_seen and
-                    b"commands: help, echo, cat, ls, clear, acpi, uptime, sleep, ps, dmesg, loglevel, mkdir, rm, mv, halt, shutdown, reboot" in buffer):
+                    b"commands: help, echo, cat, ls, clear, acpi, uptime, sleep, ps, dmesg, loglevel, mkdir, rm, mv, mount, umount, halt, shutdown, reboot" in buffer):
                 help_seen = True
 
             if (help_seen and not acpi_sent and
@@ -150,11 +150,20 @@ def main(argv):
             if (level_seen and not fs_sent and
                     time.time() - last_data > 0.5 and
                     b"gemabox> " in buffer):
-                send_line(client, b"mkdir /tmp/d\nmv /tmp/d /tmp/e\nls /tmp\nrm /tmp/e\nmkdir \"/tmp/quoted dir\"\nrm \"/tmp/quoted dir\"\n")
+                send_line(client, b"mkdir /tmp/d\nmv /tmp/d /tmp/e\nls /tmp\nrm /tmp/e\nmkdir \"/tmp/quoted dir\"\nrm \"/tmp/quoted dir\"\nmkdir /tmp/mnt\nmount ramfs /tmp/mnt\nmount ramfs /tmp/mnt\numount /tmp/mnt\numount /tmp/mnt\nrm /tmp/mnt\necho MOUNT-DONE\n")
                 fs_sent = True
                 buffer.clear()
 
-            if fs_sent and not fs_seen and b"e/" in buffer:
+            if fs_sent and not fs_seen and b"MOUNT-DONE" in buffer:
+                missing = []
+                for marker in (b"e/", b"mount: mounted", b"umount: unmounted"):
+                    if marker not in buffer:
+                        missing.append(marker.decode())
+                if missing or b"mount: failed" in buffer or \
+                        b"umount: failed" in buffer or b"rm: failed" in buffer:
+                    print("uart client: mount test failed: " +
+                          (", ".join(missing) if missing else "command failed"))
+                    return 1
                 fs_seen = True
 
             if (fs_seen and not clear_sent and

@@ -249,6 +249,7 @@ void CloseFiles(Process& process) noexcept {
 
       (void)mem::AddressSpaceDestroy(target->space);
       CloseFiles(*target);
+      ReleaseMounts(*target);
       if (target->thread != nullptr) {
         (void)sched::ThreadReclaim(target->thread);
       }
@@ -534,6 +535,62 @@ Status SetCwd(Process& process, const char* path) noexcept {
   }
   mem::Copy(process.cwd, path, length + 1U);
   return Status::kOk;
+}
+
+Status RecordMount(Process& process, const char* path) noexcept {
+  if (path == nullptr || path[0] != '/') {
+    return Status::kInvalidArg;
+  }
+  if (process.mount_count >= kMaxProcessMounts) {
+    return Status::kNoMem;
+  }
+  const std::size_t length = mem::Length(path);
+  if (length >= fs::kMaxPath) {
+    return Status::kInvalidArg;
+  }
+  char (&slot)[fs::kMaxPath] = process.mounts[process.mount_count];
+  mem::Copy(slot, path, length + 1U);
+  ++process.mount_count;
+  return Status::kOk;
+}
+
+void ForgetMount(Process& process, const char* path) noexcept {
+  if (path == nullptr) {
+    return;
+  }
+  for (uint32_t index = process.mount_count; index > 0U; --index) {
+    if (!mem::Same(process.mounts[index - 1U], path)) {
+      continue;
+    }
+    for (uint32_t current = index - 1U; (current + 1U) < process.mount_count;
+         ++current) {
+      mem::Copy(process.mounts[current], process.mounts[current + 1U],
+                fs::kMaxPath);
+    }
+    --process.mount_count;
+    process.mounts[process.mount_count][0] = '\0';
+    return;
+  }
+}
+
+bool HasMount(const Process& process, const char* path) noexcept {
+  if (path == nullptr) {
+    return false;
+  }
+  for (uint32_t index = 0; index < process.mount_count; ++index) {
+    if (mem::Same(process.mounts[index], path)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void ReleaseMounts(Process& process) noexcept {
+  while (process.mount_count > 0U) {
+    --process.mount_count;
+    (void)fs::FsUnmount(process.mounts[process.mount_count]);
+    process.mounts[process.mount_count][0] = '\0';
+  }
 }
 
 uint32_t Count() noexcept {

@@ -146,6 +146,14 @@ bool rename(const char* old_path, const char* new_path) noexcept {
   return Same(old_path, "file") && Same(new_path, "renamed");
 }
 
+bool mount(const char* type, const char* target) noexcept {
+  return Same(type, "ramfs") && Same(target, "/mnt");
+}
+
+bool umount(const char* target) noexcept {
+  return Same(target, "/mnt");
+}
+
 }  // namespace kgema
 
 namespace {
@@ -283,6 +291,17 @@ int main() {
       gemapi::fs::rename("bad", "renamed") != Status::not_found ||
       gemapi::fs::rename(nullptr, "renamed") != Status::invalid_argument) {
     return Fail("rename");
+  }
+
+  if (gemapi::fs::mount("ramfs", "/mnt") != Status::ok ||
+      gemapi::fs::mount("bad", "/mnt") != Status::not_found ||
+      gemapi::fs::mount(nullptr, "/mnt") != Status::invalid_argument) {
+    return Fail("mount");
+  }
+  if (gemapi::fs::umount("/mnt") != Status::ok ||
+      gemapi::fs::umount("/bad") != Status::not_found ||
+      gemapi::fs::umount(nullptr) != Status::invalid_argument) {
+    return Fail("umount");
   }
 
   gemapi::fs::DirEntry entry{};

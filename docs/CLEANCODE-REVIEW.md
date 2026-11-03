@@ -245,6 +245,9 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   di akhir berkas.
 - Test VFS mutation: mkdir, unlink, rmdir, rename, duplicate create, mount
   root yang tidak boleh dihapus, dan tidak ada kebocoran alokasi node.
+- Test mount table: mount `ramfs` berrefcount, unmount melepas entry terakhir,
+  root kernel yang pinned tidak bisa di-unmount, dan direktori di bawah mount
+  kembali terlihat setelah unmount.
 - Test dmesg: `/proc/dmesg` dibaca lewat procfs dan command shell.
 - Test loglevel: filter runtime bisa dibaca dan diubah dari shell.
 - Verifikasi manual block write: baca, tulis pola, baca ulang, lalu pulihkan
@@ -256,6 +259,8 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   berkutip. Command `persist` tidak lagi ada di shell produksi.
 - Test shell quoting: `mkdir` dan `rm` menerima path dengan spasi di dalam
   tanda kutip ganda.
+- Test mount di QEMU: `mount ramfs` dua kali, dua `umount`, lalu `rm`
+  direktori target untuk memastikan refcount dan cleanup berjalan.
 
 Verifikasi branch `dev`:
 

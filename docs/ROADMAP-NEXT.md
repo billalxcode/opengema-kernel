@@ -134,8 +134,11 @@ bisa dijalankan tanpa menyalin kode syscall.
 - [x] FS-13 Filesystem writable: FAT32 write, create file, mkdir, delete,
       rename, truncate, long name create/read, serta cleanup entry LFN saat
       rename/delete. Catatan: rename ke nama panjang baru belum didukung.
-- [ ] FS-14 mount/umount syscall dan mount table per proses atau global
-      dengan referensi.
+- [x] FS-14 mount/umount syscall dan mount table global berrefcount.
+      Mount hanya mendukung `ramfs`, tiap proses mencatat referensinya, dan
+      entry dilepas saat proses keluar. Root node yang sudah di-unmount
+      ditahan sampai reboot karena descriptor lama masih bisa menunjuk ke
+      sana; reklamasi node menunggu refcount per node.
 - [~] FS-15 Block layer: write path, adapter, dan flush selesai;
       IRQ/MSI-X, multiple device, dan partisi tulis belum.
 - [ ] FS-16 Metadata: permission, uid/gid, timestamp, ukuran.

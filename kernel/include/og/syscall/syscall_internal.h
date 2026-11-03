@@ -106,4 +106,10 @@ namespace og::syscall {
 
 [[nodiscard]] Status DoSetLogLevel(uint64_t level, uint64_t& result) noexcept;
 
+[[nodiscard]] Status DoMount(uint64_t user_type, uint64_t user_target,
+                             uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoUmount(uint64_t user_target,
+                              uint64_t& result) noexcept;
+
 }  // namespace og::syscall

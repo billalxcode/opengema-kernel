@@ -32,6 +32,8 @@ constexpr i64 kRmdir = 22;
 constexpr i64 kRename = 23;
 constexpr i64 kGetLogLevel = 24;
 constexpr i64 kSetLogLevel = 25;
+constexpr i64 kMount = 26;
+constexpr i64 kUmount = 27;
 
 // Number in x8, arguments in x0..x2, result in x0.
 [[nodiscard]] i64 invoke3(i64 number, i64 arg0, i64 arg1, i64 arg2) noexcept;

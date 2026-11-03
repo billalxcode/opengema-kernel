@@ -84,8 +84,19 @@ struct FileTable {
 [[nodiscard]] Status FsInit() noexcept;
 [[nodiscard]] Status FileTableInit(FileTable& table) noexcept;
 
-// Mounts root at path. Longest matching mount wins during resolution.
+// Mounts root at path. Kernel mounts are pinned and cannot be unmounted.
 [[nodiscard]] Status FsMount(const char* path, Node* root) noexcept;
+
+// Adds one shared reference to a mount. A null root references an existing
+// mount at path. A non-null root creates a new unpinned mount. The mount
+// table is global; references keep an entry alive until the last release.
+[[nodiscard]] Status FsMountRef(const char* path, Node* root) noexcept;
+
+// Drops one shared reference. The entry is removed when its count reaches
+// zero. Pinned kernel mounts return kBusy.
+[[nodiscard]] Status FsUnmount(const char* path) noexcept;
+
+[[nodiscard]] bool FsIsMountRoot(const char* path) noexcept;
 
 [[nodiscard]] Result<uint32_t> FsOpen(FileTable& table, const char* path,
                                       uint32_t flags = 0) noexcept;

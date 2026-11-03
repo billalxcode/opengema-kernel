@@ -35,6 +35,8 @@ struct DirEntry {
 [[nodiscard]] bool unlink(const char* path) noexcept;
 [[nodiscard]] bool rmdir(const char* path) noexcept;
 [[nodiscard]] bool rename(const char* old_path, const char* new_path) noexcept;
+[[nodiscard]] bool mount(const char* type, const char* target) noexcept;
+[[nodiscard]] bool umount(const char* target) noexcept;
 
 // Returns 1 when an entry is written, 0 at the end, -1 on error.
 [[nodiscard]] i64 list(const char* path, u64 index, DirEntry& entry) noexcept;

@@ -37,8 +37,8 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
    seek, read, lalu cetak `write ok`.
 8. Mode `shell`: prompt `gemabox>`, baca input UART dan keyboard,
    jalankan `help`, `echo`, `cat`, `ls`, `clear`, `acpi`, `uptime`,
-   `sleep`, `ps`, `dmesg`, `loglevel`, `mkdir`, `rm`, `mv`,
-   `halt`, `shutdown`, dan `reboot`.
+   `sleep`, `ps`, `dmesg`, `loglevel`, `mkdir`, `rm`, `mv`, `mount`,
+   `umount`, `halt`, `shutdown`, dan `reboot`.
 9. Command di luar applet dicari di `/commands/<name>`, lalu
    `/applications/<name>/<name>`.
 10. `acpi` membaca ringkasan tabel dari `/proc/acpi`. `uptime` mencetak
@@ -46,8 +46,10 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
     menampilkan daftar proses dari `/proc/processes`, `dmesg`
     membaca ring log kernel dari `/proc/dmesg`, dan `loglevel`
     menampilkan atau mengubah filter level log. `mkdir`, `rm`, dan `mv`
-    mengubah isi filesystem writable. Pengujian persistensi FAT32 ada di
-    aplikasi terpisah `/applications/fstest/fstest`, bukan command shell.
+    mengubah isi filesystem writable. `mount ramfs <path>` memasang ramfs
+    baru dengan referensi global, dan `umount <path>` melepas referensi
+    proses tersebut. Pengujian persistensi FAT32 ada di aplikasi terpisah
+    `/applications/fstest/fstest`, bukan command shell.
     `halt` menghentikan shell dan init sehingga kernel menyelesaikan self
     test lalu berhenti. `shutdown` dan `reboot` memakai ACPI/PSCI untuk
     mematikan atau me-reboot mesin.
@@ -66,7 +68,7 @@ child ok
 spawn ok
 write ok
 gemabox> help
-commands: help, echo, cat, ls, clear, acpi, uptime, sleep, ps, dmesg, loglevel, mkdir, rm, mv, halt, shutdown, reboot
+commands: help, echo, cat, ls, clear, acpi, uptime, sleep, ps, dmesg, loglevel, mkdir, rm, mv, mount, umount, halt, shutdown, reboot
 gemabox> acpi
 ACPI revision 2
 gemabox> uptime
@@ -85,6 +87,11 @@ loglevel: info (2)
 gemabox> mkdir /tmp/demo
 gemabox> mv /tmp/demo /tmp/demo2
 gemabox> rm /tmp/demo2
+gemabox> mkdir /tmp/mnt
+gemabox> mount ramfs /tmp/mnt
+mount: mounted
+gemabox> umount /tmp/mnt
+umount: unmounted
 gemabox> ...
 gemabox> hello
 hello from applications

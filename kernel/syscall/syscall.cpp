@@ -109,6 +109,12 @@ constexpr uint64_t kResultError = static_cast<uint64_t>(-1);
     case kSysSetLogLevel:
       status = DoSetLogLevel(frame->x[0], result);
       break;
+    case kSysMount:
+      status = DoMount(frame->x[0], frame->x[1], result);
+      break;
+    case kSysUmount:
+      status = DoUmount(frame->x[0], result);
+      break;
     default:
       status = Status::kInvalidArg;
       break;

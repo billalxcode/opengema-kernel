@@ -175,4 +175,18 @@ Status rename(const char* old_path, const char* new_path) noexcept {
   return kgema::rename(old_path, new_path) ? Status::ok : Status::not_found;
 }
 
+Status mount(const char* type, const char* target) noexcept {
+  if (type == nullptr || target == nullptr) {
+    return Status::invalid_argument;
+  }
+  return kgema::mount(type, target) ? Status::ok : Status::not_found;
+}
+
+Status umount(const char* target) noexcept {
+  if (target == nullptr) {
+    return Status::invalid_argument;
+  }
+  return kgema::umount(target) ? Status::ok : Status::not_found;
+}
+
 }  // namespace gemapi::fs

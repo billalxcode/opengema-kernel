@@ -497,6 +497,58 @@ CommandResult RunMv(const char* args, gemapi::usize args_length) {
   return CommandResult::kContinue;
 }
 
+CommandResult RunMount(const char* args, gemapi::usize args_length) {
+  char type[16];
+  char path[128];
+  gemapi::usize type_length = 0;
+  gemapi::usize path_length = 0;
+  const char* cursor = args;
+  const char* end = args + args_length;
+  if (!next_token(cursor, end, type, sizeof(type), type_length) ||
+      !next_token(cursor, end, path, sizeof(path), path_length) ||
+      type_length >= (sizeof(type) - 1U) ||
+      path_length >= (sizeof(path) - 1U)) {
+    gemapi::io::write("mount: usage: mount <type> <path>\n");
+    return CommandResult::kContinue;
+  }
+  char extra[2];
+  gemapi::usize extra_length = 0;
+  if (next_token(cursor, end, extra, sizeof(extra), extra_length)) {
+    gemapi::io::write("mount: usage: mount <type> <path>\n");
+    return CommandResult::kContinue;
+  }
+  if (gemapi::fs::mount(type, path) != gemapi::Status::ok) {
+    gemapi::io::write("mount: failed\n");
+    return CommandResult::kContinue;
+  }
+  gemapi::io::write("mount: mounted\n");
+  return CommandResult::kContinue;
+}
+
+CommandResult RunUmount(const char* args, gemapi::usize args_length) {
+  char path[128];
+  gemapi::usize length = 0;
+  const char* cursor = args;
+  const char* end = args + args_length;
+  if (!next_token(cursor, end, path, sizeof(path), length) ||
+      length >= (sizeof(path) - 1U)) {
+    gemapi::io::write("umount: usage: umount <path>\n");
+    return CommandResult::kContinue;
+  }
+  char extra[2];
+  gemapi::usize extra_length = 0;
+  if (next_token(cursor, end, extra, sizeof(extra), extra_length)) {
+    gemapi::io::write("umount: usage: umount <path>\n");
+    return CommandResult::kContinue;
+  }
+  if (gemapi::fs::umount(path) != gemapi::Status::ok) {
+    gemapi::io::write("umount: failed\n");
+    return CommandResult::kContinue;
+  }
+  gemapi::io::write("umount: unmounted\n");
+  return CommandResult::kContinue;
+}
+
 constexpr Command kCommands[] = {
   {"help", &RunHelp},
   {"echo", &RunEcho},
@@ -512,6 +564,8 @@ constexpr Command kCommands[] = {
   {"mkdir", &RunMkdir},
   {"rm", &RunRm},
   {"mv", &RunMv},
+  {"mount", &RunMount},
+  {"umount", &RunUmount},
   {"halt", &RunHalt},
   {"shutdown", &RunShutdown},
   {"reboot", &RunReboot},

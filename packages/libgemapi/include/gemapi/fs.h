@@ -65,6 +65,8 @@ class File {
 [[nodiscard]] Status unlink(const char* path) noexcept;
 [[nodiscard]] Status rmdir(const char* path) noexcept;
 [[nodiscard]] Status rename(const char* old_path, const char* new_path) noexcept;
+[[nodiscard]] Status mount(const char* type, const char* target) noexcept;
+[[nodiscard]] Status umount(const char* target) noexcept;
 
 // Reads one directory entry. Returns false at the end of the directory.
 [[nodiscard]] Result<bool> list(const char* path, u64 index,
