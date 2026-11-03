@@ -37,7 +37,7 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
    seek, read, lalu cetak `write ok`.
 8. Mode `shell`: prompt `gemabox>`, baca input UART dan keyboard,
    jalankan `help`, `echo`, `cat`, `ls`, `clear`, `acpi`, `uptime`,
-   `sleep`, `ps`, `dmesg`, `loglevel`, `persist`, `mkdir`, `rm`, `mv`,
+   `sleep`, `ps`, `dmesg`, `loglevel`, `mkdir`, `rm`, `mv`,
    `halt`, `shutdown`, dan `reboot`.
 9. Command di luar applet dicari di `/commands/<name>`, lalu
    `/applications/<name>/<name>`.
@@ -45,20 +45,14 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
     waktu sejak boot, `sleep` menunggu dalam milidetik, `ps`
     menampilkan daftar proses dari `/proc/processes`, `dmesg`
     membaca ring log kernel dari `/proc/dmesg`, dan `loglevel`
-    menampilkan atau mengubah filter level log. `persist write` dan
-    `persist read` menguji berkas `/volumes/boot/persist.bin`, sedangkan
-    `persist create` dan `persist read2` menguji pembuatan
-    `/volumes/boot/persist2.bin`. `persist mkdir`, `persist delete`,
-    `persist rename`, `persist truncate`, dan `persist empty` menguji
-    directory, rename, dan truncate. `persist long` dan `persist readlong`
-    menguji nama panjang. Rename dan delete nama panjang memakai `mv` dan
-    `rm` dengan path berkutip.
+    menampilkan atau mengubah filter level log. `mkdir`, `rm`, dan `mv`
+    mengubah isi filesystem writable. Pengujian persistensi FAT32 ada di
+    aplikasi terpisah `/applications/fstest/fstest`, bukan command shell.
+    `halt` menghentikan shell dan init sehingga kernel menyelesaikan self
+    test lalu berhenti. `shutdown` dan `reboot` memakai ACPI/PSCI untuk
+    mematikan atau me-reboot mesin.
 11. Path dengan spasi bisa ditulis di dalam tanda kutip ganda, misalnya
     `mkdir "/tmp/quoted dir"`.
-    `mkdir`, `rm`, dan `mv` mengubah isi filesystem writable. `halt`
-    menghentikan shell dan init sehingga kernel menyelesaikan self test
-    lalu berhenti. `shutdown` dan `reboot` memakai ACPI/PSCI untuk
-    mematikan atau me-reboot mesin.
 
 Child mendeteksi argv kedua dan hanya mencetak `child ok`.
 
@@ -72,7 +66,7 @@ child ok
 spawn ok
 write ok
 gemabox> help
-commands: help, echo, cat, ls, clear, acpi, uptime, sleep, ps, dmesg, loglevel, persist, mkdir, rm, mv, halt, shutdown, reboot
+commands: help, echo, cat, ls, clear, acpi, uptime, sleep, ps, dmesg, loglevel, mkdir, rm, mv, halt, shutdown, reboot
 gemabox> acpi
 ACPI revision 2
 gemabox> uptime
@@ -88,8 +82,6 @@ kernel: kmain entered
 ...
 gemabox> loglevel
 loglevel: info (2)
-gemabox> persist write
-persist: write ok
 gemabox> mkdir /tmp/demo
 gemabox> mv /tmp/demo /tmp/demo2
 gemabox> rm /tmp/demo2

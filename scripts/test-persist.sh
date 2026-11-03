@@ -59,14 +59,14 @@ run_boot() {
   return 0
 }
 
-run_boot $'persist write\npersist create' "persist: create ok"
-run_boot $'persist read\npersist read2' "persist: read2 ok"
-run_boot $'persist mkdir\npersist delete' "persist: delete ok"
-run_boot $'persist rename\nls /volumes/boot' "RENAMED.BIN"
-run_boot "persist truncate" "persist: truncate ok"
-run_boot "persist empty" "persist: empty ok"
-run_boot "persist long" "persist: long ok"
-run_boot "persist readlong" "persist: readlong ok"
+run_boot $'fstest write\nfstest create' "fstest: create ok"
+run_boot $'fstest read\nfstest read2' "fstest: read2 ok"
+run_boot $'fstest mkdir\nfstest delete' "fstest: delete ok"
+run_boot $'fstest rename\nls /volumes/boot' "RENAMED.BIN"
+run_boot "fstest truncate" "fstest: truncate ok"
+run_boot "fstest empty" "fstest: empty ok"
+run_boot "fstest long" "fstest: long ok"
+run_boot "fstest readlong" "fstest: readlong ok"
 run_boot $'mv "/volumes/boot/persist long name.txt" /volumes/boot/long2.txt\ncat /volumes/boot/long2.txt' "persist ok"
 run_boot $'rm /volumes/boot/long2.txt\ncat /volumes/boot/long2.txt' "cat: open failed"
 echo "persist probe: OK"

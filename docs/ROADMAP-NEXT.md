@@ -140,9 +140,9 @@ bisa dijalankan tanpa menyalin kode syscall.
       IRQ/MSI-X, multiple device, dan partisi tulis belum.
 - [ ] FS-16 Metadata: permission, uid/gid, timestamp, ukuran.
 - [x] FS-17 Uji persistensi: buat berkas, tulis, reboot, baca kembali.
-- [~] TEST-01 Hook `renamelong`/`deletelong` sudah dihapus dan test
-      memakai `mv`/`rm` berkutip. Command diagnostik `persist` masih ada
-      dan perlu dipindah ke aplikasi test.
+- [x] TEST-01 Command diagnostik `persist` sudah dipindah ke aplikasi
+      `/applications/fstest/fstest`. Shell tidak lagi punya command test,
+      dan hook `renamelong`/`deletelong` sudah dihapus.
 
 **Selesai bila:** berkas bisa dibuat dan diubah, lalu tetap ada setelah
 reboot.

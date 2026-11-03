@@ -249,16 +249,17 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 - Test loglevel: filter runtime bisa dibaca dan diubah dari shell.
 - Verifikasi manual block write: baca, tulis pola, baca ulang, lalu pulihkan
   sector terakhir pada salinan `esp.img`.
-- Test persistensi: `persist write`/`create`/`mkdir`/`delete`/`rename`/
-  `truncate`/`long` lalu reboot dan `persist read`/`read2`/`empty`/
-  `readlong` dari salinan image yang sama tanpa cache `writethrough`.
-  Rename dan delete nama panjang memakai `mv`/`rm` berkutip.
+- Test persistensi: aplikasi `/applications/fstest/fstest` menjalankan
+  `write`/`create`/`mkdir`/`delete`/`rename`/`truncate`/`long`, lalu reboot
+  dan `read`/`read2`/`empty`/`readlong` dari salinan image yang sama tanpa
+  cache `writethrough`. Rename dan delete nama panjang memakai `mv`/`rm`
+  berkutip. Command `persist` tidak lagi ada di shell produksi.
 - Test shell quoting: `mkdir` dan `rm` menerima path dengan spasi di dalam
   tanda kutip ganda.
 
 Verifikasi branch `dev`:
 
-- `python3 scripts/compile-check.py`: 131 file OK, 1 entri lama dilewati.
+- `python3 scripts/compile-check.py`: 132 file OK, 1 entri lama dilewati.
 - `./scripts/build.sh` lewat podman: kernel build dan link OK,
   `arch-check` dan `gsl-check` OK.
 - `./scripts/test-host.sh`: host tests, ramfs, procfs, devfs, HID, ACPI, FAT32,

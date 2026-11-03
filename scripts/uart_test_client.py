@@ -92,7 +92,7 @@ def main(argv):
                 buffer.clear()
 
             if (help_sent and not help_seen and
-                    b"commands: help, echo, cat, ls, clear, acpi, uptime, sleep, ps, dmesg, loglevel, persist, mkdir, rm, mv, halt, shutdown, reboot" in buffer):
+                    b"commands: help, echo, cat, ls, clear, acpi, uptime, sleep, ps, dmesg, loglevel, mkdir, rm, mv, halt, shutdown, reboot" in buffer):
                 help_seen = True
 
             if (help_seen and not acpi_sent and
