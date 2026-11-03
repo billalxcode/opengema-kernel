@@ -282,9 +282,29 @@ Status FormatProcesses(char* buffer, std::size_t capacity,
   return Status::kOk;
 }
 
+Status FormatBlockDevices(char* buffer, std::size_t capacity,
+                          std::size_t& length) noexcept {
+  og::fmt::LineBuilder line(buffer, capacity);
+  line.Text("name sectors\n");
+  for (uint32_t index = 0; index < drivers::kMaxDevices; ++index) {
+    const Result<drivers::Device> device = drivers::DeviceAt(index);
+    if (device.is_err()) {
+      break;
+    }
+    if (device.value().device_class != drivers::DeviceClass::kBlock) {
+      continue;
+    }
+    line.Text(device.value().name).Char(' ')
+        .Dec(device.value().capacity).Char('\n');
+  }
+  length = line.size();
+  return Status::kOk;
+}
+
 Status MountProcfs() noexcept {
   Result<fs::Node*> proc =
-    fs::procfs::Create(&sched::ThreadCount, &FormatProcesses);
+    fs::procfs::Create(&sched::ThreadCount, &FormatProcesses,
+                       &FormatBlockDevices);
   if (proc.is_err()) {
     return proc.status();
   }

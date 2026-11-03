@@ -43,6 +43,10 @@ constexpr uint16_t kVendorRedHat = 0x1AF4;
 using MatchFunction = bool (*)(const Info& info);
 [[nodiscard]] Result<Info> FindFirst(MatchFunction match) noexcept;
 
+// Returns the match at a zero-based index in PCI scan order.
+[[nodiscard]] Result<Info> FindNth(MatchFunction match,
+                                   uint32_t index) noexcept;
+
 // Enables memory decoding and bus mastering for a device.
 [[nodiscard]] Status EnableDevice(Address address) noexcept;
 

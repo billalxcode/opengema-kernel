@@ -203,13 +203,14 @@ Result<Info> FindByVendorDevice(uint16_t vendor_id, uint16_t device_id) noexcept
   return Result<Info>::Err(Status::kNotFound);
 }
 
-Result<Info> FindFirst(MatchFunction match) noexcept {
+Result<Info> FindNth(MatchFunction match, uint32_t index) noexcept {
   if (!g_ready) {
     return Result<Info>::Err(Status::kNotInit);
   }
   if (match == nullptr) {
     return Result<Info>::Err(Status::kInvalidArg);
   }
+  uint32_t seen = 0;
   for (uint32_t bus = 0; bus < g_bus_count; ++bus) {
     for (uint32_t device = 0; device < 32U; ++device) {
       for (uint32_t function = 0; function < 8U; ++function) {
@@ -219,13 +220,21 @@ Result<Info> FindFirst(MatchFunction match) noexcept {
         if (candidate.is_err()) {
           continue;
         }
-        if (match(candidate.value())) {
+        if (!match(candidate.value())) {
+          continue;
+        }
+        if (seen == index) {
           return candidate;
         }
+        ++seen;
       }
     }
   }
   return Result<Info>::Err(Status::kNotFound);
+}
+
+Result<Info> FindFirst(MatchFunction match) noexcept {
+  return FindNth(match, 0);
 }
 
 Status EnableDevice(Address address) noexcept {

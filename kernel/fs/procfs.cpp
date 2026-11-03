@@ -16,6 +16,7 @@ enum class ProcKind : uint32_t {
   kAcpi = 2,
   kProcesses = 3,
   kDmesg = 4,
+  kBlock = 5,
 };
 
 struct ProcFile {
@@ -26,13 +27,14 @@ struct ProcFile {
 
 struct ProcDir {
   Node node;
-  ProcFile files[5];
+  ProcFile files[6];
   uint32_t count;
 };
 
 ProcDir g_root;
 ThreadCountFn g_thread_count = nullptr;
 ProcessTextFn g_process_text = nullptr;
+BlockTextFn g_block_text = nullptr;
 
 void GenerateAcpi(og::fmt::LineBuilder& line) noexcept {
   const acpi::Info& info = acpi::GetInfo();
@@ -98,6 +100,13 @@ Status Generate(const ProcFile& file, char* buffer, std::size_t capacity,
       }
       break;
     case ProcKind::kDmesg:
+      break;
+    case ProcKind::kBlock:
+      if (g_block_text == nullptr) {
+        line.Text("no block devices\n");
+      } else {
+        return g_block_text(buffer, capacity, length);
+      }
       break;
     default:
       return Status::kInvalidArg;
@@ -203,9 +212,11 @@ void AddFile(uint32_t index, const char* name, ProcKind kind) noexcept {
 }  // namespace
 
 Result<Node*> Create(ThreadCountFn thread_count,
-                     ProcessTextFn process_text) noexcept {
+                     ProcessTextFn process_text,
+                     BlockTextFn block_text) noexcept {
   g_thread_count = thread_count;
   g_process_text = process_text;
+  g_block_text = block_text;
   mem::Zero(&g_root, sizeof(g_root));
   g_root.node.name = "/";
   g_root.node.type = NodeType::kDirectory;
@@ -219,7 +230,8 @@ Result<Node*> Create(ThreadCountFn thread_count,
   AddFile(2, "acpi", ProcKind::kAcpi);
   AddFile(3, "processes", ProcKind::kProcesses);
   AddFile(4, "dmesg", ProcKind::kDmesg);
-  g_root.count = 5;
+  AddFile(5, "block", ProcKind::kBlock);
+  g_root.count = 6;
   return Result<Node*>::Ok(&g_root.node);
 }
 

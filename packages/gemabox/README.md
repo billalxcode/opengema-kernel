@@ -48,7 +48,8 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
     menampilkan atau mengubah filter level log. `mkdir`, `rm`, dan `mv`
     mengubah isi filesystem writable. `mount ramfs <path>` memasang ramfs
     baru dengan referensi global, dan `umount <path>` melepas referensi
-    proses tersebut. Pengujian persistensi FAT32 ada di aplikasi terpisah
+    proses tersebut. `cat /proc/block` menampilkan nama dan kapasitas
+    device blok. Pengujian persistensi FAT32 ada di aplikasi terpisah
     `/applications/fstest/fstest`, bukan command shell.
     `halt` menghentikan shell dan init sehingga kernel menyelesaikan self
     test lalu berhenti. `shutdown` dan `reboot` memakai ACPI/PSCI untuk

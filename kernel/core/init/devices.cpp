@@ -19,8 +19,13 @@ namespace og::boot {
 namespace {
 
 constexpr uint64_t kSectorSize = 512;
+constexpr uint32_t kMaxBlockDevices = 2;
 
-drivers::virtio::Blk g_block_device;
+drivers::virtio::Blk g_block_devices[kMaxBlockDevices];
+constexpr const char* kBlockNames[kMaxBlockDevices] = {
+  "virtio-blk0",
+  "virtio-blk1",
+};
 drivers::virtio::Gpu g_gpu;
 drivers::virtio::Input g_input;
 drivers::rtc::Pl031 g_rtc;
@@ -94,49 +99,59 @@ void InitBlockDevice() noexcept {
     return;
   }
 
-  Result<drivers::pci::Info> info = drivers::pci::FindFirst(&drivers::virtio::IsVirtioBlock);
-  if (info.is_err()) {
-    Log(LogLevel::kWarn, "virtio-blk: no device on pci\n");
-    return;
-  }
-  LogDec(LogLevel::kInfo, "pci: virtio device id", info.value().device_id);
+  uint32_t block_count = 0;
+  for (uint32_t index = 0; index < kMaxBlockDevices; ++index) {
+    const Result<drivers::pci::Info> info =
+      drivers::pci::FindNth(&drivers::virtio::IsVirtioBlock, index);
+    if (info.is_err()) {
+      if (index == 0U) {
+        Log(LogLevel::kWarn, "virtio-blk: no device on pci\n");
+      }
+      break;
+    }
+    LogDec(LogLevel::kInfo, "pci: virtio-blk id", info.value().device_id);
 
-  status = drivers::pci::EnableDevice(info.value().address);
-  if (IsErr(status)) {
-    Log(LogLevel::kError, "pci: enable device failed\n");
-    return;
-  }
+    status = drivers::pci::EnableDevice(info.value().address);
+    if (IsErr(status)) {
+      Log(LogLevel::kError, "pci: enable device failed\n");
+      break;
+    }
 
-  status = g_block_device.init(info.value());
-  if (IsErr(status)) {
-    Log(LogLevel::kError, "virtio-blk: init failed\n");
-    return;
-  }
-  LogDec(LogLevel::kInfo, "virtio-blk: queue size", g_block_device.queue_size());
-  LogDec(LogLevel::kInfo, "virtio-blk: capacity sectors", g_block_device.capacity_sectors());
+    drivers::virtio::Blk& block = g_block_devices[index];
+    status = block.init(info.value());
+    if (IsErr(status)) {
+      Log(LogLevel::kError, "virtio-blk: init failed\n");
+      break;
+    }
+    LogDec(LogLevel::kInfo, "virtio-blk: queue size", block.queue_size());
+    LogDec(LogLevel::kInfo, "virtio-blk: capacity sectors",
+           block.capacity_sectors());
 
-  drivers::Device device{};
-  device.name = "virtio-blk0";
-  device.device_class = drivers::DeviceClass::kBlock;
-  device.capacity = g_block_device.capacity_sectors();
-  device.driver_data = &g_block_device;
-  status = drivers::RegisterDevice(device);
-  if (IsErr(status)) {
-    Log(LogLevel::kError, "device: register failed\n");
-    return;
-  }
+    drivers::Device device{};
+    device.name = kBlockNames[index];
+    device.device_class = drivers::DeviceClass::kBlock;
+    device.capacity = block.capacity_sectors();
+    device.driver_data = &block;
+    status = drivers::RegisterDevice(device);
+    if (IsErr(status)) {
+      Log(LogLevel::kError, "device: register failed\n");
+      break;
+    }
 
-  uint8_t sector[kSectorSize];
-  status = g_block_device.read(1, std::span<uint8_t>(sector, kSectorSize));
-  if (IsErr(status)) {
-    Log(LogLevel::kError, "virtio-blk: read failed\n");
-    return;
+    uint8_t sector[kSectorSize];
+    status = block.read(1, std::span<uint8_t>(sector, kSectorSize));
+    if (IsErr(status)) {
+      Log(LogLevel::kError, "virtio-blk: read failed\n");
+      break;
+    }
+    if (!mem::Equal(sector, "EFI PART", 8)) {
+      Log(LogLevel::kError, "virtio-blk: gpt signature mismatch\n");
+      break;
+    }
+    Log(LogLevel::kInfo, "virtio-blk: gpt header ok\n");
+    ++block_count;
   }
-  if (!mem::Equal(sector, "EFI PART", 8)) {
-    Log(LogLevel::kError, "virtio-blk: gpt signature mismatch\n");
-    return;
-  }
-  Log(LogLevel::kInfo, "virtio-blk: gpt header ok\n");
+  LogDec(LogLevel::kInfo, "virtio-blk: devices", block_count);
 }
 
 void InitGpu() noexcept {

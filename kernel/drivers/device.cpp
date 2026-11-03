@@ -71,6 +71,17 @@ Result<Device> FindFirstDevice(DeviceClass device_class) noexcept {
   return Result<Device>::Err(Status::kNotFound);
 }
 
+Result<Device> DeviceAt(uint32_t index) noexcept {
+  if (!g_ready) {
+    return Result<Device>::Err(Status::kNotInit);
+  }
+  arch::aarch64::LockGuard<arch::aarch64::IrqSpinlock> guard(g_lock);
+  if (index >= g_count) {
+    return Result<Device>::Err(Status::kNotFound);
+  }
+  return Result<Device>::Ok(g_devices[index]);
+}
+
 uint32_t DeviceCount() noexcept {
   return g_count;
 }

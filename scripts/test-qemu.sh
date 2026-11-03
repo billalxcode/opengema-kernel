@@ -44,7 +44,9 @@ SOCKET="$SERIAL_DIR/serial.sock"
 LOG="$SERIAL_DIR/serial.log"
 MONITOR="$SERIAL_DIR/monitor.sock"
 SCREEN="$SERIAL_DIR/screen.ppm"
+DATA_DISK="$SERIAL_DIR/data.img"
 VARS_TMP="$(mktemp /tmp/AAVMF_VARS.XXXXXX)"
+cp "$ESP" "$DATA_DISK"
 cleanup() {
   if [ -n "${QEMU_PID:-}" ]; then
     kill "$QEMU_PID" 2>/dev/null || true
@@ -65,6 +67,7 @@ qemu-system-aarch64 \
   -drive if=pflash,format=raw,file="$CODE",readonly=on \
   -drive if=pflash,format=raw,file="$VARS_TMP" \
   -drive file="$ESP",format=raw,if=virtio \
+  -drive file="$DATA_DISK",format=raw,if=virtio \
   -device virtio-gpu-pci,xres=$DISPLAY_WIDTH,yres=$DISPLAY_HEIGHT \
   -device virtio-keyboard-pci \
   -serial "unix:$SOCKET,server=on,wait=off" \
@@ -128,6 +131,7 @@ check_absent() {
 }
 
 check "fs: fat32 file read ok"
+check "virtio-blk: devices: 2"
 check "virtio-gpu: scanout ok"
 check "virtio-input: ready"
 check "hardening: wx attributes ok"
@@ -186,6 +190,7 @@ count_check() {
 }
 
 count_check "hello from el0" 2
+count_check "virtio-blk: capacity sectors" 2
 count_check "init ok" 1
 count_check "file ok" 2
 count_check "mmap ok" 2

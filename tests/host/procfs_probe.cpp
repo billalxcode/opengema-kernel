@@ -59,6 +59,20 @@ og::Status ProcessText(char* buffer, std::size_t capacity,
   return og::Status::kOk;
 }
 
+og::Status BlockText(char* buffer, std::size_t capacity,
+                     std::size_t& length) noexcept {
+  constexpr char kText[] = "virtio-blk0 100\nvirtio-blk1 200\n";
+  constexpr std::size_t kSize = sizeof(kText) - 1U;
+  if (buffer == nullptr || capacity < kSize) {
+    return og::Status::kNoMem;
+  }
+  for (std::size_t index = 0; index < kSize; ++index) {
+    buffer[index] = kText[index];
+  }
+  length = kSize;
+  return og::Status::kOk;
+}
+
 bool ReadAll(og::fs::Node* node, uint64_t offset, char* buffer,
              std::size_t capacity, uint64_t& read) {
   if (node == nullptr || node->ops == nullptr || node->ops->read == nullptr) {
@@ -155,6 +169,18 @@ int main() {
     return 1;
   }
 
+  og::fs::Node* block = nullptr;
+  if (og::IsErr(root.value()->ops->lookup(root.value(), "block", &block)) ||
+      block == nullptr) {
+    std::printf("procfs probe: block lookup failed\n");
+    return 1;
+  }
+  if (!ReadAll(block, 0, text, sizeof(text), read) || read != 17U ||
+      text[0] != 'n' || text[16] != '\n') {
+    std::printf("procfs probe: block content mismatch\n");
+    return 1;
+  }
+
   if (root.value()->ops->lookup(root.value(), "missing", &threads) !=
       og::Status::kNotFound) {
     std::printf("procfs probe: missing lookup was not rejected\n");
@@ -189,8 +215,35 @@ int main() {
     return 1;
   }
   if (og::IsErr(root.value()->ops->iterate(root.value(), 5, entry, found)) ||
+      !found || entry.name[0] != 'b') {
+    std::printf("procfs probe: iterate sixth entry failed\n");
+    return 1;
+  }
+  if (og::IsErr(root.value()->ops->iterate(root.value(), 6, entry, found)) ||
       found) {
     std::printf("procfs probe: iterate past end failed\n");
+    return 1;
+  }
+
+  const auto custom =
+    og::fs::procfs::Create(&ThreadCount, &ProcessText, &BlockText);
+  if (custom.is_err()) {
+    std::printf("procfs probe: custom create failed\n");
+    return 1;
+  }
+  og::fs::Node* custom_block = nullptr;
+  if (og::IsErr(custom.value()->ops->lookup(custom.value(), "block",
+                                            &custom_block)) ||
+      custom_block == nullptr) {
+    std::printf("procfs probe: custom block lookup failed\n");
+    return 1;
+  }
+  constexpr std::size_t kBlockSize =
+    sizeof("virtio-blk0 100\nvirtio-blk1 200\n") - 1U;
+  if (!ReadAll(custom_block, 0, text, sizeof(text), read) ||
+      read != kBlockSize || text[0] != 'v' ||
+      text[kBlockSize - 1U] != '\n') {
+    std::printf("procfs probe: custom block content mismatch\n");
     return 1;
   }
 

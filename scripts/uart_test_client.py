@@ -18,9 +18,14 @@ import time
 
 def send_line(client, text):
     """Send a command slowly so the PL011 RX FIFO is always drained."""
-    for value in text:
-        client.sendall(bytes((value,)))
-        time.sleep(0.01)
+    previous = client.gettimeout()
+    client.settimeout(5.0)
+    try:
+        for value in text:
+            client.sendall(bytes((value,)))
+            time.sleep(0.01)
+    finally:
+        client.settimeout(previous)
 
 
 def main(argv):
@@ -62,6 +67,15 @@ def main(argv):
     level_seen = False
     fs_sent = False
     fs_seen = False
+    fs_batch = 0
+    fs_output = bytearray()
+    fs_batches = [
+        b"mkdir /tmp/d\nmv /tmp/d /tmp/e\nls /tmp\nrm /tmp/e\n",
+        b"mkdir \"/tmp/quoted dir\"\nrm \"/tmp/quoted dir\"\n",
+        b"mkdir /tmp/mnt\nmount ramfs /tmp/mnt\nmount ramfs /tmp/mnt\n",
+        b"umount /tmp/mnt\numount /tmp/mnt\nrm /tmp/mnt\n",
+        b"cat /proc/block\necho MOUNT-DONE\n",
+    ]
     clear_sent = False
     clear_ready = False
     clear_released = False
@@ -84,6 +98,8 @@ def main(argv):
                 log.write(chunk)
                 log.flush()
                 buffer.extend(chunk)
+                if fs_sent:
+                    fs_output.extend(chunk)
                 last_data = time.time()
 
             if not help_sent and b"gemabox> " in buffer:
@@ -150,17 +166,30 @@ def main(argv):
             if (level_seen and not fs_sent and
                     time.time() - last_data > 0.5 and
                     b"gemabox> " in buffer):
-                send_line(client, b"mkdir /tmp/d\nmv /tmp/d /tmp/e\nls /tmp\nrm /tmp/e\nmkdir \"/tmp/quoted dir\"\nrm \"/tmp/quoted dir\"\nmkdir /tmp/mnt\nmount ramfs /tmp/mnt\nmount ramfs /tmp/mnt\numount /tmp/mnt\numount /tmp/mnt\nrm /tmp/mnt\necho MOUNT-DONE\n")
+                send_line(client, fs_batches[0])
+                fs_batch = 1
                 fs_sent = True
                 buffer.clear()
 
-            if fs_sent and not fs_seen and b"MOUNT-DONE" in buffer:
+            if (fs_sent and not fs_seen and
+                    fs_batch < len(fs_batches) and
+                    time.time() - last_data > 0.5 and
+                    b"gemabox> " in buffer):
+                send_line(client, fs_batches[fs_batch])
+                fs_batch += 1
+                buffer.clear()
+
+            if (fs_sent and not fs_seen and
+                    fs_batch >= len(fs_batches) and
+                    b"MOUNT-DONE" in fs_output):
                 missing = []
-                for marker in (b"e/", b"mount: mounted", b"umount: unmounted"):
-                    if marker not in buffer:
+                for marker in (b"e/", b"mount: mounted", b"umount: unmounted",
+                               b"virtio-blk1"):
+                    if marker not in fs_output:
                         missing.append(marker.decode())
-                if missing or b"mount: failed" in buffer or \
-                        b"umount: failed" in buffer or b"rm: failed" in buffer:
+                if missing or b"mount: failed" in fs_output or \
+                        b"umount: failed" in fs_output or \
+                        b"rm: failed" in fs_output:
                     print("uart client: mount test failed: " +
                           (", ".join(missing) if missing else "command failed"))
                     return 1

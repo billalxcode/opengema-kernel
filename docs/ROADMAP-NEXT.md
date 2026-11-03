@@ -139,8 +139,9 @@ bisa dijalankan tanpa menyalin kode syscall.
       entry dilepas saat proses keluar. Unmount menyembunyikan nama mount
       lebih dulu, lalu root ramfs dibebaskan setelah descriptor terakhir
       ditutup dan tidak ada operasi VFS yang sedang memakai node tersebut.
-- [~] FS-15 Block layer: write path, adapter, dan flush selesai;
-      IRQ/MSI-X, multiple device, dan partisi tulis belum.
+- [~] FS-15 Block layer: write path, adapter, flush, dan beberapa
+      virtio-blk selesai. `/proc/block` menampilkan nama dan kapasitas tiap
+      device. IRQ/MSI-X dan partisi tulis belum.
 - [ ] FS-16 Metadata: permission, uid/gid, timestamp, ukuran.
 - [x] FS-17 Uji persistensi: buat berkas, tulis, reboot, baca kembali.
 - [x] TEST-01 Command diagnostik `persist` sudah dipindah ke aplikasi

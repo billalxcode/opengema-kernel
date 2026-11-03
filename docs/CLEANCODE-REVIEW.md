@@ -262,6 +262,9 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   tanda kutip ganda.
 - Test mount di QEMU: `mount ramfs` dua kali, dua `umount`, lalu `rm`
   direktori target untuk memastikan refcount dan cleanup berjalan.
+- Test multi block device: QEMU memakai dua virtio-blk, kernel mencatat
+  kapasitas keduanya, dan `/proc/block` menampilkan `virtio-blk0` serta
+  `virtio-blk1`.
 
 Verifikasi branch `dev`:
 
