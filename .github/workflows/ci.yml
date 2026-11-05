@@ -37,7 +37,6 @@ jobs:
             ninja-build \
             parted \
             python3 \
-            qemu-efi-aarch64 \
             qemu-system-arm \
             wget
 
@@ -87,6 +86,17 @@ jobs:
 
       - name: Boot image
         run: ./scripts/make-esp.sh
+
+      - name: Upload boot artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: boot-image
+          path: |
+            esp.img
+            build/BOOTAA64.EFI
+            build/gema-system.img
+          if-no-files-found: error
+          retention-days: 7
 
       - name: QEMU smoke DTB
         run: |

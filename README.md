@@ -76,6 +76,12 @@ coverage, SDK probe, image boot, smoke test QEMU DTB dan ACPI, serta tes
 persistensi. Workflow ada di `.github/workflows/ci.yml` dan memakai LLVM 19
 di runner Ubuntu 24.04.
 
+Firmware UEFI dipin di `scripts/firmware.lock` ke paket Debian
+`qemu-efi-aarch64` versi `2022.11-6+deb12u2`. `get-firmware.sh` memverifikasi
+SHA256 paket, `AAVMF_CODE.fd`, dan `AAVMF_VARS.fd`, lalu mengunduh ulang bila
+ada yang tidak cocok. Artefak `esp.img`, `BOOTAA64.EFI`, dan
+`gema-system.img` diunggah dari workflow.
+
 ## Status
 
 Sudah boot sampai kernel dengan MMU, memori, GIC, timer, virtio-blk,

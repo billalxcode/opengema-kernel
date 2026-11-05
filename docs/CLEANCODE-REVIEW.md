@@ -278,6 +278,12 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 - Coverage source-based LLVM untuk host test inti menghasilkan 58,25 persen
   baris dengan ambang CI 55 persen. Laporan ada di
   `build/coverage/report.txt`.
+- Firmware UEFI dipin di `scripts/firmware.lock` ke paket Debian
+  `qemu-efi-aarch64` 2022.11-6+deb12u2. `get-firmware.sh` memverifikasi
+  SHA256 paket dan kedua file AAVMF, lalu mengunduh ulang bila berbeda.
+  Ini juga membersihkan variable store yang sempat berubah karena boot lama.
+- Workflow mengunggah artifact `boot-image` berisi `esp.img`,
+  `BOOTAA64.EFI`, dan `gema-system.img`.
 - `fix_compile_commands.py` sekarang hanya mengganti `/work` sebagai
   komponen path. Sebelumnya penggantian substring merusak entri
   `kernel/events/workqueue.cpp` menjadi path ganda.
@@ -330,6 +336,8 @@ Verifikasi branch `dev`:
 - `.github/workflows/ci.yml`: build native Linux, host test, sanitizer,
   clang-tidy, coverage, SDK, QEMU DTB/ACPI, dan persistensi. Semua langkah
   lulus lokal; workflow belum dijalankan di GitHub.
+- `./scripts/get-firmware.sh`: firmware 2022.11-6+deb12u2 terverifikasi
+  SHA256; artifact `boot-image` berisi loader dan image sistem.
 - `./scripts/test-host.sh`: host tests, ramfs, procfs, devfs, HID, ACPI, FAT32,
   gemapi fs, gemapi api, kgema, GPT, FDT, VFS, ELF, dan GSLFS probe OK.
 - `./scripts/test-qemu.sh` lewat container arm64: OK.

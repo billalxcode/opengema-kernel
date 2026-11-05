@@ -1,0 +1,7 @@
+# Pinned AAVMF firmware used by QEMU tests. The Debian pool keeps the
+# versioned package, so the bytes do not depend on the runner image.
+FIRMWARE_VERSION=2022.11-6+deb12u2
+FIRMWARE_URL=https://deb.debian.org/debian/pool/main/e/edk2/qemu-efi-aarch64_2022.11-6+deb12u2_all.deb
+FIRMWARE_DEB_SHA256=9a55c7b94fdf13a28928359a77d42e5364aa3ae2e558bd1fd5361955bf479d81
+FIRMWARE_CODE_SHA256=5f8ef96257f27e2815270bc54cbf6923bb344cbb5cd72be5b392c2ee4939181a
+FIRMWARE_VARS_SHA256=3b6a07d0d404fab4e23b6d34bc6696a6a312dd92821332385e5af7c01c421351
