@@ -16,6 +16,7 @@ struct IrqEntry {
 constexpr uint32_t kMaxCpuHooks = 4;
 
 IrqEntry g_table[kMaxIrq];
+uint64_t g_irq_counts[kMaxIrq];
 InterruptController g_controller{};
 arch::aarch64::IrqSpinlock g_table_lock;
 IrqExitHook g_exit_hooks[kMaxCpuHooks];
@@ -89,7 +90,15 @@ Status DispatchIrq(uint32_t irq) noexcept {
   if (handler == nullptr) {
     return Status::kNotFound;
   }
+  (void)__atomic_add_fetch(&g_irq_counts[irq], 1U, __ATOMIC_RELAXED);
   return handler(g_table[irq].context, irq);
+}
+
+uint64_t IrqCount(uint32_t irq) noexcept {
+  if (irq >= kMaxIrq) {
+    return 0U;
+  }
+  return __atomic_load_n(&g_irq_counts[irq], __ATOMIC_ACQUIRE);
 }
 
 Status HandleIrq() noexcept {

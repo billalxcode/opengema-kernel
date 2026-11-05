@@ -225,6 +225,18 @@ int main() {
     std::printf("procfs probe: devices content mismatch\n");
     return 1;
   }
+  og::fs::Node* interrupts = nullptr;
+  if (og::IsErr(root.value()->ops->lookup(root.value(), "interrupts",
+                                          &interrupts)) ||
+      interrupts == nullptr) {
+    std::printf("procfs probe: interrupts lookup failed\n");
+    return 1;
+  }
+  if (!ReadAll(interrupts, 0, text, sizeof(text), read) || read != 23U ||
+      text[0] != 'i' || text[22] != '\n') {
+    std::printf("procfs probe: interrupts content mismatch\n");
+    return 1;
+  }
 
   if (root.value()->ops->lookup(root.value(), "missing", &threads) !=
       og::Status::kNotFound) {
@@ -285,6 +297,11 @@ int main() {
     return 1;
   }
   if (og::IsErr(root.value()->ops->iterate(root.value(), 10, entry, found)) ||
+      !found || entry.name[0] != 'i') {
+    std::printf("procfs probe: iterate eleventh entry failed\n");
+    return 1;
+  }
+  if (og::IsErr(root.value()->ops->iterate(root.value(), 11, entry, found)) ||
       found) {
     std::printf("procfs probe: iterate past end failed\n");
     return 1;

@@ -280,6 +280,7 @@ void SchedulerTick(void* /*context*/) noexcept {
   const uint32_t index = CpuIndex();
   const uint64_t daif = arch::aarch64::IrqSave();
   g_lock.lock();
+  (void)__atomic_add_fetch(&g_cpu[index].heartbeat, 1U, __ATOMIC_RELAXED);
   Thread* current = g_cpu[index].current;
   if (current != nullptr) {
     (void)__atomic_add_fetch(&current->cpu_ticks, 1U, __ATOMIC_RELAXED);
@@ -425,6 +426,13 @@ Status ThreadReclaim(Thread* thread) noexcept {
 
 uint64_t ContextSwitchCount() noexcept {
   return __atomic_load_n(&g_context_switches, __ATOMIC_ACQUIRE);
+}
+
+uint64_t CpuHeartbeat(uint32_t cpu) noexcept {
+  if (cpu >= detail::kMaxCpus) {
+    return 0U;
+  }
+  return __atomic_load_n(&g_cpu[cpu].heartbeat, __ATOMIC_ACQUIRE);
 }
 
 uint32_t ThreadCount() noexcept {

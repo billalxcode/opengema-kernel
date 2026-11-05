@@ -2,6 +2,7 @@
 
 #include "og/events/irq.h"
 #include "og/io/register.h"
+#include "og/io/sysrq.h"
 
 namespace og::drivers::uart {
 
@@ -197,6 +198,9 @@ Status Pl011::RxHandler(void* context, uint32_t /*irq*/) noexcept {
 }
 
 void Pl011::push(char value) noexcept {
+  if (io::SysRqFilter(value)) {
+    return;
+  }
   const uint32_t head = __atomic_load_n(&ring_head_, __ATOMIC_RELAXED);
   const uint32_t tail = __atomic_load_n(&ring_tail_, __ATOMIC_ACQUIRE);
   if ((head - tail) >= kRingCapacity) {

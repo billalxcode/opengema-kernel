@@ -236,7 +236,9 @@ bekerja dari shell.
 - [x] OBS-01 Ring buffer dmesg dan level log runtime.
 - [x] OBS-02 Counter scheduler, memori, VFS, dan block device serta trace
       ring `/proc/trace` untuk event block, context switch, spawn, dan exit.
-- [~] OBS-03 Panic dump menampilkan thread, proses, heap, frame, log bytes,\n      dan 8 word stack. Watchdog dan magic SysRq belum.
+- [x] OBS-03 Panic dump menampilkan thread, proses, heap, frame, log bytes,
+      dan 8 word stack. SysRq `Ctrl-A` lalu `s`/`b`/`o`/`h` untuk statistik,
+      reboot, shutdown, dan halt. Watchdog memeriksa heartbeat tiap CPU.
 - [ ] SEC-01 KASLR dan relokasi image.
 - [ ] SEC-02 PAN dan validasi akses user yang seragam.
 - [ ] SEC-03 PAC/BTI bila tersedia di target.

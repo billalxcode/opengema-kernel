@@ -21,6 +21,7 @@ enum class ProcKind : uint32_t {
   kStat = 7,
   kTrace = 8,
   kDevices = 9,
+  kInterrupts = 10,
 };
 
 struct ProcFile {
@@ -31,7 +32,7 @@ struct ProcFile {
 
 struct ProcDir {
   Node node;
-  ProcFile files[10];
+  ProcFile files[11];
   uint32_t count;
 };
 
@@ -43,6 +44,7 @@ TextFn g_meminfo_text = nullptr;
 TextFn g_stat_text = nullptr;
 TextFn g_trace_text = nullptr;
 TextFn g_devices_text = nullptr;
+TextFn g_interrupts_text = nullptr;
 
 void GenerateAcpi(og::fmt::LineBuilder& line) noexcept {
   const acpi::Info& info = acpi::GetInfo();
@@ -142,6 +144,13 @@ Status Generate(const ProcFile& file, char* buffer, std::size_t capacity,
         line.Text("devices unavailable\n");
       } else {
         return g_devices_text(buffer, capacity, length);
+      }
+      break;
+    case ProcKind::kInterrupts:
+      if (g_interrupts_text == nullptr) {
+        line.Text("interrupts unavailable\n");
+      } else {
+        return g_interrupts_text(buffer, capacity, length);
       }
       break;
     default:
@@ -254,7 +263,8 @@ Result<Node*> Create(ThreadCountFn thread_count,
                      TextFn meminfo_text,
                      TextFn stat_text,
                      TextFn trace_text,
-                     TextFn devices_text) noexcept {
+                     TextFn devices_text,
+                     TextFn interrupts_text) noexcept {
   g_thread_count = thread_count;
   g_process_text = process_text;
   g_block_text = block_text;
@@ -262,6 +272,7 @@ Result<Node*> Create(ThreadCountFn thread_count,
   g_stat_text = stat_text;
   g_trace_text = trace_text;
   g_devices_text = devices_text;
+  g_interrupts_text = interrupts_text;
   mem::Zero(&g_root, sizeof(g_root));
   g_root.node.name = "/";
   g_root.node.type = NodeType::kDirectory;
@@ -281,7 +292,8 @@ Result<Node*> Create(ThreadCountFn thread_count,
   AddFile(7, "stat", ProcKind::kStat);
   AddFile(8, "trace", ProcKind::kTrace);
   AddFile(9, "devices", ProcKind::kDevices);
-  g_root.count = 10;
+  AddFile(10, "interrupts", ProcKind::kInterrupts);
+  g_root.count = 11;
   return Result<Node*>::Ok(&g_root.node);
 }
 

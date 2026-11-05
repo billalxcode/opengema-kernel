@@ -8,6 +8,7 @@
 #include "og/core/trace.h"
 #include "og/drivers/device.h"
 #include "og/drivers/virtio_blk.h"
+#include "og/events/irq.h"
 #include "og/fs/block_device.h"
 #include "og/fs/devfs.h"
 #include "og/fs/fat32.h"
@@ -394,11 +395,26 @@ Status FormatDevices(char* buffer, std::size_t capacity,
   return Status::kOk;
 }
 
+Status FormatInterrupts(char* buffer, std::size_t capacity,
+                        std::size_t& length) noexcept {
+  og::fmt::LineBuilder line(buffer, capacity);
+  line.Text("irq count\n");
+  for (uint32_t irq = 0; irq < events::kMaxIrq; ++irq) {
+    const uint64_t count = events::IrqCount(irq);
+    if (count == 0U) {
+      continue;
+    }
+    line.Dec(irq).Char(' ').Dec(count).Char('\n');
+  }
+  length = line.size();
+  return Status::kOk;
+}
+
 Status MountProcfs() noexcept {
   Result<fs::Node*> proc =
     fs::procfs::Create(&sched::ThreadCount, &FormatProcesses,
                        &FormatBlockDevices, &FormatMemInfo, &FormatStat,
-                       &FormatTrace, &FormatDevices);
+                       &FormatTrace, &FormatDevices, &FormatInterrupts);
   if (proc.is_err()) {
     return proc.status();
   }

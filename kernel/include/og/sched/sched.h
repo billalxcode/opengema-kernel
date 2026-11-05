@@ -105,6 +105,7 @@ void ThreadYield() noexcept;
 [[nodiscard]] Status ThreadReclaim(Thread* thread) noexcept;
 [[nodiscard]] uint32_t ThreadCount() noexcept;
 [[nodiscard]] uint64_t ContextSwitchCount() noexcept;
+[[nodiscard]] uint64_t CpuHeartbeat(uint32_t cpu) noexcept;
 
 void WaitQueueInit(WaitQueue& queue) noexcept;
 void WaitQueueWait(WaitQueue& queue) noexcept;

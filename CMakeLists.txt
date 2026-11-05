@@ -465,6 +465,7 @@ og_add_module(og_io
     kernel/io/font.cpp
     kernel/io/framebuffer_console.cpp
     kernel/io/framebuffer_draw.cpp
+    kernel/io/sysrq.cpp
   DEPS og_arch og_inc_kernel)
 
 og_add_module(og_core
@@ -517,7 +518,7 @@ og_add_module(og_drivers
     kernel/drivers/virtio/virtio_blk.cpp
     kernel/drivers/virtio/virtio_gpu.cpp
     kernel/drivers/virtio/virtio_input.cpp
-  DEPS og_events og_time og_dma og_core og_inc_kernel)
+  DEPS og_events og_time og_dma og_core og_io og_inc_kernel)
 
 og_add_module(og_fs
   SOURCES

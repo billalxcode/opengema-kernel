@@ -254,8 +254,13 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   dihitung dari tick scheduler.
 - Test observability: `/proc/meminfo` menampilkan frame dan heap,
   `/proc/stat` menampilkan tick, thread, context switch, proses, operasi
-  VFS, dan counter block device. `/proc/trace` menampilkan ring event, dan
-  `/proc/devices` menampilkan registry device.
+  VFS, dan counter block device. `/proc/trace` menampilkan ring event,
+  `/proc/devices` menampilkan registry device, dan `/proc/interrupts`
+  menampilkan jumlah interrupt per IRQ.
+- Test SysRq: `Ctrl-A` lalu `s` lewat UART mencetak statistik kernel;
+  `b`, `o`, dan `h` menjadwalkan reboot, shutdown, dan halt.
+- Test watchdog: timer periodik membandingkan heartbeat tiap CPU dan panic
+  bila salah satu CPU berhenti menerima tick.
 - Test SMP: `SMP=4` membuat worker thread satu per CPU dan memverifikasi
   seluruh CPU menjalankan worker.
 - Test loglevel: filter runtime bisa dibaca dan diubah dari shell.
@@ -284,7 +289,7 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 
 Verifikasi branch `dev`:
 
-- `python3 scripts/compile-check.py`: 133 file OK, 1 entri lama dilewati.
+- `python3 scripts/compile-check.py`: 134 file OK, 1 entri lama dilewati.
 - `./scripts/build.sh` lewat podman: kernel build dan link OK,
   `arch-check` dan `gsl-check` OK.
 - `./scripts/test-host.sh`: host tests, ramfs, procfs, devfs, HID, ACPI, FAT32,

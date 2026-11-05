@@ -2,7 +2,7 @@
 
 // Process information filesystem: /proc/uptime, /proc/threads,
 // /proc/acpi, /proc/processes, /proc/dmesg, /proc/block, /proc/meminfo,
-// /proc/stat, /proc/trace, and /proc/devices.
+// /proc/stat, /proc/trace, /proc/devices, and /proc/interrupts.
 
 #include <cstddef>
 
@@ -25,6 +25,7 @@ using TextFn = Status (*)(char* buffer, std::size_t capacity,
                                   TextFn meminfo_text = nullptr,
                                   TextFn stat_text = nullptr,
                                   TextFn trace_text = nullptr,
-                                  TextFn devices_text = nullptr) noexcept;
+                                  TextFn devices_text = nullptr,
+                                  TextFn interrupts_text = nullptr) noexcept;
 
 }  // namespace og::fs::procfs

@@ -67,6 +67,8 @@ def main(argv):
     level_seen = False
     date_sent = False
     date_seen = False
+    sysrq_sent = False
+    sysrq_seen = False
     fs_sent = False
     fs_seen = False
     fs_batch = 0
@@ -84,7 +86,7 @@ def main(argv):
         b"mkdir \"/tmp/quoted dir\"\nrm \"/tmp/quoted dir\"\nchmod 600 /tmp/hello\nstat /tmp/hello\n",
         b"mkdir /tmp/mnt\nmount ramfs /tmp/mnt\nmount ramfs /tmp/mnt\n",
         b"umount /tmp/mnt\numount /tmp/mnt\nrm /tmp/mnt\ncat /proc/meminfo\ncat /proc/stat\n",
-        b"cat /proc/block\nls /volumes/boot\ncat /proc/trace\ncat /proc/devices\necho MOUNT-DONE\n",
+        b"cat /proc/block\nls /volumes/boot\ncat /proc/trace\ncat /proc/devices\ncat /proc/interrupts\necho MOUNT-DONE\n",
     ]
     clear_sent = False
     clear_ready = False
@@ -188,7 +190,17 @@ def main(argv):
                     b"UTC+07:00" in buffer):
                 date_seen = True
 
-            if (date_seen and not fs_sent and
+            if (date_seen and not sysrq_sent and
+                    time.time() - last_data > 0.5 and
+                    b"gemabox> " in buffer):
+                send_line(client, b"\x01s\n")
+                sysrq_sent = True
+                buffer.clear()
+
+            if sysrq_sent and not sysrq_seen and b"sysrq: stats" in buffer:
+                sysrq_seen = True
+
+            if (sysrq_seen and not fs_sent and
                     time.time() - last_data > 0.5 and
                     b"gemabox> " in buffer):
                 send_line(client, fs_batches[0])
@@ -212,7 +224,8 @@ def main(argv):
                                b"mount: mounted", b"umount: unmounted",
                                b"virtio-blk1", b"frames_free:",
                                b"context_switches:", b"vfs_ops:",
-                               b"block_reads:", b"context_switch ", b"pl031"):
+                               b"block_reads:", b"context_switch ", b"pl031",
+                               b"irq count"):
                     if marker not in fs_output:
                         missing.append(marker.decode())
                 if missing or b"mount: failed" in fs_output or \
