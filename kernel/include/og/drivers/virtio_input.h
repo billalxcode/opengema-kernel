@@ -27,6 +27,9 @@ class Input {
   [[nodiscard]] Status poll() noexcept;
 
   [[nodiscard]] bool is_ready() const noexcept { return ready_; }
+  [[nodiscard]] uint64_t mmio_base() const noexcept {
+    return transport_.common_base();
+  }
 
  private:
   [[nodiscard]] Status submit_events() noexcept;

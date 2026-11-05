@@ -59,7 +59,9 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
     kapasitas device blok. `cat /proc/meminfo` menampilkan frame dan heap,
     sedangkan `cat /proc/stat` menampilkan tick, thread, context switch,
     jumlah proses, operasi VFS, dan counter block device. `cat /proc/trace`
-    menampilkan ring event block, context switch, spawn, dan exit. Pengujian persistensi FAT32 ada di aplikasi terpisah
+    menampilkan ring event block, context switch, spawn, dan exit.
+    `cat /proc/devices` menampilkan registry device beserta kelas, MMIO,
+    IRQ, clock, dan kapasitasnya. Pengujian persistensi FAT32 ada di aplikasi terpisah
     `/applications/fstest/fstest`, bukan command shell.
     `halt` menghentikan shell dan init sehingga kernel menyelesaikan self
     test lalu berhenti. `shutdown` dan `reboot` memakai ACPI/PSCI untuk

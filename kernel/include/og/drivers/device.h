@@ -24,6 +24,7 @@ struct Device {
   DeviceClass device_class;
   uint64_t mmio_base;
   uint32_t irq;
+  uint64_t clock_hz;
   uint64_t capacity;
   void* driver_data;
 };

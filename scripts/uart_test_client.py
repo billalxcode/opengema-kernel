@@ -84,7 +84,7 @@ def main(argv):
         b"mkdir \"/tmp/quoted dir\"\nrm \"/tmp/quoted dir\"\nchmod 600 /tmp/hello\nstat /tmp/hello\n",
         b"mkdir /tmp/mnt\nmount ramfs /tmp/mnt\nmount ramfs /tmp/mnt\n",
         b"umount /tmp/mnt\numount /tmp/mnt\nrm /tmp/mnt\ncat /proc/meminfo\ncat /proc/stat\n",
-        b"cat /proc/block\nls /volumes/boot\ncat /proc/trace\necho MOUNT-DONE\n",
+        b"cat /proc/block\nls /volumes/boot\ncat /proc/trace\ncat /proc/devices\necho MOUNT-DONE\n",
     ]
     clear_sent = False
     clear_ready = False
@@ -212,7 +212,7 @@ def main(argv):
                                b"mount: mounted", b"umount: unmounted",
                                b"virtio-blk1", b"frames_free:",
                                b"context_switches:", b"vfs_ops:",
-                               b"block_reads:", b"block_read "):
+                               b"block_reads:", b"context_switch ", b"pl031"):
                     if marker not in fs_output:
                         missing.append(marker.decode())
                 if missing or b"mount: failed" in fs_output or \

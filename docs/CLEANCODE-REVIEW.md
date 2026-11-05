@@ -254,7 +254,8 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   dihitung dari tick scheduler.
 - Test observability: `/proc/meminfo` menampilkan frame dan heap,
   `/proc/stat` menampilkan tick, thread, context switch, proses, operasi
-  VFS, dan counter block device. `/proc/trace` menampilkan ring event.
+  VFS, dan counter block device. `/proc/trace` menampilkan ring event, dan
+  `/proc/devices` menampilkan registry device.
 - Test SMP: `SMP=4` membuat worker thread satu per CPU dan memverifikasi
   seluruh CPU menjalankan worker.
 - Test loglevel: filter runtime bisa dibaca dan diubah dari shell.
@@ -279,7 +280,7 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   direktori target untuk memastikan refcount dan cleanup berjalan.
 - Test multi block device: QEMU memakai dua virtio-blk, kernel mencatat
   kapasitas keduanya, dan `/proc/block` menampilkan `virtio-blk0` serta
-  `virtio-blk1`.
+  `virtio-blk1`. Capability MSI-X dibaca dan jumlah vector dicatat.
 
 Verifikasi branch `dev`:
 

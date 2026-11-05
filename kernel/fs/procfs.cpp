@@ -20,6 +20,7 @@ enum class ProcKind : uint32_t {
   kMeminfo = 6,
   kStat = 7,
   kTrace = 8,
+  kDevices = 9,
 };
 
 struct ProcFile {
@@ -30,7 +31,7 @@ struct ProcFile {
 
 struct ProcDir {
   Node node;
-  ProcFile files[9];
+  ProcFile files[10];
   uint32_t count;
 };
 
@@ -41,6 +42,7 @@ BlockTextFn g_block_text = nullptr;
 TextFn g_meminfo_text = nullptr;
 TextFn g_stat_text = nullptr;
 TextFn g_trace_text = nullptr;
+TextFn g_devices_text = nullptr;
 
 void GenerateAcpi(og::fmt::LineBuilder& line) noexcept {
   const acpi::Info& info = acpi::GetInfo();
@@ -133,6 +135,13 @@ Status Generate(const ProcFile& file, char* buffer, std::size_t capacity,
         line.Text("trace unavailable\n");
       } else {
         return g_trace_text(buffer, capacity, length);
+      }
+      break;
+    case ProcKind::kDevices:
+      if (g_devices_text == nullptr) {
+        line.Text("devices unavailable\n");
+      } else {
+        return g_devices_text(buffer, capacity, length);
       }
       break;
     default:
@@ -244,13 +253,15 @@ Result<Node*> Create(ThreadCountFn thread_count,
                      BlockTextFn block_text,
                      TextFn meminfo_text,
                      TextFn stat_text,
-                     TextFn trace_text) noexcept {
+                     TextFn trace_text,
+                     TextFn devices_text) noexcept {
   g_thread_count = thread_count;
   g_process_text = process_text;
   g_block_text = block_text;
   g_meminfo_text = meminfo_text;
   g_stat_text = stat_text;
   g_trace_text = trace_text;
+  g_devices_text = devices_text;
   mem::Zero(&g_root, sizeof(g_root));
   g_root.node.name = "/";
   g_root.node.type = NodeType::kDirectory;
@@ -269,7 +280,8 @@ Result<Node*> Create(ThreadCountFn thread_count,
   AddFile(6, "meminfo", ProcKind::kMeminfo);
   AddFile(7, "stat", ProcKind::kStat);
   AddFile(8, "trace", ProcKind::kTrace);
-  g_root.count = 9;
+  AddFile(9, "devices", ProcKind::kDevices);
+  g_root.count = 10;
   return Result<Node*>::Ok(&g_root.node);
 }
 

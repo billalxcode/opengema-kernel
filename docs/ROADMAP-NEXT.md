@@ -141,7 +141,8 @@ bisa dijalankan tanpa menyalin kode syscall.
       ditutup dan tidak ada operasi VFS yang sedang memakai node tersebut.
 - [~] FS-15 Block layer: write path, adapter, flush, dan beberapa
       virtio-blk selesai. `/proc/block` menampilkan nama dan kapasitas tiap
-      device. IRQ/MSI-X dan partisi tulis belum.
+      device, dan capability MSI-X sudah dibaca. IRQ/MSI-X belum diaktifkan
+      dan partisi tulis belum diuji terpisah.
 - [x] FS-16 Metadata: mode, uid/gid, mtime, dan ukuran dilaporkan lewat
       `stat`. Open read/write memeriksa permission, `chmod`/`chown` tersedia
       untuk ramfs, chmod FAT32 memetakan read-only attribute, dan proses
@@ -157,7 +158,9 @@ reboot.
 
 ## 7. Fase 18 - Driver framework, jaringan, dan input
 
-- [ ] DRV-10 Device resource: MMIO, IRQ, DMA, clock, dan probe terurut.
+- [~] DRV-10 Registry device tersedia dan `/proc/devices` menampilkan nama,
+      kelas, MMIO, IRQ, clock, dan kapasitas. MMIO virtio, IRQ UART/legacy
+      line, dan clock UART sudah diisi; DMA dan probe terurut belum.
 - [ ] DRV-11 Virtio IRQ/MSI-X, completion tanpa polling.
 - [ ] DRV-12 virtio-net: transmit/receive, queue, interrupt.
 - [ ] NET-01 Ethernet, ARP, IPv4, ICMP echo.
@@ -233,7 +236,7 @@ bekerja dari shell.
 - [x] OBS-01 Ring buffer dmesg dan level log runtime.
 - [x] OBS-02 Counter scheduler, memori, VFS, dan block device serta trace
       ring `/proc/trace` untuk event block, context switch, spawn, dan exit.
-- [ ] OBS-03 Watchdog, panic dump lengkap, dan magic SysRq minimal.
+- [~] OBS-03 Panic dump menampilkan thread, proses, heap, frame, log bytes,\n      dan 8 word stack. Watchdog dan magic SysRq belum.
 - [ ] SEC-01 KASLR dan relokasi image.
 - [ ] SEC-02 PAN dan validasi akses user yang seragam.
 - [ ] SEC-03 PAC/BTI bila tersedia di target.

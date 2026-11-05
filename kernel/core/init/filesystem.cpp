@@ -352,11 +352,53 @@ Status FormatTrace(char* buffer, std::size_t capacity,
   return Status::kOk;
 }
 
+Status FormatDevices(char* buffer, std::size_t capacity,
+                     std::size_t& length) noexcept {
+  og::fmt::LineBuilder line(buffer, capacity);
+  line.Text("name class mmio irq clock capacity\n");
+  for (uint32_t index = 0; index < drivers::kMaxDevices; ++index) {
+    const Result<drivers::Device> device = drivers::DeviceAt(index);
+    if (device.is_err()) {
+      break;
+    }
+    const char* class_name = "unknown";
+    switch (device.value().device_class) {
+      case drivers::DeviceClass::kBlock:
+        class_name = "block";
+        break;
+      case drivers::DeviceClass::kNet:
+        class_name = "net";
+        break;
+      case drivers::DeviceClass::kDisplay:
+        class_name = "display";
+        break;
+      case drivers::DeviceClass::kSerial:
+        class_name = "serial";
+        break;
+      case drivers::DeviceClass::kInterrupt:
+        class_name = "interrupt";
+        break;
+      case drivers::DeviceClass::kInput:
+        class_name = "input";
+        break;
+      default:
+        break;
+    }
+    line.Text(device.value().name).Char(' ').Text(class_name).Char(' ')
+        .Hex(device.value().mmio_base).Char(' ')
+        .Dec(device.value().irq).Char(' ')
+        .Dec(device.value().clock_hz).Char(' ')
+        .Dec(device.value().capacity).Char('\n');
+  }
+  length = line.size();
+  return Status::kOk;
+}
+
 Status MountProcfs() noexcept {
   Result<fs::Node*> proc =
     fs::procfs::Create(&sched::ThreadCount, &FormatProcesses,
                        &FormatBlockDevices, &FormatMemInfo, &FormatStat,
-                       &FormatTrace);
+                       &FormatTrace, &FormatDevices);
   if (proc.is_err()) {
     return proc.status();
   }

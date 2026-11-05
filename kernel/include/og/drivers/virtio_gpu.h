@@ -36,6 +36,9 @@ class Gpu {
   [[nodiscard]] uint32_t stride() const noexcept { return stride_; }
   [[nodiscard]] uint32_t resource_id() const noexcept { return resource_id_; }
   [[nodiscard]] uint32_t num_scanouts() const noexcept { return num_scanouts_; }
+  [[nodiscard]] uint64_t mmio_base() const noexcept {
+    return transport_.common_base();
+  }
 
  private:
   [[nodiscard]] Status command(const void* request, uint32_t request_size,

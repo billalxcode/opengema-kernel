@@ -12,6 +12,14 @@ constexpr uint16_t kRegisterVendorId = 0x00;
 constexpr uint16_t kRegisterDeviceId = 0x02;
 constexpr uint16_t kRegisterCommand = 0x04;
 constexpr uint16_t kRegisterBar0 = 0x10;
+constexpr uint16_t kRegisterStatus = 0x06;
+constexpr uint16_t kRegisterCapabilities = 0x34;
+constexpr uint16_t kRegisterInterruptLine = 0x3C;
+constexpr uint16_t kRegisterInterruptPin = 0x3D;
+
+constexpr uint16_t kStatusCapabilities = 1U << 4U;
+constexpr uint8_t kCapabilityMsiX = 0x11;
+constexpr uint32_t kCapabilityScanLimit = 48U;
 
 constexpr uint16_t kCommandMemorySpace = 1U << 1U;
 constexpr uint16_t kCommandBusMaster = 1U << 2U;
@@ -175,6 +183,73 @@ Result<Info> Probe(Address address) noexcept {
   }
 
   return Result<Info>::Ok(info);
+}
+
+Result<MsiXInfo> ReadMsiX(Address address) noexcept {
+  const Result<uint16_t> status = Read16(address, kRegisterStatus);
+  if (status.is_err()) {
+    return Result<MsiXInfo>::Err(status.status());
+  }
+  if ((status.value() & kStatusCapabilities) == 0U) {
+    return Result<MsiXInfo>::Ok(MsiXInfo{});
+  }
+  const Result<uint8_t> first = Read8(address, kRegisterCapabilities);
+  if (first.is_err()) {
+    return Result<MsiXInfo>::Err(first.status());
+  }
+
+  uint8_t offset = static_cast<uint8_t>(first.value() & 0xFCU);
+  for (uint32_t count = 0; count < kCapabilityScanLimit && offset >= 0x40U;
+       ++count) {
+    const Result<uint8_t> id = Read8(address, offset);
+    if (id.is_err()) {
+      return Result<MsiXInfo>::Err(id.status());
+    }
+    if (id.value() == kCapabilityMsiX) {
+      const Result<uint16_t> control = Read16(
+        address, static_cast<uint16_t>(offset + 2U));
+      if (control.is_err()) {
+        return Result<MsiXInfo>::Err(control.status());
+      }
+      const Result<uint32_t> table = Read32(
+        address, static_cast<uint16_t>(offset + 4U));
+      if (table.is_err()) {
+        return Result<MsiXInfo>::Err(table.status());
+      }
+      MsiXInfo info{};
+      info.present = true;
+      info.enabled = (control.value() & 0x8000U) != 0U;
+      info.vectors = static_cast<uint16_t>((control.value() & 0x7FFU) + 1U);
+      info.bar = static_cast<uint8_t>(table.value() & 0x7U);
+      info.table_offset = table.value() & ~0x7U;
+      return Result<MsiXInfo>::Ok(info);
+    }
+    const Result<uint8_t> next = Read8(
+      address, static_cast<uint16_t>(offset + 1U));
+    if (next.is_err()) {
+      return Result<MsiXInfo>::Err(next.status());
+    }
+    offset = static_cast<uint8_t>(next.value() & 0xFCU);
+  }
+  return Result<MsiXInfo>::Ok(MsiXInfo{});
+}
+
+Result<uint8_t> LegacyIrq(Address address) noexcept {
+  const Result<uint8_t> pin = Read8(address, kRegisterInterruptPin);
+  if (pin.is_err()) {
+    return Result<uint8_t>::Err(pin.status());
+  }
+  if (pin.value() == 0U || pin.value() == 0xFFU) {
+    return Result<uint8_t>::Ok(0U);
+  }
+  const Result<uint8_t> line = Read8(address, kRegisterInterruptLine);
+  if (line.is_err()) {
+    return Result<uint8_t>::Err(line.status());
+  }
+  if (line.value() == 0xFFU) {
+    return Result<uint8_t>::Ok(0U);
+  }
+  return Result<uint8_t>::Ok(line.value());
 }
 
 Result<Info> FindByVendorDevice(uint16_t vendor_id, uint16_t device_id) noexcept {

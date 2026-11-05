@@ -37,6 +37,7 @@ class PciTransport {
   [[nodiscard]] Status notify(uint16_t index) noexcept;
 
   [[nodiscard]] io::MmioRegion device_config() const noexcept { return device_; }
+  [[nodiscard]] uint64_t common_base() const noexcept { return common_.base(); }
   [[nodiscard]] bool is_ready() const noexcept { return ready_; }
 
  private:

@@ -6,6 +6,7 @@
 #include "og/arch/registers.h"
 #include "og/core/bootinfo.h"
 #include "og/core/log.h"
+#include "og/core/log_ring.h"
 #include "og/core/panic.h"
 #include "og/core/power.h"
 #include "og/core/status.h"
@@ -38,6 +39,24 @@ namespace og {
 namespace {
 
 uint64_t g_ipi_count = 0;
+
+void PanicInfo() noexcept {
+  sched::Thread* thread = sched::CurrentThread();
+  if (thread != nullptr) {
+    Log(LogLevel::kError, "panic: thread ");
+    Log(LogLevel::kError, thread->name);
+    LogDec(LogLevel::kError, "panic: thread cpu", thread->home_cpu);
+  }
+  process::Process* process = process::Current();
+  if (process != nullptr) {
+    LogDec(LogLevel::kError, "panic: pid", process->pid);
+    Log(LogLevel::kError, "panic: process ");
+    Log(LogLevel::kError, process->name);
+  }
+  LogDec(LogLevel::kError, "panic: heap pages", mem::GetHeapStats().pages);
+  LogDec(LogLevel::kError, "panic: frames free", mem::PmmFreeFrames());
+  LogDec(LogLevel::kError, "panic: log bytes", log_ring::Size());
+}
 
 Status IpiHandler(void* /*context*/, uint32_t /*irq*/) noexcept {
   __atomic_add_fetch(&g_ipi_count, 1U, __ATOMIC_RELAXED);
@@ -101,6 +120,7 @@ void kmain(BootInfo* info) noexcept {
   if (info->version != kBootInfoVersion) {
     Panic("kmain: unsupported boot info version");
   }
+  SetPanicInfoHook(&PanicInfo);
 
   if (info->acpi_rsdp != 0U) {
     const Status acpi_status = acpi::Init(info->acpi_rsdp);

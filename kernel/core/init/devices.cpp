@@ -6,6 +6,7 @@
 #include "og/drivers/device.h"
 #include "og/drivers/pci.h"
 #include "og/drivers/rtc.h"
+#include "og/drivers/uart.h"
 #include "og/drivers/virtio_blk.h"
 #include "og/drivers/virtio_gpu.h"
 #include "og/drivers/virtio_input.h"
@@ -83,6 +84,14 @@ uint64_t FsClock() noexcept {
   return seconds.is_ok() ? seconds.value() : 0U;
 }
 
+void AssignPciIrq(drivers::Device& device,
+                  const drivers::pci::Info& info) noexcept {
+  const Result<uint8_t> irq = drivers::pci::LegacyIrq(info.address);
+  if (irq.is_ok()) {
+    device.irq = irq.value();
+  }
+}
+
 void InitRtc() noexcept {
   const platform::Platform& board = platform::Current();
   const Status status = g_rtc.init(board.rtc.base, board.rtc.size);
@@ -101,6 +110,7 @@ void InitRtc() noexcept {
 
   drivers::Device device{};
   device.name = "pl031";
+  device.mmio_base = board.rtc.base;
   device.device_class = drivers::DeviceClass::kUnknown;
   device.capacity = seconds.value();
   device.driver_data = &g_rtc;
@@ -148,9 +158,19 @@ void InitBlockDevice() noexcept {
     LogDec(LogLevel::kInfo, "virtio-blk: queue size", block.queue_size());
     LogDec(LogLevel::kInfo, "virtio-blk: capacity sectors",
            block.capacity_sectors());
+    const Result<drivers::pci::MsiXInfo> msix =
+      drivers::pci::ReadMsiX(info.value().address);
+    if (msix.is_ok() && msix.value().present) {
+      LogDec(LogLevel::kInfo, "virtio-blk: msix vectors",
+             msix.value().vectors);
+    } else {
+      Log(LogLevel::kInfo, "virtio-blk: msix unavailable\n");
+    }
 
     drivers::Device device{};
     device.name = kBlockNames[index];
+    device.mmio_base = block.mmio_base();
+    AssignPciIrq(device, info.value());
     device.device_class = drivers::DeviceClass::kBlock;
     device.capacity = block.capacity_sectors();
     device.driver_data = &block;
@@ -207,6 +227,8 @@ void InitGpu() noexcept {
 
   drivers::Device device{};
   device.name = "virtio-gpu0";
+  device.mmio_base = g_gpu.mmio_base();
+  AssignPciIrq(device, info.value());
   device.device_class = drivers::DeviceClass::kDisplay;
   device.capacity = static_cast<uint64_t>(g_gpu.width()) * g_gpu.height();
   device.driver_data = &g_gpu;
@@ -251,6 +273,8 @@ void InitInput() noexcept {
 
   drivers::Device device{};
   device.name = "virtio-input0";
+  device.mmio_base = g_input.mmio_base();
+  AssignPciIrq(device, info.value());
   device.device_class = drivers::DeviceClass::kInput;
   device.driver_data = &g_input;
   status = drivers::RegisterDevice(device);
@@ -270,11 +294,27 @@ void InitInput() noexcept {
 
 }  // namespace
 
+void RegisterUart() noexcept {
+  drivers::uart::Pl011* uart = drivers::uart::Active();
+  if (uart == nullptr) {
+    return;
+  }
+  drivers::Device device{};
+  device.name = "pl011";
+  device.device_class = drivers::DeviceClass::kSerial;
+  device.mmio_base = uart->base();
+  device.irq = drivers::uart::kUartIrq;
+  device.clock_hz = platform::Current().uart_clock;
+  device.driver_data = uart;
+  (void)drivers::RegisterDevice(device);
+}
+
 void InitDevices() noexcept {
   InitBlockDevice();
   InitGpu();
   InitInput();
   InitRtc();
+  RegisterUart();
 }
 
 }  // namespace og::boot

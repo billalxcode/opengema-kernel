@@ -33,6 +33,9 @@ class Blk {
   [[nodiscard]] bool is_ready() const noexcept { return ready_; }
   [[nodiscard]] uint64_t capacity_sectors() const noexcept { return capacity_; }
   [[nodiscard]] uint16_t queue_size() const noexcept { return queue_.size(); }
+  [[nodiscard]] uint64_t mmio_base() const noexcept {
+    return transport_.common_base();
+  }
 
   // Reads whole 512 byte sectors. buffer.size() must be a multiple of 512
   // and at most 4096 bytes.
