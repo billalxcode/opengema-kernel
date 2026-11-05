@@ -40,4 +40,20 @@ void TimerSetTickCallback(TickCallback callback, void* context) noexcept;
                                             void* context) noexcept;
 [[nodiscard]] Status CancelTimeout(Timeout* timeout) noexcept;
 
+// Wall clock source, normally the PL031 RTC. The kernel registers it during
+// boot so syscalls do not depend on the driver directly.
+using WallClockReadFn = Result<uint64_t> (*)(void* context) noexcept;
+using WallClockWriteFn = Status (*)(void* context, uint64_t seconds) noexcept;
+void SetWallClock(WallClockReadFn read, WallClockWriteFn write,
+                  void* context) noexcept;
+[[nodiscard]] Result<uint64_t> WallTimeSeconds() noexcept;
+[[nodiscard]] Status SetWallTimeSeconds(uint64_t seconds) noexcept;
+
+// Timezone offset east of UTC, in minutes. Valid range -840..840.
+[[nodiscard]] Status SetTimeZoneMinutes(int32_t minutes) noexcept;
+[[nodiscard]] int32_t TimeZoneMinutes() noexcept;
+
+// Wall time plus the timezone offset.
+[[nodiscard]] Result<uint64_t> LocalTimeSeconds() noexcept;
+
 }  // namespace og::time

@@ -1,11 +1,14 @@
 #include "og/boot/init.h"
 
+#include "format.h"
 #include "gsl/layout.h"
 #include "memory.h"
 #include "og/core/log.h"
 #include "og/core/status.h"
+#include "og/core/trace.h"
 #include "og/drivers/device.h"
 #include "og/drivers/virtio_blk.h"
+#include "og/events/irq.h"
 #include "og/fs/block_device.h"
 #include "og/fs/devfs.h"
 #include "og/fs/fat32.h"
@@ -16,7 +19,10 @@
 #include "og/fs/vfs.h"
 #include "og/io/print.h"
 #include "og/mem/heap.h"
+#include "og/mem/pmm.h"
+#include "og/process/process.h"
 #include "og/sched/sched.h"
+#include "og/time/timer.h"
 
 namespace og::boot {
 
@@ -33,6 +39,21 @@ Status BlockReadAdapter(void* context, uint64_t sector,
     return Status::kInvalidArg;
   }
   return static_cast<drivers::virtio::Blk*>(context)->read(sector, buffer);
+}
+
+Status BlockWriteAdapter(void* context, uint64_t sector,
+                         std::span<const uint8_t> buffer) noexcept {
+  if (context == nullptr) {
+    return Status::kInvalidArg;
+  }
+  return static_cast<drivers::virtio::Blk*>(context)->write(sector, buffer);
+}
+
+Status BlockFlushAdapter(void* context) noexcept {
+  if (context == nullptr) {
+    return Status::kInvalidArg;
+  }
+  return static_cast<drivers::virtio::Blk*>(context)->flush();
 }
 
 struct WritableTree {
@@ -195,7 +216,8 @@ Status MountFat32(const fs::BlockDevice& disk) noexcept {
   }
   const fs::BlockDevice device{&BlockReadAdapter, disk.context,
                                partition.value().sector_count,
-                               partition.value().start_sector};
+                               partition.value().start_sector,
+                               &BlockWriteAdapter, &BlockFlushAdapter};
   fs::Node* fat_root = nullptr;
   Status status = fs::fat32::Mount(device, &fat_root);
   if (IsErr(status)) {
@@ -234,8 +256,165 @@ Status MountFat32(const fs::BlockDevice& disk) noexcept {
   return Status::kOk;
 }
 
+const char* ProcessStateName(process::ProcessState state) noexcept {
+  switch (state) {
+    case process::ProcessState::kReady:
+      return "ready";
+    case process::ProcessState::kExited:
+      return "exited";
+    case process::ProcessState::kReaping:
+      return "reaping";
+    default:
+      return "unknown";
+  }
+}
+
+Status FormatProcesses(char* buffer, std::size_t capacity,
+                       std::size_t& length) noexcept {
+  og::fmt::LineBuilder line(buffer, capacity);
+  line.Text("pid ppid state cpu_ms name\n");
+  process::ProcessInfo info[process::kMaxProcesses];
+  const uint32_t count =
+    process::Snapshot(info, process::kMaxProcesses);
+  for (uint32_t index = 0; index < count; ++index) {
+    line.Dec(info[index].pid).Char(' ')
+        .Dec(info[index].parent_pid).Char(' ')
+        .Text(ProcessStateName(info[index].state)).Char(' ')
+        .Dec(info[index].cpu_ms).Char(' ')
+        .Text(info[index].name).Char('\n');
+  }
+  length = line.size();
+  return Status::kOk;
+}
+
+Status FormatBlockDevices(char* buffer, std::size_t capacity,
+                          std::size_t& length) noexcept {
+  og::fmt::LineBuilder line(buffer, capacity);
+  line.Text("name sectors\n");
+  for (uint32_t index = 0; index < drivers::kMaxDevices; ++index) {
+    const Result<drivers::Device> device = drivers::DeviceAt(index);
+    if (device.is_err()) {
+      break;
+    }
+    if (device.value().device_class != drivers::DeviceClass::kBlock) {
+      continue;
+    }
+    line.Text(device.value().name).Char(' ')
+        .Dec(device.value().capacity).Char('\n');
+  }
+  length = line.size();
+  return Status::kOk;
+}
+
+Status FormatMemInfo(char* buffer, std::size_t capacity,
+                     std::size_t& length) noexcept {
+  og::fmt::LineBuilder line(buffer, capacity);
+  const uint64_t total = mem::PmmTotalFrames();
+  const uint64_t free = mem::PmmFreeFrames();
+  const mem::HeapStats heap = mem::GetHeapStats();
+  line.Text("frames_total: ").Dec(total).Char('\n');
+  line.Text("frames_free: ").Dec(free).Char('\n');
+  line.Text("frames_used: ").Dec(total - free).Char('\n');
+  line.Text("heap_pages: ").Dec(heap.pages).Char('\n');
+  line.Text("heap_allocations: ").Dec(heap.allocations).Char('\n');
+  line.Text("heap_frees: ").Dec(heap.frees).Char('\n');
+  length = line.size();
+  return Status::kOk;
+}
+
+Status FormatStat(char* buffer, std::size_t capacity,
+                  std::size_t& length) noexcept {
+  og::fmt::LineBuilder line(buffer, capacity);
+  line.Text("timer_ticks: ").Dec(time::TimerTicks()).Char('\n');
+  line.Text("threads: ").Dec(sched::ThreadCount()).Char('\n');
+  line.Text("context_switches: ").Dec(sched::ContextSwitchCount()).Char('\n');
+  line.Text("processes: ").Dec(process::Count()).Char('\n');
+  line.Text("vfs_ops: ").Dec(fs::FsOperationCount()).Char('\n');
+  const drivers::virtio::BlkStats block = drivers::virtio::GetBlkStats();
+  line.Text("block_reads: ").Dec(block.reads).Char('\n');
+  line.Text("block_writes: ").Dec(block.writes).Char('\n');
+  line.Text("block_flushes: ").Dec(block.flushes).Char('\n');
+  length = line.size();
+  return Status::kOk;
+}
+
+Status FormatTrace(char* buffer, std::size_t capacity,
+                   std::size_t& length) noexcept {
+  og::fmt::LineBuilder line(buffer, capacity);
+  constexpr uint32_t kTraceSnapshot = 32;
+  trace::Event events[kTraceSnapshot];
+  const uint32_t count = trace::Snapshot(events, kTraceSnapshot);
+  for (uint32_t index = 0; index < count; ++index) {
+    line.Text(trace::TagName(events[index].tag)).Char(' ')
+        .Dec(events[index].timestamp_ms).Char(' ')
+        .Dec(events[index].value).Char('\n');
+  }
+  length = line.size();
+  return Status::kOk;
+}
+
+Status FormatDevices(char* buffer, std::size_t capacity,
+                     std::size_t& length) noexcept {
+  og::fmt::LineBuilder line(buffer, capacity);
+  line.Text("name class mmio irq clock capacity\n");
+  for (uint32_t index = 0; index < drivers::kMaxDevices; ++index) {
+    const Result<drivers::Device> device = drivers::DeviceAt(index);
+    if (device.is_err()) {
+      break;
+    }
+    const char* class_name = "unknown";
+    switch (device.value().device_class) {
+      case drivers::DeviceClass::kBlock:
+        class_name = "block";
+        break;
+      case drivers::DeviceClass::kNet:
+        class_name = "net";
+        break;
+      case drivers::DeviceClass::kDisplay:
+        class_name = "display";
+        break;
+      case drivers::DeviceClass::kSerial:
+        class_name = "serial";
+        break;
+      case drivers::DeviceClass::kInterrupt:
+        class_name = "interrupt";
+        break;
+      case drivers::DeviceClass::kInput:
+        class_name = "input";
+        break;
+      default:
+        break;
+    }
+    line.Text(device.value().name).Char(' ').Text(class_name).Char(' ')
+        .Hex(device.value().mmio_base).Char(' ')
+        .Dec(device.value().irq).Char(' ')
+        .Dec(device.value().clock_hz).Char(' ')
+        .Dec(device.value().capacity).Char('\n');
+  }
+  length = line.size();
+  return Status::kOk;
+}
+
+Status FormatInterrupts(char* buffer, std::size_t capacity,
+                        std::size_t& length) noexcept {
+  og::fmt::LineBuilder line(buffer, capacity);
+  line.Text("irq count\n");
+  for (uint32_t irq = 0; irq < events::kMaxIrq; ++irq) {
+    const uint64_t count = events::IrqCount(irq);
+    if (count == 0U) {
+      continue;
+    }
+    line.Dec(irq).Char(' ').Dec(count).Char('\n');
+  }
+  length = line.size();
+  return Status::kOk;
+}
+
 Status MountProcfs() noexcept {
-  Result<fs::Node*> proc = fs::procfs::Create(&sched::ThreadCount);
+  Result<fs::Node*> proc =
+    fs::procfs::Create(&sched::ThreadCount, &FormatProcesses,
+                       &FormatBlockDevices, &FormatMemInfo, &FormatStat,
+                       &FormatTrace, &FormatDevices, &FormatInterrupts);
   if (proc.is_err()) {
     return proc.status();
   }

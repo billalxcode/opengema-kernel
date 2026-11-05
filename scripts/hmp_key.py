@@ -50,16 +50,19 @@ def main(argv):
     time.sleep(delay)
     if not text.endswith("\n"):
         text += "\n"
-    for value in text:
-        client.sendall(("sendkey %s\n" % key_name(value)).encode())
-        time.sleep(0.05)
-        try:
-            response = client.recv(4096)
-            if b"unknown" in response.lower() or b"error" in response.lower():
-                print("hmp key:", response.decode(errors="replace").strip())
-        except OSError:
-            pass
-    print("hmp key: sent", len(text), "keys")
+    for attempt in range(2):
+        for value in text:
+            client.sendall(("sendkey %s\n" % key_name(value)).encode())
+            time.sleep(0.05)
+            try:
+                response = client.recv(4096)
+                if b"unknown" in response.lower() or b"error" in response.lower():
+                    print("hmp key:", response.decode(errors="replace").strip())
+            except OSError:
+                pass
+        if attempt == 0:
+            time.sleep(2.0)
+    print("hmp key: sent", len(text), "keys twice")
     client.close()
     return 0
 

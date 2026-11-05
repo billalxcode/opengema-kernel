@@ -12,6 +12,8 @@ namespace og::fs {
 
 struct BlockDevice {
   using ReadFn = Status (*)(void* context, uint64_t sector, std::span<uint8_t> buffer);
+  using WriteFn = Status (*)(void* context, uint64_t sector,
+                             std::span<const uint8_t> buffer);
 
   ReadFn read;
   void* context;
@@ -19,6 +21,11 @@ struct BlockDevice {
   // Added to every sector number. Non-zero when the filesystem starts at a
   // partition offset instead of the whole disk.
   uint64_t sector_offset;
+  // Optional. Null for read-only volumes.
+  WriteFn write = nullptr;
+  // Optional. Flushes the device write cache.
+  using FlushFn = Status (*)(void* context);
+  FlushFn flush = nullptr;
 };
 
 }  // namespace og::fs

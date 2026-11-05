@@ -114,6 +114,10 @@ Result<Info> stat(const char* path) noexcept {
   Info info{};
   info.kind = ConvertKind(raw.type);
   info.size = raw.size;
+  info.mode = raw.mode;
+  info.uid = raw.uid;
+  info.gid = raw.gid;
+  info.mtime = raw.mtime;
   return info;
 }
 
@@ -145,6 +149,62 @@ Result<bool> list(const char* path, u64 index, DirEntry& entry) noexcept {
   entry.kind = ConvertKind(raw.type);
   entry.size = raw.size;
   return true;
+}
+
+Status mkdir(const char* path) noexcept {
+  if (path == nullptr) {
+    return Status::invalid_argument;
+  }
+  return kgema::mkdir(path) ? Status::ok : Status::not_found;
+}
+
+Status unlink(const char* path) noexcept {
+  if (path == nullptr) {
+    return Status::invalid_argument;
+  }
+  return kgema::unlink(path) ? Status::ok : Status::not_found;
+}
+
+Status rmdir(const char* path) noexcept {
+  if (path == nullptr) {
+    return Status::invalid_argument;
+  }
+  return kgema::rmdir(path) ? Status::ok : Status::not_found;
+}
+
+Status rename(const char* old_path, const char* new_path) noexcept {
+  if (old_path == nullptr || new_path == nullptr) {
+    return Status::invalid_argument;
+  }
+  return kgema::rename(old_path, new_path) ? Status::ok : Status::not_found;
+}
+
+Status chmod(const char* path, u64 mode) noexcept {
+  if (path == nullptr) {
+    return Status::invalid_argument;
+  }
+  return kgema::chmod(path, mode) ? Status::ok : Status::not_found;
+}
+
+Status chown(const char* path, u64 uid, u64 gid) noexcept {
+  if (path == nullptr) {
+    return Status::invalid_argument;
+  }
+  return kgema::chown(path, uid, gid) ? Status::ok : Status::not_found;
+}
+
+Status mount(const char* type, const char* target) noexcept {
+  if (type == nullptr || target == nullptr) {
+    return Status::invalid_argument;
+  }
+  return kgema::mount(type, target) ? Status::ok : Status::not_found;
+}
+
+Status umount(const char* target) noexcept {
+  if (target == nullptr) {
+    return Status::invalid_argument;
+  }
+  return kgema::umount(target) ? Status::ok : Status::not_found;
 }
 
 }  // namespace gemapi::fs

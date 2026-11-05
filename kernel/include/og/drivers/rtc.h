@@ -21,6 +21,7 @@ class Pl031 {
 
   [[nodiscard]] bool is_ready() const noexcept { return ready_; }
   [[nodiscard]] Result<uint64_t> read_unix_seconds() noexcept;
+  [[nodiscard]] Status write_unix_seconds(uint64_t seconds) noexcept;
 
  private:
   io::MmioRegion registers_;

@@ -1,6 +1,7 @@
 #include "og/io/tty.h"
 
 #include "og/arch/spinlock.h"
+#include "og/io/sysrq.h"
 
 namespace og::io::tty {
 
@@ -16,6 +17,9 @@ arch::aarch64::IrqSpinlock g_lock;
 }  // namespace
 
 void PushChar(char value) noexcept {
+  if (og::io::SysRqFilter(value)) {
+    return;
+  }
   arch::aarch64::LockGuard<arch::aarch64::IrqSpinlock> guard(g_lock);
   if (g_count >= kBufferSize) {
     return;

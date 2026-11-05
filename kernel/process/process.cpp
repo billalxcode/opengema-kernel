@@ -4,6 +4,7 @@
 #include "og/arch/spinlock.h"
 #include "og/arch/user.h"
 #include "og/core/log.h"
+#include "og/core/trace.h"
 #include "og/process/elf.h"
 #include "og/process/loader.h"
 #include "og/sched/sched.h"
@@ -249,6 +250,7 @@ void CloseFiles(Process& process) noexcept {
 
       (void)mem::AddressSpaceDestroy(target->space);
       CloseFiles(*target);
+      ReleaseMounts(*target);
       if (target->thread != nullptr) {
         (void)sched::ThreadReclaim(target->thread);
       }
@@ -401,8 +403,22 @@ struct LoadedProgram {
   }
 
   mem::Zero(slot, sizeof(*slot));
+  uint32_t parent_uid = 0;
+  uint32_t parent_gid = 0;
+  if (parent_pid != kKernelPid) {
+    for (uint32_t index = 0; index < kMaxProcesses; ++index) {
+      if (g_processes[index].used != 0U &&
+          g_processes[index].pid == parent_pid) {
+        parent_uid = g_processes[index].uid;
+        parent_gid = g_processes[index].gid;
+        break;
+      }
+    }
+  }
   slot->pid = NextPidLocked();
   slot->parent_pid = parent_pid;
+  slot->uid = parent_uid;
+  slot->gid = parent_gid;
   slot->state = ProcessState::kReady;
   slot->exit_code = 0;
   slot->used = 1;
@@ -413,6 +429,8 @@ struct LoadedProgram {
   slot->envp = user_stack.envp;
   slot->argc = user_stack.argc;
   (void)fs::FileTableInit(slot->files);
+  slot->files.uid = parent_uid;
+  slot->files.gid = parent_gid;
   const std::size_t name_length = mem::Length(path);
   const std::size_t name_copy =
     name_length >= sizeof(slot->name) ? (sizeof(slot->name) - 1U) : name_length;
@@ -432,6 +450,7 @@ struct LoadedProgram {
   slot->thread = thread.value();
   const uint32_t pid = slot->pid;
   g_lock.unlock();
+  trace::Record(trace::Tag::kSpawn, pid);
   return Result<uint32_t>::Ok(pid);
 }
 
@@ -511,6 +530,7 @@ void Exit(int32_t status) noexcept {
     process->exit_code = status;
     process->state = ProcessState::kExited;
     g_lock.unlock();
+    trace::Record(trace::Tag::kExit, process->pid);
     sched::WaitQueueWakeAll(g_waiters);
   }
   sched::ThreadExit();
@@ -536,6 +556,74 @@ Status SetCwd(Process& process, const char* path) noexcept {
   return Status::kOk;
 }
 
+Status SetUid(Process& process, uint32_t uid) noexcept {
+  process.uid = uid;
+  process.files.uid = uid;
+  return Status::kOk;
+}
+
+Status SetGid(Process& process, uint32_t gid) noexcept {
+  process.gid = gid;
+  process.files.gid = gid;
+  return Status::kOk;
+}
+
+Status RecordMount(Process& process, const char* path) noexcept {
+  if (path == nullptr || path[0] != '/') {
+    return Status::kInvalidArg;
+  }
+  if (process.mount_count >= kMaxProcessMounts) {
+    return Status::kNoMem;
+  }
+  const std::size_t length = mem::Length(path);
+  if (length >= fs::kMaxPath) {
+    return Status::kInvalidArg;
+  }
+  char (&slot)[fs::kMaxPath] = process.mounts[process.mount_count];
+  mem::Copy(slot, path, length + 1U);
+  ++process.mount_count;
+  return Status::kOk;
+}
+
+void ForgetMount(Process& process, const char* path) noexcept {
+  if (path == nullptr) {
+    return;
+  }
+  for (uint32_t index = process.mount_count; index > 0U; --index) {
+    if (!mem::Same(process.mounts[index - 1U], path)) {
+      continue;
+    }
+    for (uint32_t current = index - 1U; (current + 1U) < process.mount_count;
+         ++current) {
+      mem::Copy(process.mounts[current], process.mounts[current + 1U],
+                fs::kMaxPath);
+    }
+    --process.mount_count;
+    process.mounts[process.mount_count][0] = '\0';
+    return;
+  }
+}
+
+bool HasMount(const Process& process, const char* path) noexcept {
+  if (path == nullptr) {
+    return false;
+  }
+  for (uint32_t index = 0; index < process.mount_count; ++index) {
+    if (mem::Same(process.mounts[index], path)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void ReleaseMounts(Process& process) noexcept {
+  while (process.mount_count > 0U) {
+    --process.mount_count;
+    (void)fs::FsUnmount(process.mounts[process.mount_count]);
+    process.mounts[process.mount_count][0] = '\0';
+  }
+}
+
 uint32_t Count() noexcept {
   g_lock.lock();
   uint32_t count = 0;
@@ -543,6 +631,30 @@ uint32_t Count() noexcept {
     if (g_processes[index].used != 0U) {
       ++count;
     }
+  }
+  g_lock.unlock();
+  return count;
+}
+
+uint32_t Snapshot(ProcessInfo* out, uint32_t capacity) noexcept {
+  if (out == nullptr || capacity == 0U) {
+    return 0;
+  }
+  uint32_t count = 0;
+  g_lock.lock();
+  for (uint32_t index = 0; index < kMaxProcesses && count < capacity; ++index) {
+    const Process& process = g_processes[index];
+    if (process.used == 0U) {
+      continue;
+    }
+    out[count].pid = process.pid;
+    out[count].parent_pid = process.parent_pid;
+    out[count].state = process.state;
+    out[count].cpu_ms =
+      process.thread == nullptr ? 0U : process.thread->cpu_ticks;
+    mem::Copy(out[count].name, process.name, sizeof(out[count].name));
+    out[count].name[sizeof(out[count].name) - 1U] = '\0';
+    ++count;
   }
   g_lock.unlock();
   return count;

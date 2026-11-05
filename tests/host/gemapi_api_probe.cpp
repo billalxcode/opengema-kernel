@@ -65,6 +65,24 @@ i64 spawn(const char* path, const char* const* /*argv*/,
   return Same(path, "good") ? 88 : -1;
 }
 
+bool uid(u64& value) noexcept {
+  value = 5U;
+  return true;
+}
+
+bool setuid(u64 value) noexcept {
+  return value == 5U;
+}
+
+bool gid(u64& value) noexcept {
+  value = 6U;
+  return true;
+}
+
+bool setgid(u64 value) noexcept {
+  return value == 6U;
+}
+
 i64 wait(i64 pid, int* status) noexcept {
   if (pid == 0 || status == nullptr) {
     return -1;
@@ -167,6 +185,16 @@ int main() {
       gemapi::process::spawn(nullptr, nullptr, 0U).status() !=
         Status::invalid_argument) {
     return Fail("process spawn errors");
+  }
+
+  const auto uid = gemapi::process::user_id();
+  const auto gid = gemapi::process::group_id();
+  if (!uid || uid.value() != 5U || !gid || gid.value() != 6U ||
+      gemapi::process::set_user_id(5U) != Status::ok ||
+      gemapi::process::set_user_id(9U) != Status::denied ||
+      gemapi::process::set_group_id(6U) != Status::ok ||
+      gemapi::process::set_group_id(9U) != Status::denied) {
+    return Fail("identity");
   }
 
   int wait_status = 0;

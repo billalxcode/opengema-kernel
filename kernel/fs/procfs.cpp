@@ -3,6 +3,7 @@
 #include "format.h"
 #include "memory.h"
 #include "og/acpi/acpi.h"
+#include "og/core/log_ring.h"
 #include "og/time/timer.h"
 
 namespace og::fs::procfs {
@@ -13,6 +14,14 @@ enum class ProcKind : uint32_t {
   kUptime = 0,
   kThreads = 1,
   kAcpi = 2,
+  kProcesses = 3,
+  kDmesg = 4,
+  kBlock = 5,
+  kMeminfo = 6,
+  kStat = 7,
+  kTrace = 8,
+  kDevices = 9,
+  kInterrupts = 10,
 };
 
 struct ProcFile {
@@ -23,12 +32,19 @@ struct ProcFile {
 
 struct ProcDir {
   Node node;
-  ProcFile files[3];
+  ProcFile files[11];
   uint32_t count;
 };
 
 ProcDir g_root;
 ThreadCountFn g_thread_count = nullptr;
+ProcessTextFn g_process_text = nullptr;
+BlockTextFn g_block_text = nullptr;
+TextFn g_meminfo_text = nullptr;
+TextFn g_stat_text = nullptr;
+TextFn g_trace_text = nullptr;
+TextFn g_devices_text = nullptr;
+TextFn g_interrupts_text = nullptr;
 
 void GenerateAcpi(og::fmt::LineBuilder& line) noexcept {
   const acpi::Info& info = acpi::GetInfo();
@@ -86,6 +102,57 @@ Status Generate(const ProcFile& file, char* buffer, std::size_t capacity,
     case ProcKind::kAcpi:
       GenerateAcpi(line);
       break;
+    case ProcKind::kProcesses:
+      if (g_process_text == nullptr) {
+        line.Text("no processes\n");
+      } else {
+        return g_process_text(buffer, capacity, length);
+      }
+      break;
+    case ProcKind::kDmesg:
+      break;
+    case ProcKind::kBlock:
+      if (g_block_text == nullptr) {
+        line.Text("no block devices\n");
+      } else {
+        return g_block_text(buffer, capacity, length);
+      }
+      break;
+    case ProcKind::kMeminfo:
+      if (g_meminfo_text == nullptr) {
+        line.Text("meminfo unavailable\n");
+      } else {
+        return g_meminfo_text(buffer, capacity, length);
+      }
+      break;
+    case ProcKind::kStat:
+      if (g_stat_text == nullptr) {
+        line.Text("stat unavailable\n");
+      } else {
+        return g_stat_text(buffer, capacity, length);
+      }
+      break;
+    case ProcKind::kTrace:
+      if (g_trace_text == nullptr) {
+        line.Text("trace unavailable\n");
+      } else {
+        return g_trace_text(buffer, capacity, length);
+      }
+      break;
+    case ProcKind::kDevices:
+      if (g_devices_text == nullptr) {
+        line.Text("devices unavailable\n");
+      } else {
+        return g_devices_text(buffer, capacity, length);
+      }
+      break;
+    case ProcKind::kInterrupts:
+      if (g_interrupts_text == nullptr) {
+        line.Text("interrupts unavailable\n");
+      } else {
+        return g_interrupts_text(buffer, capacity, length);
+      }
+      break;
     default:
       return Status::kInvalidArg;
   }
@@ -105,6 +172,16 @@ Status FileRead(Node* node, uint64_t offset, std::span<uint8_t> buffer,
   auto* file = static_cast<ProcFile*>(node->fs_data);
   if (file == nullptr) {
     return Status::kNotInit;
+  }
+
+  if (file->kind == ProcKind::kDmesg) {
+    const uint32_t capacity =
+      buffer.size() > 0xFFFFFFFFULL
+        ? 0xFFFFFFFFU
+        : static_cast<uint32_t>(buffer.size());
+    out_read = log_ring::Read(
+      offset, reinterpret_cast<char*>(buffer.data()), capacity);
+    return Status::kOk;
   }
 
   char text[1024];
@@ -171,6 +248,7 @@ void AddFile(uint32_t index, const char* name, ProcKind kind) noexcept {
   mem::Copy(file.name, name, length + 1U);
   file.node.name = file.name;
   file.node.type = NodeType::kFile;
+  file.node.mode = kModeReadOnlyFile;
   file.node.size = 0;
   file.node.ops = &kFileOps;
   file.node.fs_data = &file;
@@ -179,11 +257,26 @@ void AddFile(uint32_t index, const char* name, ProcKind kind) noexcept {
 
 }  // namespace
 
-Result<Node*> Create(ThreadCountFn thread_count) noexcept {
+Result<Node*> Create(ThreadCountFn thread_count,
+                     ProcessTextFn process_text,
+                     BlockTextFn block_text,
+                     TextFn meminfo_text,
+                     TextFn stat_text,
+                     TextFn trace_text,
+                     TextFn devices_text,
+                     TextFn interrupts_text) noexcept {
   g_thread_count = thread_count;
+  g_process_text = process_text;
+  g_block_text = block_text;
+  g_meminfo_text = meminfo_text;
+  g_stat_text = stat_text;
+  g_trace_text = trace_text;
+  g_devices_text = devices_text;
+  g_interrupts_text = interrupts_text;
   mem::Zero(&g_root, sizeof(g_root));
   g_root.node.name = "/";
   g_root.node.type = NodeType::kDirectory;
+  g_root.node.mode = kModeDirectory;
   g_root.node.size = 0;
   g_root.node.ops = &kDirOps;
   g_root.node.fs_data = &g_root;
@@ -192,7 +285,15 @@ Result<Node*> Create(ThreadCountFn thread_count) noexcept {
   AddFile(0, "uptime", ProcKind::kUptime);
   AddFile(1, "threads", ProcKind::kThreads);
   AddFile(2, "acpi", ProcKind::kAcpi);
-  g_root.count = 3;
+  AddFile(3, "processes", ProcKind::kProcesses);
+  AddFile(4, "dmesg", ProcKind::kDmesg);
+  AddFile(5, "block", ProcKind::kBlock);
+  AddFile(6, "meminfo", ProcKind::kMeminfo);
+  AddFile(7, "stat", ProcKind::kStat);
+  AddFile(8, "trace", ProcKind::kTrace);
+  AddFile(9, "devices", ProcKind::kDevices);
+  AddFile(10, "interrupts", ProcKind::kInterrupts);
+  g_root.count = 11;
   return Result<Node*>::Ok(&g_root.node);
 }
 

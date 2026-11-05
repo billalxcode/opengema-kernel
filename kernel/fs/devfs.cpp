@@ -109,10 +109,14 @@ Result<Node*> Create() noexcept {
     return Result<Node*>::Ok(&g_root);
   }
 
-  g_root = Node{"/", NodeType::kDirectory, 0, &kRootOps, nullptr, nullptr};
-  g_console = Node{"console", NodeType::kDevice, 0, &kConsoleOps, nullptr, nullptr};
-  g_null = Node{"null", NodeType::kDevice, 0, &kNullOps, nullptr, nullptr};
-  g_zero = Node{"zero", NodeType::kDevice, 0, &kZeroOps, nullptr, nullptr};
+  g_root = Node{"/", NodeType::kDirectory, 0, &kRootOps, nullptr, nullptr,
+                kModeDirectory, 0, 0, 0};
+  g_console = Node{"console", NodeType::kDevice, 0, &kConsoleOps, nullptr,
+                   nullptr, kModeDevice, 0, 0, 0};
+  g_null = Node{"null", NodeType::kDevice, 0, &kNullOps, nullptr, nullptr,
+                kModeDevice, 0, 0, 0};
+  g_zero = Node{"zero", NodeType::kDevice, 0, &kZeroOps, nullptr, nullptr,
+                kModeDevice, 0, 0, 0};
   g_created = true;
   return Result<Node*>::Ok(&g_root);
 }

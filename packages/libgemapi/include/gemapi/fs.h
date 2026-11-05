@@ -9,6 +9,9 @@ namespace gemapi::fs {
 
 constexpr u64 kOpenRead = 0;
 constexpr u64 kOpenWrite = 1;
+constexpr u64 kOpenAppend = 2;
+constexpr u64 kOpenCreate = 4;
+constexpr u64 kOpenTruncate = 8;
 
 enum class Kind : u64 {
   file = 0,
@@ -20,6 +23,10 @@ enum class Kind : u64 {
 struct Info {
   Kind kind;
   u64 size;
+  u64 mode;
+  u64 uid;
+  u64 gid;
+  u64 mtime;
 };
 
 struct DirEntry {
@@ -58,6 +65,14 @@ class File {
 
 [[nodiscard]] Result<Info> stat(const char* path) noexcept;
 [[nodiscard]] Status chdir(const char* path) noexcept;
+[[nodiscard]] Status mkdir(const char* path) noexcept;
+[[nodiscard]] Status unlink(const char* path) noexcept;
+[[nodiscard]] Status rmdir(const char* path) noexcept;
+[[nodiscard]] Status rename(const char* old_path, const char* new_path) noexcept;
+[[nodiscard]] Status chmod(const char* path, u64 mode) noexcept;
+[[nodiscard]] Status chown(const char* path, u64 uid, u64 gid) noexcept;
+[[nodiscard]] Status mount(const char* type, const char* target) noexcept;
+[[nodiscard]] Status umount(const char* target) noexcept;
 
 // Reads one directory entry. Returns false at the end of the directory.
 [[nodiscard]] Result<bool> list(const char* path, u64 index,

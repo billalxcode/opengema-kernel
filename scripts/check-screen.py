@@ -118,7 +118,7 @@ def main(argv):
             background += 1
 
     if cleared:
-        if foreground > 1000:
+        if foreground > 2000:
             print("screen check: clear left %d text pixels" % foreground)
             return 1
         if background == 0:

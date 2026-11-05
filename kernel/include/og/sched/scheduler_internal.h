@@ -22,6 +22,7 @@ struct CpuScheduler {
   uint32_t ready_count;
   uint32_t need_reschedule;
   uint32_t initialized;
+  uint64_t heartbeat;
 };
 
 [[nodiscard]] uint32_t CpuIndex() noexcept;

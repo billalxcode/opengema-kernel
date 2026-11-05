@@ -33,6 +33,10 @@ constexpr uint64_t kUserMmapLimit =
 struct UserStat {
   uint64_t type;
   uint64_t size;
+  uint64_t mode;
+  uint64_t uid;
+  uint64_t gid;
+  uint64_t mtime;
 };
 
 struct UserDirEntry {
@@ -88,5 +92,54 @@ namespace og::syscall {
 [[nodiscard]] Status DoShutdown(uint64_t& result) noexcept;
 
 [[nodiscard]] Status DoReboot(uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoTime(uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoSleep(uint64_t milliseconds, uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoMkdir(uint64_t user_path, uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoUnlink(uint64_t user_path, uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoRmdir(uint64_t user_path, uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoRename(uint64_t user_old_path, uint64_t user_new_path,
+                              uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoGetLogLevel(uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoSetLogLevel(uint64_t level, uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoMount(uint64_t user_type, uint64_t user_target,
+                             uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoUmount(uint64_t user_target,
+                              uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoWallTime(uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoSetWallTime(uint64_t seconds,
+                                   uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoLocalTime(uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoSetTimeZone(uint64_t minutes,
+                                   uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoGetTimeZone(uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoChmod(uint64_t user_path, uint64_t mode,
+                             uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoGetUid(uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoSetUid(uint64_t uid, uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoGetGid(uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoSetGid(uint64_t gid, uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoChown(uint64_t user_path, uint64_t uid, uint64_t gid,
+                             uint64_t& result) noexcept;
 
 }  // namespace og::syscall

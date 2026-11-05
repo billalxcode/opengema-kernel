@@ -6,7 +6,9 @@
 #include "og/arch/registers.h"
 #include "og/core/bootinfo.h"
 #include "og/core/log.h"
+#include "og/core/log_ring.h"
 #include "og/core/panic.h"
+#include "og/core/power.h"
 #include "og/core/power.h"
 #include "og/core/status.h"
 #include "og/dma/dma.h"
@@ -18,6 +20,7 @@
 #include "og/events/trap.h"
 #include "og/events/workqueue.h"
 #include "og/io/print.h"
+#include "og/io/sysrq.h"
 #include "og/mem/heap.h"
 #include "og/mem/mem_selftest.h"
 #include "og/mem/pmm.h"
@@ -38,6 +41,104 @@ namespace og {
 namespace {
 
 uint64_t g_ipi_count = 0;
+
+void PanicInfo() noexcept {
+  sched::Thread* thread = sched::CurrentThread();
+  if (thread != nullptr) {
+    Log(LogLevel::kError, "panic: thread ");
+    Log(LogLevel::kError, thread->name);
+    LogDec(LogLevel::kError, "panic: thread cpu", thread->home_cpu);
+  }
+  process::Process* process = process::Current();
+  if (process != nullptr) {
+    LogDec(LogLevel::kError, "panic: pid", process->pid);
+    Log(LogLevel::kError, "panic: process ");
+    Log(LogLevel::kError, process->name);
+  }
+  LogDec(LogLevel::kError, "panic: heap pages", mem::GetHeapStats().pages);
+  LogDec(LogLevel::kError, "panic: frames free", mem::PmmFreeFrames());
+  LogDec(LogLevel::kError, "panic: log bytes", log_ring::Size());
+}
+
+void SysRqRebootWork(void* /*context*/) noexcept {
+  const Status status = power::Reboot();
+  LogHex(LogLevel::kError, "sysrq: reboot status",
+         static_cast<uint64_t>(status));
+}
+
+void SysRqShutdownWork(void* /*context*/) noexcept {
+  const Status status = power::Shutdown();
+  LogHex(LogLevel::kError, "sysrq: shutdown status",
+         static_cast<uint64_t>(status));
+}
+
+void SysRqHaltWork(void* /*context*/) noexcept {
+  arch::aarch64::DisableInterrupts();
+  arch::aarch64::HaltForever();
+}
+
+void SysRqHandler(char key) noexcept {
+  if (key == 's') {
+    Log(LogLevel::kInfo, "sysrq: stats\n");
+    LogDec(LogLevel::kInfo, "sysrq: ticks", time::TimerTicks());
+    LogDec(LogLevel::kInfo, "sysrq: threads", sched::ThreadCount());
+    LogDec(LogLevel::kInfo, "sysrq: processes", process::Count());
+    LogDec(LogLevel::kInfo, "sysrq: frames free", mem::PmmFreeFrames());
+    LogDec(LogLevel::kInfo, "sysrq: heap pages", mem::GetHeapStats().pages);
+    LogDec(LogLevel::kInfo, "sysrq: log bytes", log_ring::Size());
+    return;
+  }
+  if (key == 'b') {
+    Log(LogLevel::kInfo, "sysrq: reboot\n");
+    (void)events::ScheduleWork(&SysRqRebootWork, nullptr);
+    return;
+  }
+  if (key == 'o') {
+    Log(LogLevel::kInfo, "sysrq: shutdown\n");
+    (void)events::ScheduleWork(&SysRqShutdownWork, nullptr);
+    return;
+  }
+  if (key == 'h') {
+    Log(LogLevel::kInfo, "sysrq: halt\n");
+    (void)events::ScheduleWork(&SysRqHaltWork, nullptr);
+    return;
+  }
+  Log(LogLevel::kWarn, "sysrq: unknown key\n");
+}
+
+constexpr uint64_t kWatchdogPeriodMs = 10000;
+uint64_t g_watchdog_last[4]{};
+uint32_t g_watchdog_cpus = 0;
+bool g_watchdog_armed = false;
+
+void WatchdogCheck(void* /*context*/) noexcept {
+  for (uint32_t cpu = 0; cpu < g_watchdog_cpus; ++cpu) {
+    const uint64_t now = sched::CpuHeartbeat(cpu);
+    if (g_watchdog_armed && now == g_watchdog_last[cpu]) {
+      LogDec(LogLevel::kError, "watchdog: stalled cpu", cpu);
+      Panic("watchdog: cpu stalled");
+    }
+    g_watchdog_last[cpu] = now;
+  }
+  g_watchdog_armed = true;
+  (void)time::ScheduleAfter(kWatchdogPeriodMs, &WatchdogCheck, nullptr);
+}
+
+void StartWatchdog() noexcept {
+  g_watchdog_cpus = smp::OnlineCount();
+  if (g_watchdog_cpus > 4U) {
+    g_watchdog_cpus = 4U;
+  }
+  if (g_watchdog_cpus == 0U) {
+    return;
+  }
+  g_watchdog_armed = false;
+  const Result<time::Timeout*> timeout =
+    time::ScheduleAfter(kWatchdogPeriodMs, &WatchdogCheck, nullptr);
+  if (timeout.is_err()) {
+    Log(LogLevel::kWarn, "watchdog: start failed\n");
+  }
+}
 
 Status IpiHandler(void* /*context*/, uint32_t /*irq*/) noexcept {
   __atomic_add_fetch(&g_ipi_count, 1U, __ATOMIC_RELAXED);
@@ -101,6 +202,8 @@ void kmain(BootInfo* info) noexcept {
   if (info->version != kBootInfoVersion) {
     Panic("kmain: unsupported boot info version");
   }
+  SetPanicInfoHook(&PanicInfo);
+  io::SetSysRqHandler(&SysRqHandler);
 
   if (info->acpi_rsdp != 0U) {
     const Status acpi_status = acpi::Init(info->acpi_rsdp);
@@ -255,6 +358,7 @@ void kmain(BootInfo* info) noexcept {
   InitSmp();
   power::SetHandlers(&platform::Shutdown, &platform::Reboot);
   boot::RunSchedulerSelfTest();
+  StartWatchdog();
   boot::RunAddressSpaceSelfTest();
   boot::RunUserSelfTest();
 

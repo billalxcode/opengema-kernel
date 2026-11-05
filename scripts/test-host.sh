@@ -12,7 +12,7 @@ trap 'rm -rf "$BUILD_DIR"' EXIT
 
 CXX="${CXX:-clang++}"
 
-"$CXX" -std=c++20 -O1 -Wall -Wextra -Werror \
+"$CXX" -std=c++20 -O1 -Wall -Wextra -Werror -DOG_HOST_TEST \
   -I libs/core -I kernel/include \
   tests/host/main.cpp libs/core/memory.cpp libs/core/format.cpp \
   kernel/fs/partition.cpp kernel/fs/vfs.cpp kernel/fs/fd_table.cpp \
@@ -52,6 +52,20 @@ CXX="${CXX:-clang++}"
   tests/host/hid_probe.cpp kernel/drivers/input/hid.cpp \
   -o "$BUILD_DIR/hid_probe"
 "$BUILD_DIR/hid_probe"
+
+"$CXX" -std=c++20 -O1 -Wall -Wextra -Werror -DOG_HOST_TEST \
+  -I libs/core -I kernel/include \
+  tests/host/vfs_mutation_probe.cpp kernel/fs/vfs.cpp kernel/fs/fd_table.cpp \
+  kernel/fs/ramfs.cpp libs/core/memory.cpp \
+  -o "$BUILD_DIR/vfs_mutation_probe"
+"$BUILD_DIR/vfs_mutation_probe"
+
+"$CXX" -std=c++20 -O1 -Wall -Wextra -Werror -DOG_HOST_TEST \
+  -I libs/core -I kernel/include \
+  tests/host/vfs_mount_probe.cpp kernel/fs/vfs.cpp \
+  kernel/fs/fd_table.cpp kernel/fs/ramfs.cpp libs/core/memory.cpp \
+  -o "$BUILD_DIR/vfs_mount_probe"
+"$BUILD_DIR/vfs_mount_probe"
 
 "$CXX" -std=c++20 -O1 -Wall -Wextra -Werror \
   -I libs/core -I kernel/include \

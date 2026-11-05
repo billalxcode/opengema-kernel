@@ -27,4 +27,28 @@ Status wait(u64 pid, int& status) noexcept {
   return Status::ok;
 }
 
+Result<u64> user_id() noexcept {
+  u64 value = 0;
+  if (!kgema::uid(value)) {
+    return Status::not_supported;
+  }
+  return value;
+}
+
+Status set_user_id(u64 id) noexcept {
+  return kgema::setuid(id) ? Status::ok : Status::denied;
+}
+
+Result<u64> group_id() noexcept {
+  u64 value = 0;
+  if (!kgema::gid(value)) {
+    return Status::not_supported;
+  }
+  return value;
+}
+
+Status set_group_id(u64 id) noexcept {
+  return kgema::setgid(id) ? Status::ok : Status::denied;
+}
+
 }  // namespace gemapi::process

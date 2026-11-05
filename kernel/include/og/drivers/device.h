@@ -24,6 +24,7 @@ struct Device {
   DeviceClass device_class;
   uint64_t mmio_base;
   uint32_t irq;
+  uint64_t clock_hz;
   uint64_t capacity;
   void* driver_data;
 };
@@ -35,6 +36,7 @@ constexpr uint32_t kMaxDevices = 32;
 
 [[nodiscard]] Result<Device> FindDeviceByName(const char* name) noexcept;
 [[nodiscard]] Result<Device> FindFirstDevice(DeviceClass device_class) noexcept;
+[[nodiscard]] Result<Device> DeviceAt(uint32_t index) noexcept;
 [[nodiscard]] uint32_t DeviceCount() noexcept;
 
 }  // namespace og::drivers

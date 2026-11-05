@@ -6,9 +6,11 @@
 #include "og/drivers/device.h"
 #include "og/drivers/pci.h"
 #include "og/drivers/rtc.h"
+#include "og/drivers/uart.h"
 #include "og/drivers/virtio_blk.h"
 #include "og/drivers/virtio_gpu.h"
 #include "og/drivers/virtio_input.h"
+#include "og/fs/vfs.h"
 #include "og/io/console.h"
 #include "og/io/tty.h"
 #include "og/platform/platform.h"
@@ -19,8 +21,13 @@ namespace og::boot {
 namespace {
 
 constexpr uint64_t kSectorSize = 512;
+constexpr uint32_t kMaxBlockDevices = 2;
 
-drivers::virtio::Blk g_block_device;
+drivers::virtio::Blk g_block_devices[kMaxBlockDevices];
+constexpr const char* kBlockNames[kMaxBlockDevices] = {
+  "virtio-blk0",
+  "virtio-blk1",
+};
 drivers::virtio::Gpu g_gpu;
 drivers::virtio::Input g_input;
 drivers::rtc::Pl031 g_rtc;
@@ -58,6 +65,33 @@ void PollInput(void* /*context*/) noexcept {
   (void)time::ScheduleAfter(10, &PollInput, nullptr);
 }
 
+Result<uint64_t> ReadWallClock(void* context) noexcept {
+  if (context == nullptr) {
+    return Result<uint64_t>::Err(Status::kInvalidArg);
+  }
+  return static_cast<drivers::rtc::Pl031*>(context)->read_unix_seconds();
+}
+
+Status WriteWallClock(void* context, uint64_t seconds) noexcept {
+  if (context == nullptr) {
+    return Status::kInvalidArg;
+  }
+  return static_cast<drivers::rtc::Pl031*>(context)->write_unix_seconds(seconds);
+}
+
+uint64_t FsClock() noexcept {
+  const Result<uint64_t> seconds = time::WallTimeSeconds();
+  return seconds.is_ok() ? seconds.value() : 0U;
+}
+
+void AssignPciIrq(drivers::Device& device,
+                  const drivers::pci::Info& info) noexcept {
+  const Result<uint8_t> irq = drivers::pci::LegacyIrq(info.address);
+  if (irq.is_ok()) {
+    device.irq = irq.value();
+  }
+}
+
 void InitRtc() noexcept {
   const platform::Platform& board = platform::Current();
   const Status status = g_rtc.init(board.rtc.base, board.rtc.size);
@@ -71,9 +105,12 @@ void InitRtc() noexcept {
     return;
   }
   LogDec(LogLevel::kInfo, "rtc: unix seconds", seconds.value());
+  time::SetWallClock(&ReadWallClock, &WriteWallClock, &g_rtc);
+  fs::SetClock(&FsClock);
 
   drivers::Device device{};
   device.name = "pl031";
+  device.mmio_base = board.rtc.base;
   device.device_class = drivers::DeviceClass::kUnknown;
   device.capacity = seconds.value();
   device.driver_data = &g_rtc;
@@ -94,49 +131,69 @@ void InitBlockDevice() noexcept {
     return;
   }
 
-  Result<drivers::pci::Info> info = drivers::pci::FindFirst(&drivers::virtio::IsVirtioBlock);
-  if (info.is_err()) {
-    Log(LogLevel::kWarn, "virtio-blk: no device on pci\n");
-    return;
-  }
-  LogDec(LogLevel::kInfo, "pci: virtio device id", info.value().device_id);
+  uint32_t block_count = 0;
+  for (uint32_t index = 0; index < kMaxBlockDevices; ++index) {
+    const Result<drivers::pci::Info> info =
+      drivers::pci::FindNth(&drivers::virtio::IsVirtioBlock, index);
+    if (info.is_err()) {
+      if (index == 0U) {
+        Log(LogLevel::kWarn, "virtio-blk: no device on pci\n");
+      }
+      break;
+    }
+    LogDec(LogLevel::kInfo, "pci: virtio-blk id", info.value().device_id);
 
-  status = drivers::pci::EnableDevice(info.value().address);
-  if (IsErr(status)) {
-    Log(LogLevel::kError, "pci: enable device failed\n");
-    return;
-  }
+    status = drivers::pci::EnableDevice(info.value().address);
+    if (IsErr(status)) {
+      Log(LogLevel::kError, "pci: enable device failed\n");
+      break;
+    }
 
-  status = g_block_device.init(info.value());
-  if (IsErr(status)) {
-    Log(LogLevel::kError, "virtio-blk: init failed\n");
-    return;
-  }
-  LogDec(LogLevel::kInfo, "virtio-blk: queue size", g_block_device.queue_size());
-  LogDec(LogLevel::kInfo, "virtio-blk: capacity sectors", g_block_device.capacity_sectors());
+    drivers::virtio::Blk& block = g_block_devices[index];
+    status = block.init(info.value());
+    if (IsErr(status)) {
+      Log(LogLevel::kError, "virtio-blk: init failed\n");
+      break;
+    }
+    LogDec(LogLevel::kInfo, "virtio-blk: queue size", block.queue_size());
+    LogDec(LogLevel::kInfo, "virtio-blk: capacity sectors",
+           block.capacity_sectors());
+    const Result<drivers::pci::MsiXInfo> msix =
+      drivers::pci::ReadMsiX(info.value().address);
+    if (msix.is_ok() && msix.value().present) {
+      LogDec(LogLevel::kInfo, "virtio-blk: msix vectors",
+             msix.value().vectors);
+    } else {
+      Log(LogLevel::kInfo, "virtio-blk: msix unavailable\n");
+    }
 
-  drivers::Device device{};
-  device.name = "virtio-blk0";
-  device.device_class = drivers::DeviceClass::kBlock;
-  device.capacity = g_block_device.capacity_sectors();
-  device.driver_data = &g_block_device;
-  status = drivers::RegisterDevice(device);
-  if (IsErr(status)) {
-    Log(LogLevel::kError, "device: register failed\n");
-    return;
-  }
+    drivers::Device device{};
+    device.name = kBlockNames[index];
+    device.mmio_base = block.mmio_base();
+    AssignPciIrq(device, info.value());
+    device.device_class = drivers::DeviceClass::kBlock;
+    device.capacity = block.capacity_sectors();
+    device.driver_data = &block;
+    status = drivers::RegisterDevice(device);
+    if (IsErr(status)) {
+      Log(LogLevel::kError, "device: register failed\n");
+      break;
+    }
 
-  uint8_t sector[kSectorSize];
-  status = g_block_device.read(1, std::span<uint8_t>(sector, kSectorSize));
-  if (IsErr(status)) {
-    Log(LogLevel::kError, "virtio-blk: read failed\n");
-    return;
+    uint8_t sector[kSectorSize];
+    status = block.read(1, std::span<uint8_t>(sector, kSectorSize));
+    if (IsErr(status)) {
+      Log(LogLevel::kError, "virtio-blk: read failed\n");
+      break;
+    }
+    if (!mem::Equal(sector, "EFI PART", 8)) {
+      Log(LogLevel::kError, "virtio-blk: gpt signature mismatch\n");
+      break;
+    }
+    Log(LogLevel::kInfo, "virtio-blk: gpt header ok\n");
+    ++block_count;
   }
-  if (!mem::Equal(sector, "EFI PART", 8)) {
-    Log(LogLevel::kError, "virtio-blk: gpt signature mismatch\n");
-    return;
-  }
-  Log(LogLevel::kInfo, "virtio-blk: gpt header ok\n");
+  LogDec(LogLevel::kInfo, "virtio-blk: devices", block_count);
 }
 
 void InitGpu() noexcept {
@@ -170,6 +227,8 @@ void InitGpu() noexcept {
 
   drivers::Device device{};
   device.name = "virtio-gpu0";
+  device.mmio_base = g_gpu.mmio_base();
+  AssignPciIrq(device, info.value());
   device.device_class = drivers::DeviceClass::kDisplay;
   device.capacity = static_cast<uint64_t>(g_gpu.width()) * g_gpu.height();
   device.driver_data = &g_gpu;
@@ -214,6 +273,8 @@ void InitInput() noexcept {
 
   drivers::Device device{};
   device.name = "virtio-input0";
+  device.mmio_base = g_input.mmio_base();
+  AssignPciIrq(device, info.value());
   device.device_class = drivers::DeviceClass::kInput;
   device.driver_data = &g_input;
   status = drivers::RegisterDevice(device);
@@ -233,11 +294,27 @@ void InitInput() noexcept {
 
 }  // namespace
 
+void RegisterUart() noexcept {
+  drivers::uart::Pl011* uart = drivers::uart::Active();
+  if (uart == nullptr) {
+    return;
+  }
+  drivers::Device device{};
+  device.name = "pl011";
+  device.device_class = drivers::DeviceClass::kSerial;
+  device.mmio_base = uart->base();
+  device.irq = drivers::uart::kUartIrq;
+  device.clock_hz = platform::Current().uart_clock;
+  device.driver_data = uart;
+  (void)drivers::RegisterDevice(device);
+}
+
 void InitDevices() noexcept {
   InitBlockDevice();
   InitGpu();
   InitInput();
   InitRtc();
+  RegisterUart();
 }
 
 }  // namespace og::boot

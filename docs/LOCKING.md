@@ -58,7 +58,7 @@ Penjelasan:
 | `sched::g_lock` | `kernel/sched/scheduler.cpp` | run queue, thread state | boleh memanggil PMM |
 | `Blk::lock_` | `kernel/drivers/virtio/virtio_blk.cpp` | queue dan request buffer | leaf |
 | `gslfs` | `kernel/fs/gslfs.cpp` | tidak ada lock | mount sekali, read-only |
-| `vfs` | `kernel/fs/vfs.cpp` | tidak ada lock | mount table diinisialisasi sebelum user mode |
+| `vfs` | `kernel/fs/vfs.cpp` | mount table | leaf; tidak boleh memanggil operasi filesystem di dalam lock |
 
 ## Risiko yang belum ditutup
 

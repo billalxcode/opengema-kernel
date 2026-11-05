@@ -46,6 +46,7 @@ struct Thread {
   uint32_t home_cpu;
   uint32_t in_ready_queue;
   uint64_t wake_ns;
+  uint64_t cpu_ticks;
   char name[16];
   ThreadEntry entry;
   void* argument;
@@ -77,6 +78,11 @@ struct WaitQueue {
                                              mem::AddressSpace* space,
                                              void* process = nullptr) noexcept;
 
+// Creates a kernel thread with a fixed home CPU.
+[[nodiscard]] Result<Thread*> ThreadCreateOn(const char* name, ThreadEntry entry,
+                                             void* argument,
+                                             uint32_t cpu) noexcept;
+
 // Becomes a thread and switches to the first ready thread. Returns when
 // this thread is scheduled again.
 void SchedulerStart() noexcept;
@@ -98,6 +104,8 @@ void ThreadYield() noexcept;
 // Frees the kernel stack of a finished thread and returns its slot.
 [[nodiscard]] Status ThreadReclaim(Thread* thread) noexcept;
 [[nodiscard]] uint32_t ThreadCount() noexcept;
+[[nodiscard]] uint64_t ContextSwitchCount() noexcept;
+[[nodiscard]] uint64_t CpuHeartbeat(uint32_t cpu) noexcept;
 
 void WaitQueueInit(WaitQueue& queue) noexcept;
 void WaitQueueWait(WaitQueue& queue) noexcept;

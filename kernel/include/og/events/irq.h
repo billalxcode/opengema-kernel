@@ -38,6 +38,7 @@ void SetSyncHook(SyncHook hook, void* context) noexcept;
 
 [[nodiscard]] Status RegisterIrq(uint32_t irq, IrqHandler handler, void* context) noexcept;
 [[nodiscard]] Status UnregisterIrq(uint32_t irq) noexcept;
+[[nodiscard]] uint64_t IrqCount(uint32_t irq) noexcept;
 
 // Calls the handler registered for irq. Safe from IRQ context.
 [[nodiscard]] Status DispatchIrq(uint32_t irq) noexcept;

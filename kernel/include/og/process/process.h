@@ -23,6 +23,7 @@ constexpr uint64_t kUserStackSize = 16384;
 constexpr uint64_t kMaxProgramSize = 65536;
 constexpr uint32_t kMaxArgs = 8;
 constexpr uint64_t kMaxArgLength = 64;
+constexpr uint32_t kMaxProcessMounts = 4;
 
 enum class ProcessState : uint32_t {
   kReady = 0,
@@ -33,6 +34,8 @@ enum class ProcessState : uint32_t {
 struct Process {
   uint32_t pid;
   uint32_t parent_pid;
+  uint32_t uid;
+  uint32_t gid;
   ProcessState state;
   int32_t exit_code;
   uint32_t used;
@@ -46,6 +49,19 @@ struct Process {
   uint32_t argc;
   char name[32];
   char cwd[fs::kMaxPath];
+  uint32_t mount_count;
+  char mounts[kMaxProcessMounts][fs::kMaxPath];
+};
+
+// Copy of the fields a user visible process listing needs.
+struct ProcessInfo {
+  uint32_t pid;
+  uint32_t parent_pid;
+  uint32_t uid;
+  uint32_t gid;
+  ProcessState state;
+  uint64_t cpu_ms;
+  char name[32];
 };
 
 [[nodiscard]] Status Init() noexcept;
@@ -69,6 +85,18 @@ struct Process {
 
 [[nodiscard]] Process* Current() noexcept;
 [[nodiscard]] Status SetCwd(Process& process, const char* path) noexcept;
+[[nodiscard]] Status SetUid(Process& process, uint32_t uid) noexcept;
+[[nodiscard]] Status SetGid(Process& process, uint32_t gid) noexcept;
+
+// Per-process record of explicitly mounted paths. Each recorded path holds
+// one reference in the global mount table.
+[[nodiscard]] Status RecordMount(Process& process, const char* path) noexcept;
+void ForgetMount(Process& process, const char* path) noexcept;
+[[nodiscard]] bool HasMount(const Process& process, const char* path) noexcept;
+void ReleaseMounts(Process& process) noexcept;
 [[nodiscard]] uint32_t Count() noexcept;
+
+// Copies used process entries into out. Returns the number copied.
+[[nodiscard]] uint32_t Snapshot(ProcessInfo* out, uint32_t capacity) noexcept;
 
 }  // namespace og::process

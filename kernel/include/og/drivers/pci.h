@@ -26,6 +26,14 @@ struct Info {
   uint32_t bar[6];
 };
 
+struct MsiXInfo {
+  bool present;
+  bool enabled;
+  uint16_t vectors;
+  uint8_t bar;
+  uint32_t table_offset;
+};
+
 constexpr uint16_t kVendorRedHat = 0x1AF4;
 
 [[nodiscard]] Status PciInit(uint64_t ecam_base, uint64_t ecam_size) noexcept;
@@ -38,10 +46,16 @@ constexpr uint16_t kVendorRedHat = 0x1AF4;
 [[nodiscard]] Status Write32(Address address, uint16_t offset, uint32_t value) noexcept;
 
 [[nodiscard]] Result<Info> Probe(Address address) noexcept;
+[[nodiscard]] Result<MsiXInfo> ReadMsiX(Address address) noexcept;
+[[nodiscard]] Result<uint8_t> LegacyIrq(Address address) noexcept;
 [[nodiscard]] Result<Info> FindByVendorDevice(uint16_t vendor_id, uint16_t device_id) noexcept;
 
 using MatchFunction = bool (*)(const Info& info);
 [[nodiscard]] Result<Info> FindFirst(MatchFunction match) noexcept;
+
+// Returns the match at a zero-based index in PCI scan order.
+[[nodiscard]] Result<Info> FindNth(MatchFunction match,
+                                   uint32_t index) noexcept;
 
 // Enables memory decoding and bus mastering for a device.
 [[nodiscard]] Status EnableDevice(Address address) noexcept;

@@ -54,6 +54,68 @@ bool chdir(const char* path) noexcept {
   return syscall::invoke3(syscall::kChdir, reinterpret_cast<i64>(path), 0, 0) == 0;
 }
 
+bool mkdir(const char* path) noexcept {
+  if (path == nullptr) {
+    return false;
+  }
+  return syscall::invoke3(syscall::kMkdir, reinterpret_cast<i64>(path), 0, 0) == 0;
+}
+
+bool unlink(const char* path) noexcept {
+  if (path == nullptr) {
+    return false;
+  }
+  return syscall::invoke3(syscall::kUnlink, reinterpret_cast<i64>(path), 0, 0) == 0;
+}
+
+bool rmdir(const char* path) noexcept {
+  if (path == nullptr) {
+    return false;
+  }
+  return syscall::invoke3(syscall::kRmdir, reinterpret_cast<i64>(path), 0, 0) == 0;
+}
+
+bool rename(const char* old_path, const char* new_path) noexcept {
+  if (old_path == nullptr || new_path == nullptr) {
+    return false;
+  }
+  return syscall::invoke3(syscall::kRename, reinterpret_cast<i64>(old_path),
+                          reinterpret_cast<i64>(new_path), 0) == 0;
+}
+
+bool chmod(const char* path, u64 mode) noexcept {
+  if (path == nullptr) {
+    return false;
+  }
+  return syscall::invoke3(syscall::kChmod, reinterpret_cast<i64>(path),
+                          static_cast<i64>(mode), 0) == 0;
+}
+
+bool chown(const char* path, u64 uid, u64 gid) noexcept {
+  if (path == nullptr) {
+    return false;
+  }
+  return syscall::invoke3(syscall::kChown, reinterpret_cast<i64>(path),
+                          static_cast<i64>(uid),
+                          static_cast<i64>(gid)) == 0;
+}
+
+bool mount(const char* type, const char* target) noexcept {
+  if (type == nullptr || target == nullptr) {
+    return false;
+  }
+  return syscall::invoke3(syscall::kMount, reinterpret_cast<i64>(type),
+                          reinterpret_cast<i64>(target), 0) == 0;
+}
+
+bool umount(const char* target) noexcept {
+  if (target == nullptr) {
+    return false;
+  }
+  return syscall::invoke3(syscall::kUmount, reinterpret_cast<i64>(target), 0,
+                          0) == 0;
+}
+
 i64 list(const char* path, u64 index, DirEntry& entry) noexcept {
   if (path == nullptr) {
     return -1;

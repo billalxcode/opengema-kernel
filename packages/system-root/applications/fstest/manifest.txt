@@ -1,0 +1,8 @@
+name=fstest
+version=0.1
+exec=fstest
+type=executable
+depends=libgemapi>=0.1
+capability=console
+capability=filesystem.read:/volumes/boot
+capability=filesystem.write:/volumes/boot

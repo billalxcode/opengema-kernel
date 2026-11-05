@@ -76,6 +76,10 @@ bool stat(const char* path, Stat& result) noexcept {
   if (Same(path, "file")) {
     result.type = 0;
     result.size = 10;
+    result.mode = 0644;
+    result.uid = 1;
+    result.gid = 2;
+    result.mtime = 1234;
     return true;
   }
   if (Same(path, "dir")) {
@@ -128,6 +132,38 @@ i64 list(const char* path, u64 index, DirEntry& entry) noexcept {
     return 0;
   }
   return 0;
+}
+
+bool mkdir(const char* path) noexcept {
+  return Same(path, "newdir");
+}
+
+bool unlink(const char* path) noexcept {
+  return Same(path, "file");
+}
+
+bool rmdir(const char* path) noexcept {
+  return Same(path, "dir");
+}
+
+bool rename(const char* old_path, const char* new_path) noexcept {
+  return Same(old_path, "file") && Same(new_path, "renamed");
+}
+
+bool chmod(const char* path, u64 mode) noexcept {
+  return Same(path, "file") && mode == 0600U;
+}
+
+bool chown(const char* path, u64 uid, u64 gid) noexcept {
+  return Same(path, "file") && uid == 1U && gid == 1U;
+}
+
+bool mount(const char* type, const char* target) noexcept {
+  return Same(type, "ramfs") && Same(target, "/mnt");
+}
+
+bool umount(const char* target) noexcept {
+  return Same(target, "/mnt");
 }
 
 }  // namespace kgema
@@ -221,7 +257,10 @@ int main() {
 
   const auto file_info = gemapi::fs::stat("file");
   if (!file_info || file_info.value().kind != Kind::file ||
-      file_info.value().size != 10U) {
+      file_info.value().size != 10U ||
+      file_info.value().mode != 0644U ||
+      file_info.value().uid != 1U || file_info.value().gid != 2U ||
+      file_info.value().mtime != 1234U) {
     return Fail("stat file");
   }
   if (gemapi::fs::stat("dir").value().kind != Kind::directory ||
@@ -244,6 +283,50 @@ int main() {
   }
   if (gemapi::fs::chdir(nullptr) != Status::invalid_argument) {
     return Fail("chdir null");
+  }
+
+  if (gemapi::fs::mkdir("newdir") != Status::ok) {
+    return Fail("mkdir");
+  }
+  if (gemapi::fs::mkdir("bad") != Status::not_found ||
+      gemapi::fs::mkdir(nullptr) != Status::invalid_argument) {
+    return Fail("mkdir error");
+  }
+  if (gemapi::fs::unlink("file") != Status::ok ||
+      gemapi::fs::unlink("bad") != Status::not_found ||
+      gemapi::fs::unlink(nullptr) != Status::invalid_argument) {
+    return Fail("unlink");
+  }
+  if (gemapi::fs::rmdir("dir") != Status::ok ||
+      gemapi::fs::rmdir("bad") != Status::not_found ||
+      gemapi::fs::rmdir(nullptr) != Status::invalid_argument) {
+    return Fail("rmdir");
+  }
+  if (gemapi::fs::rename("file", "renamed") != Status::ok ||
+      gemapi::fs::rename("bad", "renamed") != Status::not_found ||
+      gemapi::fs::rename(nullptr, "renamed") != Status::invalid_argument) {
+    return Fail("rename");
+  }
+
+  if (gemapi::fs::chmod("file", 0600U) != Status::ok ||
+      gemapi::fs::chmod("bad", 0600U) != Status::not_found ||
+      gemapi::fs::chmod(nullptr, 0600U) != Status::invalid_argument) {
+    return Fail("chmod");
+  }
+  if (gemapi::fs::chown("file", 1U, 1U) != Status::ok ||
+      gemapi::fs::chown("bad", 1U, 1U) != Status::not_found ||
+      gemapi::fs::chown(nullptr, 1U, 1U) != Status::invalid_argument) {
+    return Fail("chown");
+  }
+  if (gemapi::fs::mount("ramfs", "/mnt") != Status::ok ||
+      gemapi::fs::mount("bad", "/mnt") != Status::not_found ||
+      gemapi::fs::mount(nullptr, "/mnt") != Status::invalid_argument) {
+    return Fail("mount");
+  }
+  if (gemapi::fs::umount("/mnt") != Status::ok ||
+      gemapi::fs::umount("/bad") != Status::not_found ||
+      gemapi::fs::umount(nullptr) != Status::invalid_argument) {
+    return Fail("umount");
   }
 
   gemapi::fs::DirEntry entry{};

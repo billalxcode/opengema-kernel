@@ -5,6 +5,7 @@
 #include "og/arch/cpu.h"
 #include "og/arch/registers.h"
 #include "og/arch/spinlock.h"
+#include "og/core/trace.h"
 #include "og/events/irq.h"
 #include "og/mem/pmm.h"
 #include "og/mem/vmm.h"
@@ -31,6 +32,7 @@ CpuScheduler g_cpu[kMaxCpus];
 arch::aarch64::IrqSpinlock g_lock;
 uint32_t g_next_id = 1;
 bool g_initialized = false;
+uint64_t g_context_switches = 0;
 
 [[nodiscard]] uint32_t CpuIndex() noexcept {
   const uint64_t id = arch::aarch64::CpuId();
@@ -92,6 +94,8 @@ void Schedule() noexcept {
   }
 
   g_lock.unlock();
+  (void)__atomic_add_fetch(&g_context_switches, 1U, __ATOMIC_RELAXED);
+  trace::Record(trace::Tag::kContextSwitch, index);
   mem::AddressSpaceActivate(next->address_space);
   arch::aarch64::WriteSpEl0(next->user_sp);
   SwitchContext(&previous->saved_sp, next->saved_sp);
@@ -242,6 +246,18 @@ Result<Thread*> ThreadCreateIn(const char* name, ThreadEntry entry, void* argume
                               process);
 }
 
+Result<Thread*> ThreadCreateOn(const char* name, ThreadEntry entry,
+                               void* argument, uint32_t cpu) noexcept {
+  if (!g_initialized) {
+    return Result<Thread*>::Err(Status::kNotInit);
+  }
+  if (cpu >= kMaxCpus) {
+    return Result<Thread*>::Err(Status::kInvalidArg);
+  }
+  return detail::CreateThread(name, entry, argument, true, cpu, true, nullptr,
+                              nullptr);
+}
+
 void SchedulerStart() noexcept {
   if (!g_initialized) {
     return;
@@ -264,6 +280,11 @@ void SchedulerTick(void* /*context*/) noexcept {
   const uint32_t index = CpuIndex();
   const uint64_t daif = arch::aarch64::IrqSave();
   g_lock.lock();
+  (void)__atomic_add_fetch(&g_cpu[index].heartbeat, 1U, __ATOMIC_RELAXED);
+  Thread* current = g_cpu[index].current;
+  if (current != nullptr) {
+    (void)__atomic_add_fetch(&current->cpu_ticks, 1U, __ATOMIC_RELAXED);
+  }
   WakeSleepersLocked();
   g_cpu[index].need_reschedule = 1;
   g_lock.unlock();
@@ -401,6 +422,17 @@ Status ThreadReclaim(Thread* thread) noexcept {
   mem::Zero(thread, sizeof(*thread));
   g_lock.unlock();
   return Status::kOk;
+}
+
+uint64_t ContextSwitchCount() noexcept {
+  return __atomic_load_n(&g_context_switches, __ATOMIC_ACQUIRE);
+}
+
+uint64_t CpuHeartbeat(uint32_t cpu) noexcept {
+  if (cpu >= detail::kMaxCpus) {
+    return 0U;
+  }
+  return __atomic_load_n(&g_cpu[cpu].heartbeat, __ATOMIC_ACQUIRE);
 }
 
 uint32_t ThreadCount() noexcept {

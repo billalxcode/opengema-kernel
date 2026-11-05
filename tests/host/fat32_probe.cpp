@@ -38,7 +38,7 @@ void PutLe32(uint8_t* data, uint32_t value) {
 }
 
 struct Disk {
-  const std::vector<uint8_t>* data;
+  std::vector<uint8_t>* data;
 };
 
 og::Status ReadDisk(void* context, uint64_t sector,
@@ -54,6 +54,22 @@ og::Status ReadDisk(void* context, uint64_t sector,
   }
   return og::Status::kOk;
 }
+
+og::Status WriteDisk(void* context, uint64_t sector,
+                     std::span<const uint8_t> buffer) {
+  auto* disk = static_cast<Disk*>(context);
+  const uint64_t offset = sector * kSectorSize;
+  if (disk == nullptr || disk->data == nullptr ||
+      offset + buffer.size() > disk->data->size()) {
+    return og::Status::kIoError;
+  }
+  for (std::size_t index = 0; index < buffer.size(); ++index) {
+    (*disk->data)[offset + index] = buffer[index];
+  }
+  return og::Status::kOk;
+}
+
+og::Status FlushDisk(void* /*context*/) { return og::Status::kOk; }
 
 void BuildImage(std::vector<uint8_t>& image) {
   image.assign(kSectorCount * kSectorSize, 0);
@@ -138,7 +154,8 @@ int main() {
   std::vector<uint8_t> image;
   BuildImage(image);
   Disk disk{&image};
-  const og::fs::BlockDevice device{&ReadDisk, &disk, kSectorCount, 0};
+  const og::fs::BlockDevice device{&ReadDisk, &disk, kSectorCount, 0,
+                                   &WriteDisk, &FlushDisk};
 
   og::fs::Node* root = nullptr;
   if (og::IsErr(og::fs::fat32::Mount(device, &root)) || root == nullptr) {
@@ -156,6 +173,14 @@ int main() {
       hello == nullptr || hello->type != og::fs::NodeType::kFile ||
       hello->size != 12U) {
     std::printf("fat32 probe: hello lookup failed\n");
+    return 1;
+  }
+  if (hello->ops == nullptr || hello->ops->chmod == nullptr ||
+      !og::IsOk(hello->ops->chmod(hello, 0444U)) ||
+      hello->mode != 0444U ||
+      !og::IsOk(hello->ops->chmod(hello, 0644U)) ||
+      hello->mode != 0644U) {
+    std::printf("fat32 probe: chmod failed\n");
     return 1;
   }
   char text[16]{};

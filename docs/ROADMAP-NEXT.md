@@ -10,11 +10,11 @@ Prioritas: P0 blocker, P1 penting, P2 menengah, P3 nanti.
 
 | Area | Kondisi sekarang | Yang kurang | Dampak | Prioritas |
 |---|---|---|---|---|
-| Model proses | Dua proses, PID, parent, wait, exit status, dan reklamasi | argv/env, exec, cwd, daftar anak, banyak thread per proses | Shell dan program berbeda belum bisa dijalankan | P0 |
-| File descriptor | FD per proses sudah ada | Write ke FD, open flags, FD 0/1/2 standar | Program belum bisa menulis berkas | P0 |
+| Model proses | Dua proses, PID, parent, wait, exit status, argv, cwd, dan reklamasi | env, exec, daftar anak, banyak thread per proses | Shell dan program berbeda belum bisa dijalankan | P0 |
+| File descriptor | FD per proses, open, read, write, dan stdout | Open flags lengkap, append, create, truncate | Program belum bisa membuat berkas baru | P0 |
 | Syscall | open, close, read, write stdout, stat, seek, getpid, wait, spawn, exit, mmap | Write file, exec, error/errno konsisten, validasi lengkap | Userland belum bisa menjalankan program lain dengan argumen | P0 |
 | Reklamasi | Stack, address space, FD, dan slot proses dibebaskan; frame kembali | PID reuse, reklamasi saat gagal di tengah jalan | Aman untuk dua proses, belum untuk beban besar | P0 |
-| SDK dan shell | API berkas/proses awal, gemabox dua proses uji | argv, konstruktor C++, shell multi perintah, packaging SDK | Belum ada pengalaman userland yang nyata | P1 |
+| SDK dan shell | API berkas/proses/waktu, argv, konstruktor C++, shell multi perintah | Packaging SDK, contoh program, dan template package | Belum ada pengalaman userland yang nyata | P1 |
 | Filesystem | FAT32 read-only, ramfs statis, mount internal | Tulis berkas, mkdir, unlink, rename, mount/umount, permission, sync | Data tidak bisa disimpan atau diubah | P1 |
 | Memori user | Semua halaman user RWX, tanpa demand paging | W^X user, guard stack, stack growth, COW, file-backed mmap, accounting, OOM | Isolasi dan keamanan user lemah | P1 |
 | Scheduler | Per-CPU, thread tidak migrasi, tanpa prioritas | Migrasi/work stealing, prioritas, join, condvar, rwlock, futex, TLS | Beban tidak seimbang, primitif sinkronisasi kurang | P1 |
@@ -109,40 +109,58 @@ Tujuan: userland punya API yang layak dan gemabox menjadi shell nyata.
 - [x] SDK-01 `libkgema` API berkas: open, read, write, close, stat, seek,
       dan chdir sudah.
 - [x] SDK-02 API proses: getpid, wait, exit, spawn, dan argv sudah.
+- [x] SDK-03a API waktu: `now_ms` dan `sleep_ms` di libkgema dan libgemapi.
+- [ ] SDK-03b Error/errno yang konsisten untuk semua syscall.
 - [ ] SDK-03 API waktu dan error yang konsisten, tanpa libc.
-- [ ] SDK-04 Jalankan `.init_array` di `_start`, dukung konstruktor global
+- [x] SDK-04 Jalankan `.init_array` di `_start`, dukung konstruktor global
       sederhana tanpa exception dan tanpa RTTI.
 - [x] SDK-05 `_start` meneruskan argc/argv ke `main`.
-- [~] SDK-06 gemabox shell: `help`, `echo`, `cat`, `ls`, `clear`, `acpi`,
-      `halt`, `shutdown`, dan `reboot` sudah. `ps` dan `sleep` belum.
+- [x] SDK-06 gemabox shell: `help`, `echo`, `cat`, `ls`, `clear`, `acpi`,
+      `uptime`, `sleep`, `ps`, `halt`, `shutdown`, dan `reboot` sudah.
 - [x] SDK-07 Input UART ke TTY: line buffer, backspace, echo, read blocking.
-- [ ] SDK-08 Packaging: install header dan `libkgema.a`, CMake package
+- [x] SDK-08 Packaging: install header dan `libkgema.a`, CMake package
       config, satu contoh program baru, dan dokumentasi link.
-- [x] SDK-09 Uji: shell menerima `help`, `ls`, `acpi`, `shutdown`, `reboot`,
-      dan `halt`. Uji `ps` dan `sleep` belum.
+- [x] SDK-09 Uji: shell menerima `help`, `ls`, `acpi`, `uptime`, `sleep`,
+      `ps`, `shutdown`, `reboot`, dan `halt`.
 
 **Selesai bila:** shell interaktif berjalan di atas UART dan perintah dasar
 bisa dijalankan tanpa menyalin kode syscall.
 
 ## 6. Fase 17 - Storage dan VFS
 
-- [ ] FS-10 FD dan open flags per proses, termasuk read/write/append.
-- [ ] FS-11 Operasi directory: mkdir, rmdir, unlink, rename, lookup.
-- [ ] FS-12 ramfs dinamis: node dan data dialokasikan serta dibebaskan.
-- [ ] FS-13 Filesystem writable. Pilih satu: FAT32 write atau filesystem
-      sederhana dengan journal ringan. Dokumentasikan pilihannya.
-- [ ] FS-14 mount/umount syscall dan mount table per proses atau global
-      dengan referensi.
-- [ ] FS-15 Block layer: IRQ/MSI-X, flush, multiple device, partisi.
-- [ ] FS-16 Metadata: permission, uid/gid, timestamp, ukuran.
-- [ ] FS-17 Uji persistensi: buat berkas, tulis, reboot, baca kembali.
+- [x] FS-10 FD dan open flags per proses, termasuk read/write/append.
+- [x] FS-11 Operasi directory: mkdir, rmdir, unlink, rename, lookup.
+- [x] FS-12 ramfs dinamis: node dan data dialokasikan serta dibebaskan.
+- [x] FS-13 Filesystem writable: FAT32 write, create file, mkdir, delete,
+      rename, truncate, long name create/read, serta cleanup entry LFN saat
+      rename/delete. Catatan: rename ke nama panjang baru belum didukung.
+- [x] FS-14 mount/umount syscall dan mount table global berrefcount.
+      Mount hanya mendukung `ramfs`, tiap proses mencatat referensinya, dan
+      entry dilepas saat proses keluar. Unmount menyembunyikan nama mount
+      lebih dulu, lalu root ramfs dibebaskan setelah descriptor terakhir
+      ditutup dan tidak ada operasi VFS yang sedang memakai node tersebut.
+- [~] FS-15 Block layer: write path, adapter, flush, dan beberapa
+      virtio-blk selesai. `/proc/block` menampilkan nama dan kapasitas tiap
+      device, dan capability MSI-X sudah dibaca. IRQ/MSI-X belum diaktifkan
+      dan partisi tulis belum diuji terpisah.
+- [x] FS-16 Metadata: mode, uid/gid, mtime, dan ukuran dilaporkan lewat
+      `stat`. Open read/write memeriksa permission, `chmod`/`chown` tersedia
+      untuk ramfs, chmod FAT32 memetakan read-only attribute, dan proses
+      punya identity uid/gid. Catatan: FAT32 tidak menyimpan ownership dan
+      filesystem read-only memakai timestamp nol.
+- [x] FS-17 Uji persistensi: buat berkas, tulis, reboot, baca kembali.
+- [x] TEST-01 Command diagnostik `persist` sudah dipindah ke aplikasi
+      `/applications/fstest/fstest`. Shell tidak lagi punya command test,
+      dan hook `renamelong`/`deletelong` sudah dihapus.
 
 **Selesai bila:** berkas bisa dibuat dan diubah, lalu tetap ada setelah
 reboot.
 
 ## 7. Fase 18 - Driver framework, jaringan, dan input
 
-- [ ] DRV-10 Device resource: MMIO, IRQ, DMA, clock, dan probe terurut.
+- [~] DRV-10 Registry device tersedia dan `/proc/devices` menampilkan nama,
+      kelas, MMIO, IRQ, clock, dan kapasitas. MMIO virtio, IRQ UART/legacy
+      line, dan clock UART sudah diisi; DMA dan probe terurut belum.
 - [ ] DRV-11 Virtio IRQ/MSI-X, completion tanpa polling.
 - [ ] DRV-12 virtio-net: transmit/receive, queue, interrupt.
 - [ ] NET-01 Ethernet, ARP, IPv4, ICMP echo.
@@ -155,7 +173,9 @@ reboot.
 - [ ] DRV-13d Mouse sebagai device input kedua dan hotplug.
 - [x] DRV-14 TTY input dari keyboard, bukan hanya UART.
 - [x] LOG-01 Log kernel hanya ke serial; display untuk output user dan TTY.
-- [ ] TIME-06 RTC settime, zona waktu, dan waktu dinding.
+- [x] TIME-06 RTC settime, waktu dinding, dan offset zona waktu runtime
+      selesai lewat `wall_time`/`set_wall_time`/`local_time` serta command
+      `date` dan `tz`. Konfigurasi zona waktu persisten belum.
 - [x] OPS-01 shutdown/reboot lewat ACPI FADT dan PSCI SYSTEM_OFF/SYSTEM_RESET.
 
 **Selesai bila:** kernel menjawab ping/UDP dari host dan menerima input
@@ -184,8 +204,9 @@ demand paging lulus uji.
 - [ ] SCH-13 Condition variable dan read/write lock.
 - [ ] SCH-14 Futex untuk user space.
 - [ ] SCH-15 TLS dan dukungan thread-local storage.
-- [ ] SCH-16 Accounting CPU per proses dan statistik di procfs.
-- [ ] SCH-17 Uji stres 4 core, latency preemption, dan lost wakeup.
+- [x] SCH-16 Accounting CPU per proses: tick scheduler menambah `cpu_ticks`
+      thread dan `/proc/processes` menampilkan `cpu_ms`.
+- [~] SCH-17 Uji stres 4 core: thread worker dibuat satu per CPU dan QEMU\n      menerima `SMP=4`. Latency preemption dan lost wakeup belum diuji\n      terpisah.
 
 **Selesai bila:** beban merata di 4 core, thread bisa join, dan primitif
 sinkronisasi lulus uji stres.
@@ -212,9 +233,12 @@ bekerja dari shell.
 
 ## 11. Fase 22 - Observability, keamanan, dan CI
 
-- [ ] OBS-01 Ring buffer dmesg dan level log runtime.
-- [ ] OBS-02 Tracepoint, counter, dan statistik scheduler/memori/FS.
-- [ ] OBS-03 Watchdog, panic dump lengkap, dan magic SysRq minimal.
+- [x] OBS-01 Ring buffer dmesg dan level log runtime.
+- [x] OBS-02 Counter scheduler, memori, VFS, dan block device serta trace
+      ring `/proc/trace` untuk event block, context switch, spawn, dan exit.
+- [x] OBS-03 Panic dump menampilkan thread, proses, heap, frame, log bytes,
+      dan 8 word stack. SysRq `Ctrl-A` lalu `s`/`b`/`o`/`h` untuk statistik,
+      reboot, shutdown, dan halt. Watchdog memeriksa heartbeat tiap CPU.
 - [ ] SEC-01 KASLR dan relokasi image.
 - [ ] SEC-02 PAN dan validasi akses user yang seragam.
 - [ ] SEC-03 PAC/BTI bila tersedia di target.
