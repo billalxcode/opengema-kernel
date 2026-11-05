@@ -17,6 +17,16 @@ Build di dalam podman, jalankan QEMU di host:
 ./scripts/run-qemu.sh       # jalankan, default tanpa GUI
 ```
 
+Di Linux dengan clang, lld, dan binutils AArch64 terpasang, semua script
+bisa berjalan tanpa podman:
+
+```sh
+export OG_NATIVE=1
+./scripts/get-firmware.sh
+./scripts/build.sh
+./scripts/make-esp.sh
+```
+
 Mau lihat jendela QEMU:
 
 ```sh
@@ -41,8 +51,30 @@ Test lain:
 ./scripts/check-arch.sh   # aturan lapisan dan duplikasi
 ./scripts/check-gsl.sh    # aplikasi hanya memakai libgemapi
 ./scripts/test-host.sh    # unit test libs/core
+./scripts/test-tidy.sh    # clang-tidy dari compile_commands.json
 ./scripts/test-qemu.sh    # boot dan cek output
 ```
+
+Host test dengan ASan dan UBSan:
+
+```sh
+./scripts/test-sanitize.sh
+```
+
+Coverage baris untuk host test inti, dengan ambang 55 persen:
+
+```sh
+./scripts/test-coverage.sh
+```
+
+Laporan lengkap ditulis ke `build/coverage/report.txt`.
+
+## CI
+
+GitHub Actions menjalankan build, host test, sanitizer, clang-tidy,
+coverage, SDK probe, image boot, smoke test QEMU DTB dan ACPI, serta tes
+persistensi. Workflow ada di `.github/workflows/ci.yml` dan memakai LLVM 19
+di runner Ubuntu 24.04.
 
 ## Status
 

@@ -269,6 +269,18 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 - Test fuzz argumen: `hello fuzz` menjalankan 512 panggilan dengan pointer,
   ukuran, flag, argc, dan pid acak deterministik. Semua kegagalan ditolak
   tanpa panic dan program mencetak `FUZZ-DONE`.
+- CI GitHub Actions menjalankan host test, sanitizer, clang-tidy, coverage,
+  build native, SDK probe, image boot, smoke test QEMU DTB dan ACPI, serta
+  persistensi.
+- Host test bisa dijalankan dengan ASan+UBSan lewat
+  `scripts/test-sanitize.sh`. Seluruh probe lulus; `ramfs_probe` sekarang
+  melepas root tree lewat `NodeOps::release` sehingga tidak ada leak.
+- Coverage source-based LLVM untuk host test inti menghasilkan 58,25 persen
+  baris dengan ambang CI 55 persen. Laporan ada di
+  `build/coverage/report.txt`.
+- `fix_compile_commands.py` sekarang hanya mengganti `/work` sebagai
+  komponen path. Sebelumnya penggantian substring merusak entri
+  `kernel/events/workqueue.cpp` menjadi path ganda.
 - Test W^X user: `hello wx` mencoba menulis ke halaman code; proses fault,
   shell tetap berjalan, dan tidak ada `code write allowed`.
 - Test mprotect dynamic linker: ld-gem memetakan shared object writable,
@@ -308,9 +320,16 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 
 Verifikasi branch `dev`:
 
-- `python3 scripts/compile-check.py`: 134 file OK, 1 entri lama dilewati.
+- `python3 scripts/compile-check.py`: 135 file OK, 0 dilewati.
 - `./scripts/build.sh` lewat podman: kernel build dan link OK,
   `arch-check` dan `gsl-check` OK.
+- `./scripts/test-tidy.sh`: 117 file C++ OK dengan clang-tidy.
+- Sanitizer host test dengan ASan+UBSan: seluruh probe OK.
+- `./scripts/test-coverage.sh`: host test inti 58,25 persen baris,
+  ambang 55 persen.
+- `.github/workflows/ci.yml`: build native Linux, host test, sanitizer,
+  clang-tidy, coverage, SDK, QEMU DTB/ACPI, dan persistensi. Semua langkah
+  lulus lokal; workflow belum dijalankan di GitHub.
 - `./scripts/test-host.sh`: host tests, ramfs, procfs, devfs, HID, ACPI, FAT32,
   gemapi fs, gemapi api, kgema, GPT, FDT, VFS, ELF, dan GSLFS probe OK.
 - `./scripts/test-qemu.sh` lewat container arm64: OK.

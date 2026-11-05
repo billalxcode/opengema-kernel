@@ -11,7 +11,12 @@ Exit nonzero on invalid JSON or missing file.
 
 import json
 import os
+import re
 import sys
+
+# Only rewrite /work when it is a complete path component. A plain
+# str.replace also matches the "/work" inside names such as workqueue.cpp.
+WORK_PREFIX = re.compile(r"/work(?![A-Za-z0-9_.-])")
 
 
 def fail(msg):
@@ -45,7 +50,7 @@ def main(argv):
                 continue
             original = value
             if "/work" in value:
-                value = value.replace("/work", repo_root)
+                value = WORK_PREFIX.sub(lambda _match: repo_root, value)
             # Container compiler paths do not exist on the host. Use the
             # bare name so clangd resolves it from PATH.
             if value.startswith("/usr/bin/clang++ "):

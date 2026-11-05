@@ -38,6 +38,22 @@ bool ReadAll(og::fs::Node* node, char* buffer, std::size_t capacity,
     read));
 }
 
+class RootGuard {
+ public:
+  explicit RootGuard(og::fs::Node* root) : root_(root) {}
+  RootGuard(const RootGuard&) = delete;
+  RootGuard& operator=(const RootGuard&) = delete;
+  ~RootGuard() {
+    if (root_ != nullptr && root_->ops != nullptr &&
+        root_->ops->release != nullptr) {
+      root_->ops->release(root_);
+    }
+  }
+
+ private:
+  og::fs::Node* root_;
+};
+
 }  // namespace
 
 int main() {
@@ -46,6 +62,7 @@ int main() {
     std::printf("ramfs probe: create failed\n");
     return 1;
   }
+  RootGuard guard(root.value());
   const auto etc = og::fs::ramfs::CreateDir(root.value(), "etc");
   if (etc.is_err()) {
     std::printf("ramfs probe: etc failed\n");

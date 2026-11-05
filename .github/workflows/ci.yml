@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  OG_NATIVE: "1"
+
+jobs:
+  build-test:
+    name: Build and smoke test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            binutils \
+            binutils-aarch64-linux-gnu \
+            cmake \
+            dosfstools \
+            gdisk \
+            mtools \
+            ninja-build \
+            parted \
+            python3 \
+            qemu-efi-aarch64 \
+            qemu-system-arm \
+            wget
+
+      - name: Install LLVM 19
+        run: |
+          wget -q https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 19
+          sudo apt-get install -y clang-tidy-19 libclang-rt-19-dev llvm-19-tools
+
+      - name: Use LLVM 19
+        run: echo "/usr/lib/llvm-19/bin" >> "$GITHUB_PATH"
+
+      - name: Tool versions
+        run: |
+          clang++ --version
+          clang-tidy --version
+          cmake --version | head -n 1
+          qemu-system-aarch64 --version | head -n 1
+
+      - name: Host tests
+        run: ./scripts/test-host.sh
+
+      - name: Build kernel
+        run: ./scripts/build.sh
+
+      - name: Sanitizer host tests
+        run: ./scripts/test-sanitize.sh
+
+      - name: clang-tidy
+        run: ./scripts/test-tidy.sh
+
+      - name: Coverage
+        run: ./scripts/test-coverage.sh
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: build/coverage/report.txt
+
+      - name: SDK probe
+        run: ./scripts/test-sdk.sh
+
+      - name: Firmware
+        run: ./scripts/get-firmware.sh
+
+      - name: Boot image
+        run: ./scripts/make-esp.sh
+
+      - name: QEMU smoke DTB
+        run: |
+          for attempt in 1 2; do
+            if ./scripts/test-qemu.sh; then
+              exit 0
+            fi
+            echo "QEMU DTB attempt $attempt failed, retrying"
+          done
+          exit 1
+
+      - name: QEMU smoke ACPI SMP=2
+        run: |
+          for attempt in 1 2; do
+            if ACPI=on RESOLUTION=1920x1080 ./scripts/test-qemu.sh; then
+              exit 0
+            fi
+            echo "QEMU ACPI attempt $attempt failed, retrying"
+          done
+          exit 1
+
+      - name: Persistence
+        run: ./scripts/test-persist.sh

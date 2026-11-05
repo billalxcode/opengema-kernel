@@ -1,0 +1,15 @@
+---
+# Conservative clang-tidy baseline for the freestanding kernel and SDK.
+# The excluded checks are either intentional ABI requirements or tracked
+# separately from CI-01.
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-implicit-widening-of-multiplication-result,
+  -bugprone-reserved-identifier,
+  -bugprone-signed-char-misuse,
+  -bugprone-std-namespace-modification
+WarningsAsErrors: ''
+HeaderFilterRegex: ''
+FormatStyle: none
