@@ -22,6 +22,7 @@ struct DirEntry {
   char name[64];
   NodeType type;
   uint64_t size;
+  uint64_t mtime;
 };
 
 struct NodeOps {
@@ -43,6 +44,8 @@ struct NodeOps {
   // Called when the last mount reference and the last open descriptor are
   // gone. Filesystems that own dynamic nodes use this to free the tree.
   void (*release)(Node* root) noexcept = nullptr;
+  Status (*chmod)(Node* node, uint32_t mode) noexcept = nullptr;
+  Status (*chown)(Node* node, uint32_t uid, uint32_t gid) noexcept = nullptr;
 };
 
 struct Node {
@@ -52,11 +55,19 @@ struct Node {
   const NodeOps* ops;
   void* fs_data;
   void* device_data;
+  uint32_t mode;
+  uint32_t uid;
+  uint32_t gid;
+  uint64_t mtime;
 };
 
 struct Stat {
   NodeType type;
   uint64_t size;
+  uint32_t mode;
+  uint32_t uid;
+  uint32_t gid;
+  uint64_t mtime;
 };
 
 struct FileEntry {
@@ -66,6 +77,30 @@ struct FileEntry {
   uint32_t mount;
   bool in_use;
 };
+
+// Permission bits only; the node type lives in Node::type.
+constexpr uint32_t kModeDirectory = 0755U;
+constexpr uint32_t kModeFile = 0644U;
+constexpr uint32_t kModeReadOnlyDirectory = 0555U;
+constexpr uint32_t kModeReadOnlyFile = 0444U;
+constexpr uint32_t kModeDevice = 0666U;
+
+// Wall clock hook for timestamps. Defaults to zero in host probes.
+using ClockFn = uint64_t (*)() noexcept;
+
+inline ClockFn& ClockRef() noexcept {
+  static ClockFn clock = nullptr;
+  return clock;
+}
+
+inline void SetClock(ClockFn clock) noexcept {
+  ClockRef() = clock;
+}
+
+inline uint64_t NowSeconds() noexcept {
+  const ClockFn clock = ClockRef();
+  return clock == nullptr ? 0U : clock();
+}
 
 constexpr uint32_t kMaxMounts = 16;
 constexpr uint32_t kMaxFiles = 16;
@@ -83,9 +118,12 @@ constexpr uint32_t kFirstFileDescriptor = 3;
 // probes, so no file descriptor is global any more.
 struct FileTable {
   FileEntry entries[kMaxFiles];
+  uint32_t uid;
+  uint32_t gid;
 };
 
 [[nodiscard]] Status FsInit() noexcept;
+[[nodiscard]] uint64_t FsOperationCount() noexcept;
 [[nodiscard]] Status FileTableInit(FileTable& table) noexcept;
 
 // Mounts root at path. Kernel mounts are pinned and cannot be unmounted.
@@ -125,5 +163,8 @@ struct FileTable {
 [[nodiscard]] Status FsRename(const char* old_path,
                               const char* new_path) noexcept;
 [[nodiscard]] Status FsTruncate(const char* path, uint64_t size) noexcept;
+[[nodiscard]] Status FsChmod(const char* path, uint32_t mode) noexcept;
+[[nodiscard]] Status FsChown(const char* path, uint32_t uid,
+                             uint32_t gid) noexcept;
 
 }  // namespace og::fs

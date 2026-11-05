@@ -6,6 +6,20 @@
 // File descriptor table only. Path resolution and mounting stay in vfs.cpp.
 namespace og::fs {
 
+namespace {
+
+[[nodiscard]] bool AllowsAccess(const Node& node, uint32_t uid, uint32_t gid,
+                                bool write) noexcept {
+  if (uid == 0U) {
+    return true;
+  }
+  const uint32_t shift = uid == node.uid ? 6U : (gid == node.gid ? 3U : 0U);
+  const uint32_t bit = write ? 2U : 4U;
+  return (node.mode & (bit << shift)) != 0U;
+}
+
+}  // namespace
+
 Status FileTableInit(FileTable& table) noexcept {
   mem::Zero(&table, sizeof(table));
   for (uint32_t index = 0; index < kFirstFileDescriptor; ++index) {
@@ -37,6 +51,12 @@ Result<uint32_t> FsOpen(FileTable& table, const char* path,
   }
   if (node.is_err()) {
     return Result<uint32_t>::Err(node.status());
+  }
+  constexpr uint32_t kWriteFlags =
+    kOpenWrite | kOpenAppend | kOpenCreate | kOpenTruncate;
+  const bool write_access = (flags & kWriteFlags) != 0U;
+  if (!AllowsAccess(*node.value(), table.uid, table.gid, write_access)) {
+    return Result<uint32_t>::Err(Status::kDenied);
   }
   if ((flags & kOpenTruncate) != 0U) {
     const Status truncated = FsTruncate(path, 0);

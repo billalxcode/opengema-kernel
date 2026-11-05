@@ -34,6 +34,8 @@ enum class ProcessState : uint32_t {
 struct Process {
   uint32_t pid;
   uint32_t parent_pid;
+  uint32_t uid;
+  uint32_t gid;
   ProcessState state;
   int32_t exit_code;
   uint32_t used;
@@ -55,7 +57,10 @@ struct Process {
 struct ProcessInfo {
   uint32_t pid;
   uint32_t parent_pid;
+  uint32_t uid;
+  uint32_t gid;
   ProcessState state;
+  uint64_t cpu_ms;
   char name[32];
 };
 
@@ -80,6 +85,8 @@ struct ProcessInfo {
 
 [[nodiscard]] Process* Current() noexcept;
 [[nodiscard]] Status SetCwd(Process& process, const char* path) noexcept;
+[[nodiscard]] Status SetUid(Process& process, uint32_t uid) noexcept;
+[[nodiscard]] Status SetGid(Process& process, uint32_t gid) noexcept;
 
 // Per-process record of explicitly mounted paths. Each recorded path holds
 // one reference in the global mount table.

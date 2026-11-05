@@ -2,6 +2,7 @@
 
 #include "memory.h"
 #include "og/arch/spinlock.h"
+#include "og/core/trace.h"
 #include "og/dma/dma.h"
 
 namespace og::drivers::virtio {
@@ -21,6 +22,10 @@ constexpr uint32_t kRequestTypeFlush = 4;
 
 constexpr uint16_t kVirtioDeviceIdLegacyBlock = 0x1001;
 constexpr uint16_t kVirtioDeviceIdModernBlock = 0x1042;
+
+uint64_t g_block_reads = 0;
+uint64_t g_block_writes = 0;
+uint64_t g_block_flushes = 0;
 
 struct RequestHeader {
   uint32_t type;
@@ -117,6 +122,8 @@ Status Blk::read(uint64_t sector, std::span<uint8_t> buffer) noexcept {
   if (IsErr(validation)) {
     return validation;
   }
+  (void)__atomic_add_fetch(&g_block_reads, 1U, __ATOMIC_RELAXED);
+  trace::Record(trace::Tag::kBlockRead, static_cast<uint32_t>(sector));
 
   // One queue and one request buffer are shared by all CPUs. Serialize the
   // whole request so a fork or loader read cannot overwrite an in-flight
@@ -164,6 +171,8 @@ Status Blk::write(uint64_t sector,
   if (IsErr(validation)) {
     return validation;
   }
+  (void)__atomic_add_fetch(&g_block_writes, 1U, __ATOMIC_RELAXED);
+  trace::Record(trace::Tag::kBlockWrite, static_cast<uint32_t>(sector));
 
   arch::aarch64::LockGuard<arch::aarch64::IrqSpinlock> guard(lock_);
 
@@ -202,6 +211,8 @@ Status Blk::flush() noexcept {
     return Status::kNotInit;
   }
 
+  (void)__atomic_add_fetch(&g_block_flushes, 1U, __ATOMIC_RELAXED);
+  trace::Record(trace::Tag::kBlockFlush, 0U);
   arch::aarch64::LockGuard<arch::aarch64::IrqSpinlock> guard(lock_);
   auto* request_base = static_cast<uint8_t*>(request_memory_.cpu_address);
   auto* header = reinterpret_cast<RequestHeader*>(request_base);
@@ -227,6 +238,14 @@ Status Blk::flush() noexcept {
   }
   return request_base[kRequestStatusOffset] == 0U ? Status::kOk
                                                   : Status::kIoError;
+}
+
+BlkStats GetBlkStats() noexcept {
+  BlkStats stats{};
+  stats.reads = __atomic_load_n(&g_block_reads, __ATOMIC_ACQUIRE);
+  stats.writes = __atomic_load_n(&g_block_writes, __ATOMIC_ACQUIRE);
+  stats.flushes = __atomic_load_n(&g_block_flushes, __ATOMIC_ACQUIRE);
+  return stats;
 }
 
 }  // namespace og::drivers::virtio

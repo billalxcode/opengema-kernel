@@ -14,6 +14,12 @@
 
 namespace og::drivers::virtio {
 
+struct BlkStats {
+  uint64_t reads;
+  uint64_t writes;
+  uint64_t flushes;
+};
+
 class Blk {
  public:
   Blk() noexcept = default;
@@ -52,5 +58,6 @@ class Blk {
 };
 
 [[nodiscard]] bool IsVirtioBlock(const pci::Info& info) noexcept;
+[[nodiscard]] BlkStats GetBlkStats() noexcept;
 
 }  // namespace og::drivers::virtio

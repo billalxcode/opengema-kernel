@@ -18,4 +18,9 @@ namespace gemapi::process {
 // Waits for a child and stores its exit status.
 [[nodiscard]] Status wait(u64 pid, int& status) noexcept;
 
+[[nodiscard]] Result<u64> user_id() noexcept;
+[[nodiscard]] Status set_user_id(u64 id) noexcept;
+[[nodiscard]] Result<u64> group_id() noexcept;
+[[nodiscard]] Status set_group_id(u64 id) noexcept;
+
 }  // namespace gemapi::process

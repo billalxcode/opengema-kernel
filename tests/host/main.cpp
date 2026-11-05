@@ -373,13 +373,13 @@ const og::fs::NodeOps kFileOps{nullptr, &FileReadOp, &FileWriteOp, nullptr};
 
 void TestVfs() {
   g_root_node = og::fs::Node{"/", og::fs::NodeType::kDirectory, 0, &kRootOps,
-                             nullptr, nullptr};
+                             nullptr, nullptr, 0, 0, 0, 0};
   g_dev_node = og::fs::Node{"dev", og::fs::NodeType::kDirectory, 0, &kDevOps,
-                            nullptr, nullptr};
+                            nullptr, nullptr, 0, 0, 0, 0};
   g_console_node = og::fs::Node{"console", og::fs::NodeType::kDevice, 0,
-                                nullptr, nullptr, nullptr};
+                                nullptr, nullptr, nullptr, 0, 0, 0, 0};
   g_file_node = og::fs::Node{"file", og::fs::NodeType::kFile, 12, nullptr,
-                             nullptr, nullptr};
+                             nullptr, nullptr, 0, 0, 0, 0};
 
   CHECK(og::IsOk(og::fs::FsInit()));
   CHECK(og::IsOk(og::fs::FsMount("/", &g_root_node)));

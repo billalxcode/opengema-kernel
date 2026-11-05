@@ -21,6 +21,7 @@ enum class Status : uint32_t {
   kIoError = 10,
   kUnsupported = 11,
   kBusy = 12,
+  kDenied = 13,
 };
 
 [[nodiscard]] constexpr bool IsOk(Status status) noexcept {

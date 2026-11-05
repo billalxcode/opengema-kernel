@@ -121,6 +121,33 @@ constexpr uint64_t kResultError = static_cast<uint64_t>(-1);
     case kSysSetWallTime:
       status = DoSetWallTime(frame->x[0], result);
       break;
+    case kSysLocalTime:
+      status = DoLocalTime(result);
+      break;
+    case kSysSetTimeZone:
+      status = DoSetTimeZone(frame->x[0], result);
+      break;
+    case kSysGetTimeZone:
+      status = DoGetTimeZone(result);
+      break;
+    case kSysChmod:
+      status = DoChmod(frame->x[0], frame->x[1], result);
+      break;
+    case kSysGetUid:
+      status = DoGetUid(result);
+      break;
+    case kSysSetUid:
+      status = DoSetUid(frame->x[0], result);
+      break;
+    case kSysGetGid:
+      status = DoGetGid(result);
+      break;
+    case kSysSetGid:
+      status = DoSetGid(frame->x[0], result);
+      break;
+    case kSysChown:
+      status = DoChown(frame->x[0], frame->x[1], frame->x[2], result);
+      break;
     default:
       status = Status::kInvalidArg;
       break;

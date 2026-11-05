@@ -45,13 +45,22 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
     waktu sejak boot, `sleep` menunggu dalam milidetik, `ps`
     menampilkan daftar proses dari `/proc/processes`, `dmesg`
     membaca ring log kernel dari `/proc/dmesg`, dan `loglevel`
-    menampilkan atau mengubah filter level log. `date` mencetak waktu UTC
-    dari RTC, dan `date <unix-seconds>` menyetel RTC. `mkdir`, `rm`, dan
-    `mv` mengubah isi filesystem writable. `mount ramfs <path>` memasang
+    menampilkan atau mengubah filter level log. `date` mencetak waktu
+    lokal dari RTC, dan `date <unix-seconds>` menyetel RTC. `tz`
+    menampilkan offset zona waktu, dan `tz <menit>` mengubahnya dalam
+    rentang -840..840. `stat` menampilkan tipe, ukuran, mode, uid,
+    gid, dan mtime. `chmod <mode> <path>` mengubah permission ramfs,
+    `chown <uid> <gid> <path>` mengubah owner, `id` mencetak identity,
+    dan `setuid`/`setgid` mengubah identity proses. `mkdir`, `rm`, dan
+    `mv` mengubah isi filesystem writable.
+    `mount ramfs <path>` memasang
     ramfs baru dengan referensi global, dan `umount <path>` melepas
     referensi proses tersebut. `cat /proc/block` menampilkan nama dan
-    kapasitas device blok. Pengujian persistensi FAT32 ada di aplikasi
-    terpisah `/applications/fstest/fstest`, bukan command shell.
+    kapasitas device blok. `cat /proc/meminfo` menampilkan frame dan heap,
+    sedangkan `cat /proc/stat` menampilkan tick, thread, context switch,
+    jumlah proses, operasi VFS, dan counter block device. `cat /proc/trace`
+    menampilkan ring event block, context switch, spawn, dan exit. Pengujian persistensi FAT32 ada di aplikasi terpisah
+    `/applications/fstest/fstest`, bukan command shell.
     `halt` menghentikan shell dan init sehingga kernel menyelesaikan self
     test lalu berhenti. `shutdown` dan `reboot` memakai ACPI/PSCI untuk
     mematikan atau me-reboot mesin.
@@ -70,15 +79,15 @@ child ok
 spawn ok
 write ok
 gemabox> help
-commands: help, echo, cat, ls, clear, acpi, uptime, date, sleep, ps, dmesg, loglevel, mkdir, rm, mv, mount, umount, halt, shutdown, reboot
+commands: help, echo, cat, ls, stat, clear, acpi, uptime, date, tz, sleep, ps, id, setuid, setgid, dmesg, loglevel, mkdir, rm, mv, chmod, chown, mount, umount, halt, shutdown, reboot
 gemabox> acpi
 ACPI revision 2
 gemabox> uptime
 uptime: 12345 ms
 gemabox> sleep 50
 gemabox> ps
-pid ppid state name
-1 0 ready /system/boot/init
+pid ppid state cpu_ms name
+1 0 ready 0 /system/boot/init
 ...
 gemabox> dmesg
 dmesg:
@@ -88,9 +97,35 @@ gemabox> loglevel
 loglevel: info (2)
 gemabox> date 1700000000
 2023-11-14 22:13:20 UTC
+gemabox> tz 420
+tz: +07:00
+gemabox> date
+2023-11-15 05:13:21 UTC+07:00
+gemabox> tz 0
+tz: UTC
 gemabox> mkdir /tmp/demo
 gemabox> mv /tmp/demo /tmp/demo2
 gemabox> rm /tmp/demo2
+gemabox> stat /system/config/version
+type: file
+size: 4
+mode: 0644
+uid: 0
+gid: 0
+mtime: -
+gemabox> chmod 600 /tmp/hello
+gemabox> stat /tmp/hello
+type: file
+size: 14
+mode: 0600
+uid: 0
+gid: 0
+mtime: 2026-...
+gemabox> chown 1 1 /tmp/hello
+gemabox> setuid 1
+gemabox> setgid 1
+gemabox> id
+uid: 1 gid: 1
 gemabox> mkdir /tmp/mnt
 gemabox> mount ramfs /tmp/mnt
 mount: mounted

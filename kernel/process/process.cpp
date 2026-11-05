@@ -4,6 +4,7 @@
 #include "og/arch/spinlock.h"
 #include "og/arch/user.h"
 #include "og/core/log.h"
+#include "og/core/trace.h"
 #include "og/process/elf.h"
 #include "og/process/loader.h"
 #include "og/sched/sched.h"
@@ -402,8 +403,22 @@ struct LoadedProgram {
   }
 
   mem::Zero(slot, sizeof(*slot));
+  uint32_t parent_uid = 0;
+  uint32_t parent_gid = 0;
+  if (parent_pid != kKernelPid) {
+    for (uint32_t index = 0; index < kMaxProcesses; ++index) {
+      if (g_processes[index].used != 0U &&
+          g_processes[index].pid == parent_pid) {
+        parent_uid = g_processes[index].uid;
+        parent_gid = g_processes[index].gid;
+        break;
+      }
+    }
+  }
   slot->pid = NextPidLocked();
   slot->parent_pid = parent_pid;
+  slot->uid = parent_uid;
+  slot->gid = parent_gid;
   slot->state = ProcessState::kReady;
   slot->exit_code = 0;
   slot->used = 1;
@@ -414,6 +429,8 @@ struct LoadedProgram {
   slot->envp = user_stack.envp;
   slot->argc = user_stack.argc;
   (void)fs::FileTableInit(slot->files);
+  slot->files.uid = parent_uid;
+  slot->files.gid = parent_gid;
   const std::size_t name_length = mem::Length(path);
   const std::size_t name_copy =
     name_length >= sizeof(slot->name) ? (sizeof(slot->name) - 1U) : name_length;
@@ -433,6 +450,7 @@ struct LoadedProgram {
   slot->thread = thread.value();
   const uint32_t pid = slot->pid;
   g_lock.unlock();
+  trace::Record(trace::Tag::kSpawn, pid);
   return Result<uint32_t>::Ok(pid);
 }
 
@@ -512,6 +530,7 @@ void Exit(int32_t status) noexcept {
     process->exit_code = status;
     process->state = ProcessState::kExited;
     g_lock.unlock();
+    trace::Record(trace::Tag::kExit, process->pid);
     sched::WaitQueueWakeAll(g_waiters);
   }
   sched::ThreadExit();
@@ -534,6 +553,18 @@ Status SetCwd(Process& process, const char* path) noexcept {
     return Status::kInvalidArg;
   }
   mem::Copy(process.cwd, path, length + 1U);
+  return Status::kOk;
+}
+
+Status SetUid(Process& process, uint32_t uid) noexcept {
+  process.uid = uid;
+  process.files.uid = uid;
+  return Status::kOk;
+}
+
+Status SetGid(Process& process, uint32_t gid) noexcept {
+  process.gid = gid;
+  process.files.gid = gid;
   return Status::kOk;
 }
 
@@ -619,6 +650,8 @@ uint32_t Snapshot(ProcessInfo* out, uint32_t capacity) noexcept {
     out[count].pid = process.pid;
     out[count].parent_pid = process.parent_pid;
     out[count].state = process.state;
+    out[count].cpu_ms =
+      process.thread == nullptr ? 0U : process.thread->cpu_ticks;
     mem::Copy(out[count].name, process.name, sizeof(out[count].name));
     out[count].name[sizeof(out[count].name) - 1U] = '\0';
     ++count;

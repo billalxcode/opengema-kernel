@@ -33,6 +33,7 @@ void* g_tick_context = nullptr;
 WallClockReadFn g_wall_read = nullptr;
 WallClockWriteFn g_wall_write = nullptr;
 void* g_wall_context = nullptr;
+int32_t g_timezone_minutes = 0;
 
 constexpr uint64_t kCntpCtlEnable = 1ULL << 0U;
 constexpr uint64_t kCntpCtlMask = 1ULL << 1U;
@@ -214,6 +215,33 @@ Status SetWallTimeSeconds(uint64_t seconds) noexcept {
     return Status::kNotInit;
   }
   return g_wall_write(g_wall_context, seconds);
+}
+
+Status SetTimeZoneMinutes(int32_t minutes) noexcept {
+  constexpr int32_t kMaxOffsetMinutes = 14 * 60;
+  if (minutes < -kMaxOffsetMinutes || minutes > kMaxOffsetMinutes) {
+    return Status::kInvalidArg;
+  }
+  __atomic_store_n(&g_timezone_minutes, minutes, __ATOMIC_RELEASE);
+  return Status::kOk;
+}
+
+int32_t TimeZoneMinutes() noexcept {
+  return __atomic_load_n(&g_timezone_minutes, __ATOMIC_ACQUIRE);
+}
+
+Result<uint64_t> LocalTimeSeconds() noexcept {
+  const Result<uint64_t> wall = WallTimeSeconds();
+  if (wall.is_err()) {
+    return wall;
+  }
+  const int64_t offset =
+    static_cast<int64_t>(TimeZoneMinutes()) * 60;
+  const int64_t local = static_cast<int64_t>(wall.value()) + offset;
+  if (local < 0) {
+    return Result<uint64_t>::Err(Status::kInvalidArg);
+  }
+  return Result<uint64_t>::Ok(static_cast<uint64_t>(local));
 }
 
 }  // namespace og::time

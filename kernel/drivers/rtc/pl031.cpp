@@ -5,6 +5,7 @@ namespace og::drivers::rtc {
 namespace {
 
 constexpr uint64_t kDataRegister = 0x00;
+constexpr uint64_t kLoadRegister = 0x08;
 constexpr uint64_t kControlRegister = 0x0C;
 constexpr uint64_t kMinimumSpan = 0x1000;
 constexpr uint32_t kControlEnable = 1U;
@@ -46,7 +47,7 @@ Status Pl031::write_unix_seconds(uint64_t seconds) noexcept {
   if (seconds > 0xFFFFFFFFULL) {
     return Status::kInvalidArg;
   }
-  return registers_.Write32(kDataRegister, static_cast<uint32_t>(seconds));
+  return registers_.Write32(kLoadRegister, static_cast<uint32_t>(seconds));
 }
 
 }  // namespace og::drivers::rtc

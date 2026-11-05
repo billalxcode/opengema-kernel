@@ -142,7 +142,11 @@ bisa dijalankan tanpa menyalin kode syscall.
 - [~] FS-15 Block layer: write path, adapter, flush, dan beberapa
       virtio-blk selesai. `/proc/block` menampilkan nama dan kapasitas tiap
       device. IRQ/MSI-X dan partisi tulis belum.
-- [ ] FS-16 Metadata: permission, uid/gid, timestamp, ukuran.
+- [x] FS-16 Metadata: mode, uid/gid, mtime, dan ukuran dilaporkan lewat
+      `stat`. Open read/write memeriksa permission, `chmod`/`chown` tersedia
+      untuk ramfs, chmod FAT32 memetakan read-only attribute, dan proses
+      punya identity uid/gid. Catatan: FAT32 tidak menyimpan ownership dan
+      filesystem read-only memakai timestamp nol.
 - [x] FS-17 Uji persistensi: buat berkas, tulis, reboot, baca kembali.
 - [x] TEST-01 Command diagnostik `persist` sudah dipindah ke aplikasi
       `/applications/fstest/fstest`. Shell tidak lagi punya command test,
@@ -166,9 +170,9 @@ reboot.
 - [ ] DRV-13d Mouse sebagai device input kedua dan hotplug.
 - [x] DRV-14 TTY input dari keyboard, bukan hanya UART.
 - [x] LOG-01 Log kernel hanya ke serial; display untuk output user dan TTY.
-- [~] TIME-06 RTC settime dan waktu dinding UTC selesai lewat syscall
-      `wall_time`/`set_wall_time` serta command `date`. Zona waktu dan
-      konversi lokal belum.
+- [x] TIME-06 RTC settime, waktu dinding, dan offset zona waktu runtime
+      selesai lewat `wall_time`/`set_wall_time`/`local_time` serta command
+      `date` dan `tz`. Konfigurasi zona waktu persisten belum.
 - [x] OPS-01 shutdown/reboot lewat ACPI FADT dan PSCI SYSTEM_OFF/SYSTEM_RESET.
 
 **Selesai bila:** kernel menjawab ping/UDP dari host dan menerima input
@@ -197,8 +201,9 @@ demand paging lulus uji.
 - [ ] SCH-13 Condition variable dan read/write lock.
 - [ ] SCH-14 Futex untuk user space.
 - [ ] SCH-15 TLS dan dukungan thread-local storage.
-- [ ] SCH-16 Accounting CPU per proses dan statistik di procfs.
-- [ ] SCH-17 Uji stres 4 core, latency preemption, dan lost wakeup.
+- [x] SCH-16 Accounting CPU per proses: tick scheduler menambah `cpu_ticks`
+      thread dan `/proc/processes` menampilkan `cpu_ms`.
+- [~] SCH-17 Uji stres 4 core: thread worker dibuat satu per CPU dan QEMU\n      menerima `SMP=4`. Latency preemption dan lost wakeup belum diuji\n      terpisah.
 
 **Selesai bila:** beban merata di 4 core, thread bisa join, dan primitif
 sinkronisasi lulus uji stres.
@@ -226,7 +231,8 @@ bekerja dari shell.
 ## 11. Fase 22 - Observability, keamanan, dan CI
 
 - [x] OBS-01 Ring buffer dmesg dan level log runtime.
-- [ ] OBS-02 Tracepoint, counter, dan statistik scheduler/memori/FS.
+- [x] OBS-02 Counter scheduler, memori, VFS, dan block device serta trace
+      ring `/proc/trace` untuk event block, context switch, spawn, dan exit.
 - [ ] OBS-03 Watchdog, panic dump lengkap, dan magic SysRq minimal.
 - [ ] SEC-01 KASLR dan relokasi image.
 - [ ] SEC-02 PAN dan validasi akses user yang seragam.

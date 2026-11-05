@@ -17,4 +17,9 @@ namespace gemapi::time {
 [[nodiscard]] Result<u64> wall_seconds() noexcept;
 [[nodiscard]] Status set_wall_seconds(u64 seconds) noexcept;
 
+// Wall clock plus the runtime timezone offset.
+[[nodiscard]] Result<u64> local_seconds() noexcept;
+[[nodiscard]] Status set_timezone_minutes(i64 minutes) noexcept;
+[[nodiscard]] Result<i64> timezone_minutes() noexcept;
+
 }  // namespace gemapi::time

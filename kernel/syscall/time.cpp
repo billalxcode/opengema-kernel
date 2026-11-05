@@ -35,6 +35,31 @@ Status DoSetWallTime(uint64_t seconds, uint64_t& result) noexcept {
   return Status::kOk;
 }
 
+Status DoLocalTime(uint64_t& result) noexcept {
+  const Result<uint64_t> seconds = time::LocalTimeSeconds();
+  if (seconds.is_err()) {
+    return seconds.status();
+  }
+  result = seconds.value();
+  return Status::kOk;
+}
+
+Status DoSetTimeZone(uint64_t minutes, uint64_t& result) noexcept {
+  const Status status =
+    time::SetTimeZoneMinutes(static_cast<int32_t>(minutes));
+  if (IsErr(status)) {
+    return status;
+  }
+  result = 0;
+  return Status::kOk;
+}
+
+Status DoGetTimeZone(uint64_t& result) noexcept {
+  constexpr uint64_t kOffsetBias = 840U;
+  result = static_cast<uint64_t>(time::TimeZoneMinutes()) + kOffsetBias;
+  return Status::kOk;
+}
+
 Status DoSleep(uint64_t milliseconds, uint64_t& result) noexcept {
   if (milliseconds > kMaxSleepMs) {
     return Status::kInvalidArg;

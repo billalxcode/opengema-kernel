@@ -15,4 +15,9 @@ namespace kgema {
 [[nodiscard]] bool wall_seconds(u64& seconds) noexcept;
 [[nodiscard]] bool set_wall_seconds(u64 seconds) noexcept;
 
+// Wall clock plus the runtime timezone offset.
+[[nodiscard]] bool local_seconds(u64& seconds) noexcept;
+[[nodiscard]] bool set_timezone_minutes(i64 minutes) noexcept;
+[[nodiscard]] bool timezone_minutes(i64& minutes) noexcept;
+
 }  // namespace kgema

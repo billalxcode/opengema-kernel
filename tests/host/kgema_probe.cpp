@@ -60,11 +60,24 @@ i64 invoke3(i64 number, i64 arg0, i64 arg1, i64 arg2) noexcept {
                   static_cast<std::size_t>(arg2));
       g_written_size += static_cast<std::size_t>(arg2);
       return arg2;
+    case kGetUid:
+      return 5;
+    case kSetUid:
+      return arg0 == 5 ? 0 : -1;
+    case kGetGid:
+      return 6;
+    case kSetGid:
+      return arg0 == 6 ? 0 : -1;
+    case kChmod:
+      return Same(reinterpret_cast<const char*>(arg0), "file") &&
+                 arg1 == 0600
+               ? 0
+               : -1;
     case kStat:
       if (arg1 == 0) {
         return -1;
       }
-      *reinterpret_cast<Stat*>(arg1) = Stat{1U, 123U};
+      *reinterpret_cast<Stat*>(arg1) = Stat{1U, 123U, 0755U, 0U, 0U, 42U};
       return 0;
     case kList:
       if (arg2 == 0) {
@@ -145,11 +158,22 @@ int main() {
   }
 
   kgema::Stat stat{};
-  if (!kgema::stat(path, stat) || stat.type != 1U || stat.size != 123U) {
+  if (!kgema::stat(path, stat) || stat.type != 1U || stat.size != 123U ||
+      stat.mode != 0755U || stat.mtime != 42U) {
     return Fail("stat failed");
   }
   if (kgema::stat(nullptr, stat)) {
     return Fail("stat null accepted");
+  }
+  if (!kgema::chmod("file", 0600U) || kgema::chmod("bad", 0600U)) {
+    return Fail("chmod");
+  }
+  kgema::u64 uid = 0;
+  kgema::u64 gid = 0;
+  if (!kgema::uid(uid) || uid != 5U || !kgema::setuid(5U) ||
+      kgema::setuid(9U) || !kgema::gid(gid) || gid != 6U ||
+      !kgema::setgid(6U) || kgema::setgid(9U)) {
+    return Fail("identity");
   }
 
   if (!kgema::chdir(path) || g_last_number != kgema::syscall::kChdir) {

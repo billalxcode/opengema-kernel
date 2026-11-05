@@ -13,6 +13,7 @@ constexpr uint32_t kMaxName = 64;
 constexpr uint32_t kClusterEnd = 0xFFFFFFFFU;
 constexpr uint32_t kMaxClusterBytes = 32768;
 constexpr uint32_t kReadChunkBytes = 4096;
+constexpr uint8_t kAttributeReadOnly = 0x01;
 constexpr uint8_t kAttributeLongName = 0x0F;
 constexpr uint8_t kAttributeVolumeLabel = 0x08;
 constexpr uint8_t kAttributeDirectory = 0x10;
@@ -80,6 +81,7 @@ Status DirCreate(Node* directory, const char* name, NodeType type,
 Status DirRemove(Node* directory, Node* node) noexcept;
 Status DirRename(Node* directory, Node* node, Node* new_directory,
                  const char* new_name) noexcept;
+Status FatChmod(Node* node, uint32_t mode) noexcept;
 [[nodiscard]] Result<bool> ParseEntry(const uint8_t* raw, char* long_name,
                                       bool& long_name_active,
                                       ParsedEntry& out) noexcept;
@@ -87,9 +89,10 @@ Status DirRename(Node* directory, Node* node, Node* new_directory,
                                               const char* name) noexcept;
 
 const NodeOps kFileOps{nullptr, &FileRead, &FileWrite, nullptr, nullptr,
-                       nullptr, nullptr, &FileTruncate};
+                       nullptr, nullptr, &FileTruncate, nullptr, &FatChmod};
 const NodeOps kDirectoryOps{&Lookup, nullptr, nullptr, &IterateDirectory,
-                            &DirCreate, &DirRemove, &DirRename};
+                            &DirCreate, &DirRemove, &DirRename, nullptr,
+                            nullptr, &FatChmod};
 
 [[nodiscard]] char ToUpper(char value) noexcept {
   if (value >= 'a' && value <= 'z') {
@@ -110,6 +113,88 @@ const NodeOps kDirectoryOps{&Lookup, nullptr, nullptr, &IterateDirectory,
     ++index;
   }
   return lhs[index] == '\0' && rhs[index] == '\0';
+}
+
+[[nodiscard]] uint64_t FatTimestampToUnix(uint16_t date,
+                                            uint16_t time) noexcept {
+  if (date == 0U) {
+    return 0;
+  }
+  const uint32_t year = 1980U + ((date >> 9U) & 0x7FU);
+  const uint32_t month = (date >> 5U) & 0x0FU;
+  const uint32_t day = date & 0x1FU;
+  const uint32_t hour = (time >> 11U) & 0x1FU;
+  const uint32_t minute = (time >> 5U) & 0x3FU;
+  const uint32_t second = (time & 0x1FU) * 2U;
+  if (month < 1U || month > 12U || day < 1U || day > 31U ||
+      hour > 23U || minute > 59U || second > 59U) {
+    return 0;
+  }
+  int64_t adjusted_year = static_cast<int64_t>(year);
+  const int64_t adjusted_month = static_cast<int64_t>(month);
+  adjusted_year -= adjusted_month <= 2 ? 1 : 0;
+  const int64_t era =
+    (adjusted_year >= 0 ? adjusted_year : adjusted_year - 399) / 400;
+  const uint32_t year_of_era =
+    static_cast<uint32_t>(adjusted_year - era * 400);
+  const int64_t shifted_month =
+    adjusted_month + (adjusted_month > 2 ? -3 : 9);
+  const uint32_t day_of_year =
+    static_cast<uint32_t>((153 * shifted_month + 2) / 5 +
+                           static_cast<int64_t>(day) - 1);
+  const uint32_t day_of_era =
+    year_of_era * 365U + year_of_era / 4U - year_of_era / 100U +
+    day_of_year;
+  const int64_t days =
+    era * 146097 + static_cast<int64_t>(day_of_era) - 719468;
+  if (days < 0) {
+    return 0;
+  }
+  return static_cast<uint64_t>(days) * 86400U + hour * 3600U +
+         minute * 60U + second;
+}
+
+void SetEntryTimestamp(uint8_t* entry, uint64_t seconds) noexcept {
+  if (entry == nullptr || seconds == 0U) {
+    return;
+  }
+  const uint64_t days = seconds / 86400U;
+  const uint64_t clock = seconds % 86400U;
+  const int64_t shifted = static_cast<int64_t>(days) + 719468;
+  const int64_t era =
+    (shifted >= 0 ? shifted : shifted - 146096) / 146097;
+  const uint32_t day_of_era =
+    static_cast<uint32_t>(shifted - era * 146097);
+  const uint32_t year_of_era =
+    (day_of_era - day_of_era / 1460U + day_of_era / 36524U -
+     day_of_era / 146096U) /
+    365U;
+  int64_t year = static_cast<int64_t>(year_of_era) + era * 400;
+  const uint32_t day_of_year =
+    day_of_era - (365U * year_of_era + year_of_era / 4U -
+                  year_of_era / 100U);
+  const uint32_t month_part = (5U * day_of_year + 2U) / 153U;
+  const uint32_t day =
+    day_of_year - (153U * month_part + 2U) / 5U + 1U;
+  const uint32_t month =
+    month_part < 10U ? month_part + 3U : month_part - 9U;
+  if (month <= 2U) {
+    ++year;
+  }
+  if (year < 1980 || year > 2107) {
+    return;
+  }
+  const uint32_t hour = static_cast<uint32_t>(clock / 3600U);
+  const uint32_t minute = static_cast<uint32_t>((clock % 3600U) / 60U);
+  const uint32_t second = static_cast<uint32_t>(clock % 60U);
+  const uint16_t fat_date = static_cast<uint16_t>(
+    ((year - 1980) << 9U) | (month << 5U) | day);
+  const uint16_t fat_time = static_cast<uint16_t>(
+    (hour << 11U) | (minute << 5U) | (second / 2U));
+  entry[22] = static_cast<uint8_t>(fat_time & 0xFFU);
+  entry[23] = static_cast<uint8_t>((fat_time >> 8U) & 0xFFU);
+  entry[24] = static_cast<uint8_t>(fat_date & 0xFFU);
+  entry[25] = static_cast<uint8_t>((fat_date >> 8U) & 0xFFU);
 }
 
 [[nodiscard]] bool ValidCluster(uint32_t cluster) noexcept {
@@ -406,6 +491,7 @@ Status WriteSectors(uint64_t sector, const void* buffer, uint32_t count) noexcep
       entry[29] = static_cast<uint8_t>((size >> 8U) & 0xFFU);
       entry[30] = static_cast<uint8_t>((size >> 16U) & 0xFFU);
       entry[31] = static_cast<uint8_t>((size >> 24U) & 0xFFU);
+      SetEntryTimestamp(entry, file->node.mtime);
       return WriteCluster(cluster, g_volume.cluster_buffer);
     }
     const Result<uint32_t> next = NextCluster(cluster);
@@ -697,6 +783,8 @@ Status DirCreate(Node* directory, const char* name, NodeType type,
     entry[11] = 0x20U;
   }
   SetEntryCluster(entry, child_cluster);
+  const uint64_t now = NowSeconds();
+  SetEntryTimestamp(entry, now);
   const uint32_t required = long_count + 1U;
   uint32_t cluster = parent->first_cluster;
   uint32_t guard = 0;
@@ -746,11 +834,15 @@ Status DirCreate(Node* directory, const char* name, NodeType type,
       mem::Copy(node->name, name, length + 1U);
       node->node.name = node->name;
       node->node.type = type;
+      node->node.mode =
+        type == NodeType::kDirectory ? kModeDirectory : kModeFile;
+      node->node.mtime = now;
       node->node.size = 0;
       node->node.ops = type == NodeType::kDirectory ? &kDirectoryOps
                                                     : &kFileOps;
       node->first_cluster = child_cluster;
       node->dir_cluster = parent->first_cluster;
+      parent->node.mtime = now;
       *out = &node->node;
       return Status::kOk;
     }
@@ -875,6 +967,7 @@ Status DirRemove(Node* directory, Node* node) noexcept {
   if (IsErr(status)) {
     return status;
   }
+  parent->node.mtime = NowSeconds();
   return FlushVolume();
 }
 
@@ -934,6 +1027,8 @@ Status DirRename(Node* directory, Node* node, Node* new_directory,
     return Status::kInvalidArg;
   }
   mem::Copy(target->name, new_name, length + 1U);
+  target->node.mtime = NowSeconds();
+  parent->node.mtime = target->node.mtime;
   return Status::kOk;
 }
 
@@ -1047,6 +1142,13 @@ void AccumulateLongName(const uint8_t* entry, char* text, bool& active) noexcept
   out.entry.type = ((attribute & kAttributeDirectory) != 0U)
                      ? NodeType::kDirectory
                      : NodeType::kFile;
+  const uint16_t write_time = static_cast<uint16_t>(
+    static_cast<uint16_t>(raw[22]) |
+    (static_cast<uint16_t>(raw[23]) << 8U));
+  const uint16_t write_date = static_cast<uint16_t>(
+    static_cast<uint16_t>(raw[24]) |
+    (static_cast<uint16_t>(raw[25]) << 8U));
+  out.entry.mtime = FatTimestampToUnix(write_date, write_time);
   return Result<bool>::Ok(true);
 }
 
@@ -1220,6 +1322,10 @@ Status Lookup(Node* directory, const char* name, Node** out) noexcept {
   mem::Copy(node->name, context.entry.name, length + 1U);
   node->node.name = node->name;
   node->node.type = context.entry.type;
+  node->node.mode = context.entry.type == NodeType::kDirectory
+                      ? kModeDirectory
+                      : kModeFile;
+  node->node.mtime = context.entry.mtime;
   node->node.size = context.entry.size;
   node->node.ops = (context.entry.type == NodeType::kDirectory) ? &kDirectoryOps : &kFileOps;
   node->first_cluster = context.first_cluster;
@@ -1370,6 +1476,7 @@ Status FileWrite(Node* node, uint64_t offset,
   if (end > node->size) {
     node->size = end;
   }
+  node->mtime = NowSeconds();
   const Status update = UpdateDirectoryEntry(fat_node);
   if (IsErr(update)) {
     return update;
@@ -1389,11 +1496,52 @@ Status FileTruncate(Node* node, uint64_t size) noexcept {
   if (IsErr(status)) {
     return status;
   }
+  node->mtime = NowSeconds();
   status = UpdateDirectoryEntry(fat_node);
   if (IsErr(status)) {
     return status;
   }
   return FlushVolume();
+}
+
+Status FatChmod(Node* node, uint32_t mode) noexcept {
+  if (node == nullptr || mode > 0777U) {
+    return Status::kInvalidArg;
+  }
+  auto* file = reinterpret_cast<FatNode*>(node);
+  if (node->type == NodeType::kFile) {
+    if (g_volume.device.write == nullptr) {
+      return Status::kUnsupported;
+    }
+    FatNode parent{};
+    parent.first_cluster = file->dir_cluster;
+    const Result<EntryLocation> location = FindEntry(&parent, file->name);
+    if (location.is_err()) {
+      return location.status();
+    }
+    Status status =
+      ReadCluster(location.value().cluster, g_volume.cluster_buffer);
+    if (IsErr(status)) {
+      return status;
+    }
+    uint8_t& attribute =
+      g_volume.cluster_buffer[location.value().offset + 11U];
+    if ((mode & 0200U) == 0U) {
+      attribute |= kAttributeReadOnly;
+    } else {
+      attribute &= static_cast<uint8_t>(~kAttributeReadOnly);
+    }
+    status = WriteCluster(location.value().cluster, g_volume.cluster_buffer);
+    if (IsErr(status)) {
+      return status;
+    }
+    status = FlushVolume();
+    if (IsErr(status)) {
+      return status;
+    }
+  }
+  node->mode = mode & 0777U;
+  return Status::kOk;
 }
 
 Status IterateDirectory(Node* directory, uint32_t index, DirEntry& entry,
@@ -1524,6 +1672,7 @@ Status Mount(const BlockDevice& device, Node** root_out) noexcept {
   }
   root->node.name = "/";
   root->node.type = NodeType::kDirectory;
+  root->node.mode = kModeDirectory;
   root->node.size = 0;
   root->node.ops = &kDirectoryOps;
   root->first_cluster = boot.root_cluster;

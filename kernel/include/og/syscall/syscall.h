@@ -36,6 +36,15 @@ constexpr uint64_t kSysMount = 26;
 constexpr uint64_t kSysUmount = 27;
 constexpr uint64_t kSysWallTime = 28;
 constexpr uint64_t kSysSetWallTime = 29;
+constexpr uint64_t kSysLocalTime = 30;
+constexpr uint64_t kSysSetTimeZone = 31;
+constexpr uint64_t kSysGetTimeZone = 32;
+constexpr uint64_t kSysChmod = 33;
+constexpr uint64_t kSysGetUid = 34;
+constexpr uint64_t kSysSetUid = 35;
+constexpr uint64_t kSysGetGid = 36;
+constexpr uint64_t kSysSetGid = 37;
+constexpr uint64_t kSysChown = 38;
 
 void SyscallInit() noexcept;
 

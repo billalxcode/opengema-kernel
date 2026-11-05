@@ -94,7 +94,9 @@ Status DoStat(uint64_t user_path, uint64_t user_stat,
   if (stat.is_err()) {
     return stat.status();
   }
-  UserStat output{static_cast<uint64_t>(stat.value().type), stat.value().size};
+  const fs::Stat& value = stat.value();
+  UserStat output{static_cast<uint64_t>(value.type), value.size,
+                  value.mode, value.uid, value.gid, value.mtime};
   status = mem::VmmCopyOut(process->space, user_stat, &output, sizeof(output));
   if (IsErr(status)) {
     return status;
@@ -208,6 +210,57 @@ Status DoRename(uint64_t user_old_path, uint64_t user_new_path,
     return status;
   }
   status = fs::FsRename(old_path, new_path);
+  if (IsErr(status)) {
+    return status;
+  }
+  result = 0;
+  return Status::kOk;
+}
+
+Status DoChmod(uint64_t user_path, uint64_t mode, uint64_t& result) noexcept {
+  process::Process* process = CurrentProcess();
+  if (process == nullptr) {
+    return Status::kNotInit;
+  }
+  char path[fs::kMaxPath];
+  const Status copy = CopyUserPath(*process, user_path, path);
+  if (IsErr(copy)) {
+    return copy;
+  }
+  const Result<fs::Stat> info = fs::FsStat(path);
+  if (info.is_err()) {
+    return info.status();
+  }
+  if (process->uid != 0U && process->uid != info.value().uid) {
+    return Status::kDenied;
+  }
+  const Status status = fs::FsChmod(path, static_cast<uint32_t>(mode));
+  if (IsErr(status)) {
+    return status;
+  }
+  result = 0;
+  return Status::kOk;
+}
+
+Status DoChown(uint64_t user_path, uint64_t uid, uint64_t gid,
+               uint64_t& result) noexcept {
+  process::Process* process = CurrentProcess();
+  if (process == nullptr) {
+    return Status::kNotInit;
+  }
+  if (process->uid != 0U) {
+    return Status::kDenied;
+  }
+  if (uid > 0xFFFFFFFFULL || gid > 0xFFFFFFFFULL) {
+    return Status::kInvalidArg;
+  }
+  char path[fs::kMaxPath];
+  const Status copy = CopyUserPath(*process, user_path, path);
+  if (IsErr(copy)) {
+    return copy;
+  }
+  const Status status =
+    fs::FsChown(path, static_cast<uint32_t>(uid), static_cast<uint32_t>(gid));
   if (IsErr(status)) {
     return status;
   }

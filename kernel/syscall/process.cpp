@@ -16,6 +16,64 @@ Status DoGetPid(uint64_t& result) noexcept {
   return Status::kOk;
 }
 
+Status DoGetUid(uint64_t& result) noexcept {
+  process::Process* process = CurrentProcess();
+  if (process == nullptr) {
+    return Status::kNotInit;
+  }
+  result = process->uid;
+  return Status::kOk;
+}
+
+Status DoSetUid(uint64_t uid, uint64_t& result) noexcept {
+  process::Process* process = CurrentProcess();
+  if (process == nullptr) {
+    return Status::kNotInit;
+  }
+  if (uid > 0xFFFFFFFFULL) {
+    return Status::kInvalidArg;
+  }
+  const uint32_t value = static_cast<uint32_t>(uid);
+  if (process->uid != 0U && value != process->uid) {
+    return Status::kDenied;
+  }
+  const Status status = process::SetUid(*process, value);
+  if (IsErr(status)) {
+    return status;
+  }
+  result = 0;
+  return Status::kOk;
+}
+
+Status DoGetGid(uint64_t& result) noexcept {
+  process::Process* process = CurrentProcess();
+  if (process == nullptr) {
+    return Status::kNotInit;
+  }
+  result = process->gid;
+  return Status::kOk;
+}
+
+Status DoSetGid(uint64_t gid, uint64_t& result) noexcept {
+  process::Process* process = CurrentProcess();
+  if (process == nullptr) {
+    return Status::kNotInit;
+  }
+  if (gid > 0xFFFFFFFFULL) {
+    return Status::kInvalidArg;
+  }
+  const uint32_t value = static_cast<uint32_t>(gid);
+  if (process->uid != 0U && value != process->gid) {
+    return Status::kDenied;
+  }
+  const Status status = process::SetGid(*process, value);
+  if (IsErr(status)) {
+    return status;
+  }
+  result = 0;
+  return Status::kOk;
+}
+
 Status DoWait(uint64_t pid, uint64_t user_status, uint64_t& result) noexcept {
   process::Process* process = CurrentProcess();
   if (process == nullptr) {

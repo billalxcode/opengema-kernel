@@ -30,6 +30,13 @@ case "$ACPI" in
     ;;
 esac
 
+SMP="${SMP:-2}"
+if [[ ! "$SMP" =~ ^[1-4]$ ]]; then
+  echo "qemu test: SMP must be 1, 2, 3, or 4"
+  exit 1
+fi
+WORKER_MASK=$(( (1 << SMP) - 1 ))
+
 if [ ! -f "$CODE" ] || [ ! -f "$VARS" ]; then
   echo "missing firmware, run ./scripts/get-firmware.sh"
   exit 1
@@ -61,7 +68,7 @@ cp "$VARS" "$VARS_TMP"
 qemu-system-aarch64 \
   -M virt,gic-version=3,acpi=$ACPI \
   -cpu cortex-a72 \
-  -smp 2 \
+  -smp "$SMP" \
   -m 512M \
   -nic none \
   -drive if=pflash,format=raw,file="$CODE",readonly=on \
@@ -135,22 +142,37 @@ check "virtio-blk: devices: 2"
 check "virtio-gpu: scanout ok"
 check "virtio-input: ready"
 check "hardening: wx attributes ok"
-check "smp: cpus online: 2"
+check "smp: cpus online: $SMP"
 check "smp: ipi count: 1"
-check "smp: worker cpus: 3"
+check "smp: worker cpus: $WORKER_MASK"
 check "mem: address space switch ok"
 check "sched: round robin ok"
 check "user: spawn pid"
 check "gemabox> "
-check "commands: help, echo, cat, ls, clear, acpi, uptime, date, sleep, ps, dmesg, loglevel, mkdir, rm, mv, mount, umount, halt, shutdown, reboot"
+check "commands: help, echo, cat, ls, stat, clear, acpi, uptime, date, tz, sleep, ps, id, setuid, setgid, dmesg, loglevel, mkdir, rm, mv, chmod, chown, mount, umount, halt, shutdown, reboot"
 check "uptime: "
 check "pid ppid"
+check "cpu_ms"
+check "frames_free:"
+check "context_switches:"
+check "vfs_ops:"
+check "block_reads:"
+check "block_read "
 check "/system/boot/init"
 check "dmesg:"
 check "loglevel: info (2)"
 check "loglevel: debug (3)"
 check "2023-11-14 22:13:"
+check "2023-11-15 05:13:"
+check "UTC+07:00"
 check "e/"
+check "mode: 0644"
+check "mode: 0600"
+check "uid: 1"
+check "gid: 1"
+check "chmod: failed"
+check "setuid: failed"
+check "setgid: failed"
 check_absent "mkdir: failed"
 check_absent "mv: failed"
 check_absent "rm: failed"

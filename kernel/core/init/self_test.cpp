@@ -77,17 +77,7 @@ void WorkerA(void* /*argument*/) noexcept {
   for (uint32_t index = 0; index < 3U; ++index) {
     (void)__atomic_or_fetch(&g_worker_cpu_mask,
                             1ULL << smp::CurrentIndex(), __ATOMIC_RELAXED);
-    (void)PrintLn("sched: worker a");
-    (void)sched::ThreadSleep(3);
-  }
-  (void)__atomic_add_fetch(&g_workers_done, 1U, __ATOMIC_RELAXED);
-}
-
-void WorkerB(void* /*argument*/) noexcept {
-  for (uint32_t index = 0; index < 3U; ++index) {
-    (void)__atomic_or_fetch(&g_worker_cpu_mask,
-                            1ULL << smp::CurrentIndex(), __ATOMIC_RELAXED);
-    (void)PrintLn("sched: worker b");
+    (void)PrintLn("sched: worker");
     (void)sched::ThreadSleep(3);
   }
   (void)__atomic_add_fetch(&g_workers_done, 1U, __ATOMIC_RELAXED);
@@ -147,15 +137,18 @@ void RunTimerSelfTest() noexcept {
 }
 
 void RunSchedulerSelfTest() noexcept {
-  const Result<sched::Thread*> worker_a =
-    sched::ThreadCreate("worker-a", &WorkerA, nullptr);
-  if (worker_a.is_err()) {
-    Panic("sched: create worker a failed");
+  const uint32_t online = smp::OnlineCount();
+  if (online == 0U || online > 8U) {
+    Panic("sched: invalid cpu count");
   }
-  const Result<sched::Thread*> worker_b =
-    sched::ThreadCreate("worker-b", &WorkerB, nullptr);
-  if (worker_b.is_err()) {
-    Panic("sched: create worker b failed");
+  sched::Thread* workers[8]{};
+  for (uint32_t cpu = 0; cpu < online; ++cpu) {
+    const Result<sched::Thread*> worker =
+      sched::ThreadCreateOn("worker", &WorkerA, nullptr, cpu);
+    if (worker.is_err()) {
+      Panic("sched: create worker failed");
+    }
+    workers[cpu] = worker.value();
   }
   LogDec(LogLevel::kInfo, "sched: threads", sched::ThreadCount());
 
@@ -164,19 +157,19 @@ void RunSchedulerSelfTest() noexcept {
   arch::aarch64::EnableIrq();
 
   uint32_t waits = 0;
-  while (__atomic_load_n(&g_workers_done, __ATOMIC_ACQUIRE) < 2U && waits < 2000U) {
+  while (__atomic_load_n(&g_workers_done, __ATOMIC_ACQUIRE) < online &&
+         waits < 2000U) {
     (void)sched::ThreadSleep(1);
     ++waits;
   }
   LogDec(LogLevel::kInfo, "sched: workers done",
          __atomic_load_n(&g_workers_done, __ATOMIC_ACQUIRE));
-  if (__atomic_load_n(&g_workers_done, __ATOMIC_ACQUIRE) < 2U) {
+  if (__atomic_load_n(&g_workers_done, __ATOMIC_ACQUIRE) < online) {
     Panic("sched: workers did not finish");
   }
   const uint64_t worker_cpus =
     __atomic_load_n(&g_worker_cpu_mask, __ATOMIC_ACQUIRE);
   LogDec(LogLevel::kInfo, "smp: worker cpus", worker_cpus);
-  const uint32_t online = smp::OnlineCount();
   if (online < 64U) {
     const uint64_t expected = (1ULL << online) - 1ULL;
     if ((worker_cpus & expected) != expected) {
@@ -253,8 +246,10 @@ void RunSchedulerSelfTest() noexcept {
   }
   Log(LogLevel::kInfo, "time: timeout ok\n");
 
-  if (!ReclaimThread(worker_a.value()) || !ReclaimThread(worker_b.value())) {
-    Panic("sched: worker reclaim failed");
+  for (uint32_t cpu = 0; cpu < online; ++cpu) {
+    if (!ReclaimThread(workers[cpu])) {
+      Panic("sched: worker reclaim failed");
+    }
   }
 }
 

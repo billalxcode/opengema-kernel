@@ -36,6 +36,15 @@ constexpr i64 kMount = 26;
 constexpr i64 kUmount = 27;
 constexpr i64 kWallTime = 28;
 constexpr i64 kSetWallTime = 29;
+constexpr i64 kLocalTime = 30;
+constexpr i64 kSetTimeZone = 31;
+constexpr i64 kGetTimeZone = 32;
+constexpr i64 kChmod = 33;
+constexpr i64 kGetUid = 34;
+constexpr i64 kSetUid = 35;
+constexpr i64 kGetGid = 36;
+constexpr i64 kSetGid = 37;
+constexpr i64 kChown = 38;
 
 // Number in x8, arguments in x0..x2, result in x0.
 [[nodiscard]] i64 invoke3(i64 number, i64 arg0, i64 arg1, i64 arg2) noexcept;

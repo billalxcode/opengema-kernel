@@ -83,6 +83,23 @@ bool rename(const char* old_path, const char* new_path) noexcept {
                           reinterpret_cast<i64>(new_path), 0) == 0;
 }
 
+bool chmod(const char* path, u64 mode) noexcept {
+  if (path == nullptr) {
+    return false;
+  }
+  return syscall::invoke3(syscall::kChmod, reinterpret_cast<i64>(path),
+                          static_cast<i64>(mode), 0) == 0;
+}
+
+bool chown(const char* path, u64 uid, u64 gid) noexcept {
+  if (path == nullptr) {
+    return false;
+  }
+  return syscall::invoke3(syscall::kChown, reinterpret_cast<i64>(path),
+                          static_cast<i64>(uid),
+                          static_cast<i64>(gid)) == 0;
+}
+
 bool mount(const char* type, const char* target) noexcept {
   if (type == nullptr || target == nullptr) {
     return false;

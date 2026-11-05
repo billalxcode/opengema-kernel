@@ -71,12 +71,20 @@ def main(argv):
     fs_seen = False
     fs_batch = 0
     fs_output = bytearray()
+    identity_sent = False
+    identity_seen = False
+    identity_batch = 0
+    identity_output = bytearray()
+    identity_batches = [
+        b"chown 1 1 /tmp/hello\nstat /tmp/hello\nsetuid 1\nsetgid 1\nid\n",
+        b"chmod 600 /tmp/writer\nsetuid 0\nsetgid 0\necho ID-DONE\n",
+    ]
     fs_batches = [
-        b"mkdir /tmp/d\nmv /tmp/d /tmp/e\nls /tmp\nrm /tmp/e\n",
-        b"mkdir \"/tmp/quoted dir\"\nrm \"/tmp/quoted dir\"\n",
+        b"mkdir /tmp/d\nmv /tmp/d /tmp/e\nls /tmp\nrm /tmp/e\nstat /system/config/version\n",
+        b"mkdir \"/tmp/quoted dir\"\nrm \"/tmp/quoted dir\"\nchmod 600 /tmp/hello\nstat /tmp/hello\n",
         b"mkdir /tmp/mnt\nmount ramfs /tmp/mnt\nmount ramfs /tmp/mnt\n",
-        b"umount /tmp/mnt\numount /tmp/mnt\nrm /tmp/mnt\n",
-        b"cat /proc/block\necho MOUNT-DONE\n",
+        b"umount /tmp/mnt\numount /tmp/mnt\nrm /tmp/mnt\ncat /proc/meminfo\ncat /proc/stat\n",
+        b"cat /proc/block\nls /volumes/boot\ncat /proc/trace\necho MOUNT-DONE\n",
     ]
     clear_sent = False
     clear_ready = False
@@ -102,6 +110,8 @@ def main(argv):
                 buffer.extend(chunk)
                 if fs_sent:
                     fs_output.extend(chunk)
+                if identity_sent:
+                    identity_output.extend(chunk)
                 last_data = time.time()
 
             if not help_sent and b"gemabox> " in buffer:
@@ -110,7 +120,7 @@ def main(argv):
                 buffer.clear()
 
             if (help_sent and not help_seen and
-                    b"commands: help, echo, cat, ls, clear, acpi, uptime, date, sleep, ps, dmesg, loglevel, mkdir, rm, mv, mount, umount, halt, shutdown, reboot" in buffer):
+                    b"commands: help, echo, cat, ls, stat, clear, acpi, uptime, date, tz, sleep, ps, id, setuid, setgid, dmesg, loglevel, mkdir, rm, mv, chmod, chown, mount, umount, halt, shutdown, reboot" in buffer):
                 help_seen = True
 
             if (help_seen and not acpi_sent and
@@ -168,12 +178,14 @@ def main(argv):
             if (level_seen and not date_sent and
                     time.time() - last_data > 0.5 and
                     b"gemabox> " in buffer):
-                send_line(client, b"date 1700000000\ndate\n")
+                send_line(client, b"date 1700000000\ndate\ntz 420\ndate\ntz 0\ndate\n")
                 date_sent = True
                 buffer.clear()
 
             if (date_sent and not date_seen and
-                    b"2023-11-14 22:13:" in buffer):
+                    b"2023-11-14 22:13:" in buffer and
+                    b"2023-11-15 05:13:" in buffer and
+                    b"UTC+07:00" in buffer):
                 date_seen = True
 
             if (date_seen and not fs_sent and
@@ -196,8 +208,11 @@ def main(argv):
                     fs_batch >= len(fs_batches) and
                     b"MOUNT-DONE" in fs_output):
                 missing = []
-                for marker in (b"e/", b"mount: mounted", b"umount: unmounted",
-                               b"virtio-blk1"):
+                for marker in (b"e/", b"mode: 0644", b"mode: 0600",
+                               b"mount: mounted", b"umount: unmounted",
+                               b"virtio-blk1", b"frames_free:",
+                               b"context_switches:", b"vfs_ops:",
+                               b"block_reads:", b"block_read "):
                     if marker not in fs_output:
                         missing.append(marker.decode())
                 if missing or b"mount: failed" in fs_output or \
@@ -208,7 +223,37 @@ def main(argv):
                     return 1
                 fs_seen = True
 
-            if (fs_seen and not clear_sent and
+            if (fs_seen and not identity_sent and
+                    time.time() - last_data > 0.5 and
+                    b"gemabox> " in buffer):
+                send_line(client, identity_batches[0])
+                identity_batch = 1
+                identity_sent = True
+                buffer.clear()
+
+            if (identity_sent and not identity_seen and
+                    identity_batch < len(identity_batches) and
+                    time.time() - last_data > 0.5 and
+                    b"gemabox> " in buffer):
+                send_line(client, identity_batches[identity_batch])
+                identity_batch += 1
+                buffer.clear()
+
+            if (identity_sent and not identity_seen and
+                    identity_batch >= len(identity_batches) and
+                    b"ID-DONE" in identity_output):
+                missing = []
+                for marker in (b"uid: 1", b"gid: 1", b"chmod: failed",
+                               b"setuid: failed", b"setgid: failed"):
+                    if marker not in identity_output:
+                        missing.append(marker.decode())
+                if missing or b"chown: failed" in identity_output:
+                    print("uart client: identity test failed: " +
+                          (", ".join(missing) if missing else "chown failed"))
+                    return 1
+                identity_seen = True
+
+            if (identity_seen and not clear_sent and
                     time.time() - last_data > 0.5 and
                     b"gemabox> " in buffer):
                 send_line(client, b"clear\necho CLEAR-DONE\n")

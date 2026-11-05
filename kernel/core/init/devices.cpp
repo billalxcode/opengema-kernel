@@ -9,6 +9,7 @@
 #include "og/drivers/virtio_blk.h"
 #include "og/drivers/virtio_gpu.h"
 #include "og/drivers/virtio_input.h"
+#include "og/fs/vfs.h"
 #include "og/io/console.h"
 #include "og/io/tty.h"
 #include "og/platform/platform.h"
@@ -77,6 +78,11 @@ Status WriteWallClock(void* context, uint64_t seconds) noexcept {
   return static_cast<drivers::rtc::Pl031*>(context)->write_unix_seconds(seconds);
 }
 
+uint64_t FsClock() noexcept {
+  const Result<uint64_t> seconds = time::WallTimeSeconds();
+  return seconds.is_ok() ? seconds.value() : 0U;
+}
+
 void InitRtc() noexcept {
   const platform::Platform& board = platform::Current();
   const Status status = g_rtc.init(board.rtc.base, board.rtc.size);
@@ -91,6 +97,7 @@ void InitRtc() noexcept {
   }
   LogDec(LogLevel::kInfo, "rtc: unix seconds", seconds.value());
   time::SetWallClock(&ReadWallClock, &WriteWallClock, &g_rtc);
+  fs::SetClock(&FsClock);
 
   drivers::Device device{};
   device.name = "pl031";

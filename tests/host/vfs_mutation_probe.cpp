@@ -100,6 +100,37 @@ int main() {
     return Fail("close file");
   }
 
+  if (!og::IsOk(og::fs::FsChmod("/dir/file", 0644U))) {
+    return Fail("chmod");
+  }
+  const auto mode = og::fs::FsStat("/dir/file");
+  if (mode.is_err() || mode.value().mode != 0644U) {
+    return Fail("chmod result");
+  }
+  if (og::fs::FsChmod("/dir/file", 01000U) != og::Status::kInvalidArg) {
+    return Fail("invalid chmod accepted");
+  }
+  if (!og::IsOk(og::fs::FsChown("/dir/file", 7U, 8U))) {
+    return Fail("chown");
+  }
+  const auto owner = og::fs::FsStat("/dir/file");
+  if (owner.is_err() || owner.value().uid != 7U ||
+      owner.value().gid != 8U) {
+    return Fail("chown result");
+  }
+
+  table.uid = 1U;
+  table.gid = 1U;
+  if (og::fs::FsOpen(table, "/dir/file", og::fs::kOpenWrite).status() !=
+      og::Status::kDenied) {
+    return Fail("non-owner write was allowed");
+  }
+  const auto reader = og::fs::FsOpen(table, "/dir/file");
+  if (reader.is_err() ||
+      !og::IsOk(og::fs::FsClose(table, reader.value()))) {
+    return Fail("read-only open failed");
+  }
+
   if (!og::IsOk(og::fs::FsRename("/dir/file", "/dir/renamed"))) {
     return Fail("rename");
   }

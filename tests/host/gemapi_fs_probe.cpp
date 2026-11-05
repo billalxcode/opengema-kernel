@@ -76,6 +76,10 @@ bool stat(const char* path, Stat& result) noexcept {
   if (Same(path, "file")) {
     result.type = 0;
     result.size = 10;
+    result.mode = 0644;
+    result.uid = 1;
+    result.gid = 2;
+    result.mtime = 1234;
     return true;
   }
   if (Same(path, "dir")) {
@@ -144,6 +148,14 @@ bool rmdir(const char* path) noexcept {
 
 bool rename(const char* old_path, const char* new_path) noexcept {
   return Same(old_path, "file") && Same(new_path, "renamed");
+}
+
+bool chmod(const char* path, u64 mode) noexcept {
+  return Same(path, "file") && mode == 0600U;
+}
+
+bool chown(const char* path, u64 uid, u64 gid) noexcept {
+  return Same(path, "file") && uid == 1U && gid == 1U;
 }
 
 bool mount(const char* type, const char* target) noexcept {
@@ -245,7 +257,10 @@ int main() {
 
   const auto file_info = gemapi::fs::stat("file");
   if (!file_info || file_info.value().kind != Kind::file ||
-      file_info.value().size != 10U) {
+      file_info.value().size != 10U ||
+      file_info.value().mode != 0644U ||
+      file_info.value().uid != 1U || file_info.value().gid != 2U ||
+      file_info.value().mtime != 1234U) {
     return Fail("stat file");
   }
   if (gemapi::fs::stat("dir").value().kind != Kind::directory ||
@@ -293,6 +308,16 @@ int main() {
     return Fail("rename");
   }
 
+  if (gemapi::fs::chmod("file", 0600U) != Status::ok ||
+      gemapi::fs::chmod("bad", 0600U) != Status::not_found ||
+      gemapi::fs::chmod(nullptr, 0600U) != Status::invalid_argument) {
+    return Fail("chmod");
+  }
+  if (gemapi::fs::chown("file", 1U, 1U) != Status::ok ||
+      gemapi::fs::chown("bad", 1U, 1U) != Status::not_found ||
+      gemapi::fs::chown(nullptr, 1U, 1U) != Status::invalid_argument) {
+    return Fail("chown");
+  }
   if (gemapi::fs::mount("ramfs", "/mnt") != Status::ok ||
       gemapi::fs::mount("bad", "/mnt") != Status::not_found ||
       gemapi::fs::mount(nullptr, "/mnt") != Status::invalid_argument) {

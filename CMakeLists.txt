@@ -470,6 +470,7 @@ og_add_module(og_io
 og_add_module(og_core
   SOURCES kernel/core/log.cpp kernel/core/log_ring.cpp kernel/core/panic.cpp
           kernel/core/power.cpp kernel/core/stack_guard.cpp
+          kernel/core/trace.cpp
   DEPS og_io og_inc_kernel)
 
 og_add_module(og_acpi

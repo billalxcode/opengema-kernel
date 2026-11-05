@@ -464,6 +464,7 @@ struct NodeFields {
   node.data_checksum = fields.data_checksum;
   node.node.type = fields.type == kNodeTypeFile ? NodeType::kFile
                                                 : NodeType::kDirectory;
+  node.node.mode = fields.mode & 0777U;
   node.node.size = fields.size;
 
   status = AssignNodeName(device, super, index, fields, node);

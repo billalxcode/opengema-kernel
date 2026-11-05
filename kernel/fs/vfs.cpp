@@ -66,6 +66,7 @@ MountEntry g_mounts[kMaxMounts];
 VfsLock g_lock;
 bool g_ready = false;
 uint32_t g_operations = 0;
+uint64_t g_operation_total = 0;
 
 // Releases roots whose mount name and open descriptors are both gone. The
 // VFS lock is dropped before calling into a filesystem, keeping it a leaf.
@@ -295,6 +296,7 @@ struct ParentPath {
 OperationGuard::OperationGuard() noexcept {
   LockGuard guard(g_lock);
   ++g_operations;
+  ++g_operation_total;
 }
 
 OperationGuard::~OperationGuard() noexcept {
@@ -369,8 +371,14 @@ Status FsInit() noexcept {
   LockGuard guard(g_lock);
   mem::Zero(g_mounts, sizeof(g_mounts));
   g_operations = 0;
+  g_operation_total = 0;
   g_ready = true;
   return Status::kOk;
+}
+
+uint64_t FsOperationCount() noexcept {
+  LockGuard guard(g_lock);
+  return g_operation_total;
 }
 
 Status FsMount(const char* path, Node* root) noexcept {
@@ -507,6 +515,10 @@ Result<Stat> FsStat(const char* path) noexcept {
   Stat stat{};
   stat.type = node.value()->type;
   stat.size = node.value()->size;
+  stat.mode = node.value()->mode;
+  stat.uid = node.value()->uid;
+  stat.gid = node.value()->gid;
+  stat.mtime = node.value()->mtime;
   return Result<Stat>::Ok(stat);
 }
 
@@ -630,6 +642,36 @@ Status FsTruncate(const char* path, uint64_t size) noexcept {
     return Status::kUnsupported;
   }
   return node.value()->ops->truncate(node.value(), size);
+}
+
+Status FsChmod(const char* path, uint32_t mode) noexcept {
+  OperationGuard guard;
+  if (path == nullptr || mode > 0777U) {
+    return Status::kInvalidArg;
+  }
+  const Result<Node*> node = FsResolve(path);
+  if (node.is_err()) {
+    return node.status();
+  }
+  if (node.value()->ops == nullptr || node.value()->ops->chmod == nullptr) {
+    return Status::kUnsupported;
+  }
+  return node.value()->ops->chmod(node.value(), mode);
+}
+
+Status FsChown(const char* path, uint32_t uid, uint32_t gid) noexcept {
+  OperationGuard guard;
+  if (path == nullptr) {
+    return Status::kInvalidArg;
+  }
+  const Result<Node*> node = FsResolve(path);
+  if (node.is_err()) {
+    return node.status();
+  }
+  if (node.value()->ops == nullptr || node.value()->ops->chown == nullptr) {
+    return Status::kUnsupported;
+  }
+  return node.value()->ops->chown(node.value(), uid, gid);
 }
 
 }  // namespace og::fs

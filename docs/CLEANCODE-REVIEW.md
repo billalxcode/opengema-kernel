@@ -250,9 +250,17 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   kembali terlihat setelah unmount. Descriptor yang masih terbuka menahan
   root sampai ditutup, lalu node dibebaskan.
 - Test dmesg: `/proc/dmesg` dibaca lewat procfs dan command shell.
+- Test CPU accounting: `/proc/processes` menampilkan kolom `cpu_ms` yang
+  dihitung dari tick scheduler.
+- Test observability: `/proc/meminfo` menampilkan frame dan heap,
+  `/proc/stat` menampilkan tick, thread, context switch, proses, operasi
+  VFS, dan counter block device. `/proc/trace` menampilkan ring event.
+- Test SMP: `SMP=4` membuat worker thread satu per CPU dan memverifikasi
+  seluruh CPU menjalankan worker.
 - Test loglevel: filter runtime bisa dibaca dan diubah dari shell.
-- Test wall clock: `date <unix-seconds>` menyetel RTC PL031 dan `date`
-  mencetak waktu UTC dengan format `YYYY-MM-DD HH:MM:SS UTC`.
+- Test wall clock: `date <unix-seconds>` menyetel RTC PL031, `date`
+  mencetak waktu lokal, dan `tz <menit>` menggeser offset dengan format
+  `YYYY-MM-DD HH:MM:SS UTC+HH:MM`.
 - Verifikasi manual block write: baca, tulis pola, baca ulang, lalu pulihkan
   sector terakhir pada salinan `esp.img`.
 - Test persistensi: aplikasi `/applications/fstest/fstest` menjalankan
@@ -262,6 +270,11 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   berkutip. Command `persist` tidak lagi ada di shell produksi.
 - Test shell quoting: `mkdir` dan `rm` menerima path dengan spasi di dalam
   tanda kutip ganda.
+- Test metadata: `stat` menampilkan tipe, ukuran, mode oktal, uid, gid, dan
+  mtime; mode direktori, file, device, dan file read-only diperiksa.
+  `chmod` memperbarui mode ramfs dan read-only attribute FAT32, `chown`
+  memperbarui owner ramfs, dan proses non-root ditolak saat membuka file
+  0644 untuk write atau mengubah file milik user lain.
 - Test mount di QEMU: `mount ramfs` dua kali, dua `umount`, lalu `rm`
   direktori target untuk memastikan refcount dan cleanup berjalan.
 - Test multi block device: QEMU memakai dua virtio-blk, kernel mencatat
@@ -270,7 +283,7 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 
 Verifikasi branch `dev`:
 
-- `python3 scripts/compile-check.py`: 132 file OK, 1 entri lama dilewati.
+- `python3 scripts/compile-check.py`: 133 file OK, 1 entri lama dilewati.
 - `./scripts/build.sh` lewat podman: kernel build dan link OK,
   `arch-check` dan `gsl-check` OK.
 - `./scripts/test-host.sh`: host tests, ramfs, procfs, devfs, HID, ACPI, FAT32,

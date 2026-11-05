@@ -95,6 +95,7 @@ Status FileWrite(Node* node, uint64_t offset, std::span<const uint8_t> buffer,
     file->size = end;
     file->node.size = end;
   }
+  file->node.mtime = NowSeconds();
   out_written = buffer.size();
   return Status::kOk;
 }
@@ -117,6 +118,7 @@ Status FileTruncate(Node* node, uint64_t size) noexcept {
   }
   file->size = size;
   file->node.size = size;
+  file->node.mtime = NowSeconds();
   return Status::kOk;
 }
 
@@ -199,6 +201,7 @@ Status DirCreate(Node* directory, const char* name, NodeType type,
   }
   dir->children[dir->child_count] = child;
   ++dir->child_count;
+  dir->node.mtime = NowSeconds();
   *out = &child->node;
   return Status::kOk;
 }
@@ -230,6 +233,7 @@ Status DirRemove(Node* directory, Node* node) noexcept {
     dir->children[current] = dir->children[current + 1U];
   }
   --dir->child_count;
+  dir->node.mtime = NowSeconds();
   (void)mem::HeapFree(target);
   return Status::kOk;
 }
@@ -281,6 +285,9 @@ Status DirRename(Node* directory, Node* node, Node* new_directory,
   }
   mem::Copy(target->name, new_name, name_length + 1U);
   target->parent = new_dir;
+  target->node.mtime = NowSeconds();
+  old_dir->node.mtime = NowSeconds();
+  new_dir->node.mtime = NowSeconds();
   return Status::kOk;
 }
 
@@ -301,10 +308,31 @@ void ReleaseRoot(Node* root) noexcept {
   ReleaseTree(NodeOf(root));
 }
 
+Status Chmod(Node* node, uint32_t mode) noexcept {
+  if (node == nullptr) {
+    return Status::kInvalidArg;
+  }
+  node->mode = mode & 0777U;
+  node->mtime = NowSeconds();
+  return Status::kOk;
+}
+
+Status Chown(Node* node, uint32_t uid, uint32_t gid) noexcept {
+  if (node == nullptr) {
+    return Status::kInvalidArg;
+  }
+  node->uid = uid;
+  node->gid = gid;
+  node->mtime = NowSeconds();
+  return Status::kOk;
+}
+
 const NodeOps kFileOps{nullptr, &FileRead, &FileWrite, nullptr, nullptr,
-                       nullptr, nullptr, &FileTruncate, nullptr};
+                       nullptr, nullptr, &FileTruncate, nullptr, &Chmod,
+                       &Chown};
 const NodeOps kDirOps{&DirLookup, nullptr, nullptr, &DirIterate, &DirCreate,
-                      &DirRemove, &DirRename, nullptr, &ReleaseRoot};
+                      &DirRemove, &DirRename, nullptr, &ReleaseRoot, &Chmod,
+                      &Chown};
 
 [[nodiscard]] RamNode* AllocateNode(NodeType type, const char* name,
                                     RamNode* parent) noexcept {
@@ -322,6 +350,9 @@ const NodeOps kDirOps{&DirLookup, nullptr, nullptr, &DirIterate, &DirCreate,
   RamNode* node = static_cast<RamNode*>(storage.value());
   mem::Zero(node, sizeof(*node));
   node->node.type = type;
+  node->node.mode =
+    type == NodeType::kDirectory ? kModeDirectory : kModeFile;
+  node->node.mtime = NowSeconds();
   node->node.ops = type == NodeType::kFile ? &kFileOps : &kDirOps;
   node->node.fs_data = node;
   node->parent = parent;
@@ -341,6 +372,8 @@ Result<Node*> Create() noexcept {
   mem::Zero(root, sizeof(*root));
   root->node.name = "/";
   root->node.type = NodeType::kDirectory;
+  root->node.mode = kModeDirectory;
+  root->node.mtime = NowSeconds();
   root->node.ops = &kDirOps;
   root->node.fs_data = root;
   root->parent = root;

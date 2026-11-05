@@ -181,6 +181,40 @@ int main() {
     return 1;
   }
 
+  og::fs::Node* meminfo = nullptr;
+  if (og::IsErr(root.value()->ops->lookup(root.value(), "meminfo", &meminfo)) ||
+      meminfo == nullptr) {
+    std::printf("procfs probe: meminfo lookup failed\n");
+    return 1;
+  }
+  if (!ReadAll(meminfo, 0, text, sizeof(text), read) || read != 20U ||
+      text[0] != 'm' || text[19] != '\n') {
+    std::printf("procfs probe: meminfo content mismatch\n");
+    return 1;
+  }
+  og::fs::Node* stat = nullptr;
+  if (og::IsErr(root.value()->ops->lookup(root.value(), "stat", &stat)) ||
+      stat == nullptr) {
+    std::printf("procfs probe: stat lookup failed\n");
+    return 1;
+  }
+  if (!ReadAll(stat, 0, text, sizeof(text), read) || read != 17U ||
+      text[0] != 's' || text[16] != '\n') {
+    std::printf("procfs probe: stat content mismatch\n");
+    return 1;
+  }
+  og::fs::Node* trace = nullptr;
+  if (og::IsErr(root.value()->ops->lookup(root.value(), "trace", &trace)) ||
+      trace == nullptr) {
+    std::printf("procfs probe: trace lookup failed\n");
+    return 1;
+  }
+  if (!ReadAll(trace, 0, text, sizeof(text), read) || read != 18U ||
+      text[0] != 't' || text[17] != '\n') {
+    std::printf("procfs probe: trace content mismatch\n");
+    return 1;
+  }
+
   if (root.value()->ops->lookup(root.value(), "missing", &threads) !=
       og::Status::kNotFound) {
     std::printf("procfs probe: missing lookup was not rejected\n");
@@ -220,6 +254,21 @@ int main() {
     return 1;
   }
   if (og::IsErr(root.value()->ops->iterate(root.value(), 6, entry, found)) ||
+      !found || entry.name[0] != 'm') {
+    std::printf("procfs probe: iterate seventh entry failed\n");
+    return 1;
+  }
+  if (og::IsErr(root.value()->ops->iterate(root.value(), 7, entry, found)) ||
+      !found || entry.name[0] != 's') {
+    std::printf("procfs probe: iterate eighth entry failed\n");
+    return 1;
+  }
+  if (og::IsErr(root.value()->ops->iterate(root.value(), 8, entry, found)) ||
+      !found || entry.name[0] != 't') {
+    std::printf("procfs probe: iterate ninth entry failed\n");
+    return 1;
+  }
+  if (og::IsErr(root.value()->ops->iterate(root.value(), 9, entry, found)) ||
       found) {
     std::printf("procfs probe: iterate past end failed\n");
     return 1;

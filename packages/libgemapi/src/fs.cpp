@@ -114,6 +114,10 @@ Result<Info> stat(const char* path) noexcept {
   Info info{};
   info.kind = ConvertKind(raw.type);
   info.size = raw.size;
+  info.mode = raw.mode;
+  info.uid = raw.uid;
+  info.gid = raw.gid;
+  info.mtime = raw.mtime;
   return info;
 }
 
@@ -173,6 +177,20 @@ Status rename(const char* old_path, const char* new_path) noexcept {
     return Status::invalid_argument;
   }
   return kgema::rename(old_path, new_path) ? Status::ok : Status::not_found;
+}
+
+Status chmod(const char* path, u64 mode) noexcept {
+  if (path == nullptr) {
+    return Status::invalid_argument;
+  }
+  return kgema::chmod(path, mode) ? Status::ok : Status::not_found;
+}
+
+Status chown(const char* path, u64 uid, u64 gid) noexcept {
+  if (path == nullptr) {
+    return Status::invalid_argument;
+  }
+  return kgema::chown(path, uid, gid) ? Status::ok : Status::not_found;
 }
 
 Status mount(const char* type, const char* target) noexcept {

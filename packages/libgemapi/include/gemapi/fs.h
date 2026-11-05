@@ -23,6 +23,10 @@ enum class Kind : u64 {
 struct Info {
   Kind kind;
   u64 size;
+  u64 mode;
+  u64 uid;
+  u64 gid;
+  u64 mtime;
 };
 
 struct DirEntry {
@@ -65,6 +69,8 @@ class File {
 [[nodiscard]] Status unlink(const char* path) noexcept;
 [[nodiscard]] Status rmdir(const char* path) noexcept;
 [[nodiscard]] Status rename(const char* old_path, const char* new_path) noexcept;
+[[nodiscard]] Status chmod(const char* path, u64 mode) noexcept;
+[[nodiscard]] Status chown(const char* path, u64 uid, u64 gid) noexcept;
 [[nodiscard]] Status mount(const char* type, const char* target) noexcept;
 [[nodiscard]] Status umount(const char* target) noexcept;
 

@@ -28,4 +28,27 @@ bool set_wall_seconds(u64 seconds) noexcept {
                           static_cast<i64>(seconds), 0, 0) == 0;
 }
 
+bool local_seconds(u64& seconds) noexcept {
+  const i64 result = syscall::invoke3(syscall::kLocalTime, 0, 0, 0);
+  if (result < 0) {
+    return false;
+  }
+  seconds = static_cast<u64>(result);
+  return true;
+}
+
+bool set_timezone_minutes(i64 minutes) noexcept {
+  return syscall::invoke3(syscall::kSetTimeZone, minutes, 0, 0) == 0;
+}
+
+bool timezone_minutes(i64& minutes) noexcept {
+  constexpr i64 kOffsetBias = 840;
+  const i64 result = syscall::invoke3(syscall::kGetTimeZone, 0, 0, 0);
+  if (result < 0) {
+    return false;
+  }
+  minutes = result - kOffsetBias;
+  return true;
+}
+
 }  // namespace kgema

@@ -5,6 +5,7 @@
 #include "memory.h"
 #include "og/core/log.h"
 #include "og/core/status.h"
+#include "og/core/trace.h"
 #include "og/drivers/device.h"
 #include "og/drivers/virtio_blk.h"
 #include "og/fs/block_device.h"
@@ -17,8 +18,10 @@
 #include "og/fs/vfs.h"
 #include "og/io/print.h"
 #include "og/mem/heap.h"
+#include "og/mem/pmm.h"
 #include "og/process/process.h"
 #include "og/sched/sched.h"
+#include "og/time/timer.h"
 
 namespace og::boot {
 
@@ -268,7 +271,7 @@ const char* ProcessStateName(process::ProcessState state) noexcept {
 Status FormatProcesses(char* buffer, std::size_t capacity,
                        std::size_t& length) noexcept {
   og::fmt::LineBuilder line(buffer, capacity);
-  line.Text("pid ppid state name\n");
+  line.Text("pid ppid state cpu_ms name\n");
   process::ProcessInfo info[process::kMaxProcesses];
   const uint32_t count =
     process::Snapshot(info, process::kMaxProcesses);
@@ -276,6 +279,7 @@ Status FormatProcesses(char* buffer, std::size_t capacity,
     line.Dec(info[index].pid).Char(' ')
         .Dec(info[index].parent_pid).Char(' ')
         .Text(ProcessStateName(info[index].state)).Char(' ')
+        .Dec(info[index].cpu_ms).Char(' ')
         .Text(info[index].name).Char('\n');
   }
   length = line.size();
@@ -301,10 +305,58 @@ Status FormatBlockDevices(char* buffer, std::size_t capacity,
   return Status::kOk;
 }
 
+Status FormatMemInfo(char* buffer, std::size_t capacity,
+                     std::size_t& length) noexcept {
+  og::fmt::LineBuilder line(buffer, capacity);
+  const uint64_t total = mem::PmmTotalFrames();
+  const uint64_t free = mem::PmmFreeFrames();
+  const mem::HeapStats heap = mem::GetHeapStats();
+  line.Text("frames_total: ").Dec(total).Char('\n');
+  line.Text("frames_free: ").Dec(free).Char('\n');
+  line.Text("frames_used: ").Dec(total - free).Char('\n');
+  line.Text("heap_pages: ").Dec(heap.pages).Char('\n');
+  line.Text("heap_allocations: ").Dec(heap.allocations).Char('\n');
+  line.Text("heap_frees: ").Dec(heap.frees).Char('\n');
+  length = line.size();
+  return Status::kOk;
+}
+
+Status FormatStat(char* buffer, std::size_t capacity,
+                  std::size_t& length) noexcept {
+  og::fmt::LineBuilder line(buffer, capacity);
+  line.Text("timer_ticks: ").Dec(time::TimerTicks()).Char('\n');
+  line.Text("threads: ").Dec(sched::ThreadCount()).Char('\n');
+  line.Text("context_switches: ").Dec(sched::ContextSwitchCount()).Char('\n');
+  line.Text("processes: ").Dec(process::Count()).Char('\n');
+  line.Text("vfs_ops: ").Dec(fs::FsOperationCount()).Char('\n');
+  const drivers::virtio::BlkStats block = drivers::virtio::GetBlkStats();
+  line.Text("block_reads: ").Dec(block.reads).Char('\n');
+  line.Text("block_writes: ").Dec(block.writes).Char('\n');
+  line.Text("block_flushes: ").Dec(block.flushes).Char('\n');
+  length = line.size();
+  return Status::kOk;
+}
+
+Status FormatTrace(char* buffer, std::size_t capacity,
+                   std::size_t& length) noexcept {
+  og::fmt::LineBuilder line(buffer, capacity);
+  constexpr uint32_t kTraceSnapshot = 32;
+  trace::Event events[kTraceSnapshot];
+  const uint32_t count = trace::Snapshot(events, kTraceSnapshot);
+  for (uint32_t index = 0; index < count; ++index) {
+    line.Text(trace::TagName(events[index].tag)).Char(' ')
+        .Dec(events[index].timestamp_ms).Char(' ')
+        .Dec(events[index].value).Char('\n');
+  }
+  length = line.size();
+  return Status::kOk;
+}
+
 Status MountProcfs() noexcept {
   Result<fs::Node*> proc =
     fs::procfs::Create(&sched::ThreadCount, &FormatProcesses,
-                       &FormatBlockDevices);
+                       &FormatBlockDevices, &FormatMemInfo, &FormatStat,
+                       &FormatTrace);
   if (proc.is_err()) {
     return proc.status();
   }

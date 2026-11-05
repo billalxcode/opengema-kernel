@@ -15,6 +15,10 @@ constexpr u64 kOpenTruncate = 8;
 struct Stat {
   u64 type;
   u64 size;
+  u64 mode;
+  u64 uid;
+  u64 gid;
+  u64 mtime;
 };
 
 struct DirEntry {
@@ -35,6 +39,8 @@ struct DirEntry {
 [[nodiscard]] bool unlink(const char* path) noexcept;
 [[nodiscard]] bool rmdir(const char* path) noexcept;
 [[nodiscard]] bool rename(const char* old_path, const char* new_path) noexcept;
+[[nodiscard]] bool chmod(const char* path, u64 mode) noexcept;
+[[nodiscard]] bool chown(const char* path, u64 uid, u64 gid) noexcept;
 [[nodiscard]] bool mount(const char* type, const char* target) noexcept;
 [[nodiscard]] bool umount(const char* target) noexcept;
 

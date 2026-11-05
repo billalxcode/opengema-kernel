@@ -33,6 +33,10 @@ constexpr uint64_t kUserMmapLimit =
 struct UserStat {
   uint64_t type;
   uint64_t size;
+  uint64_t mode;
+  uint64_t uid;
+  uint64_t gid;
+  uint64_t mtime;
 };
 
 struct UserDirEntry {
@@ -116,5 +120,26 @@ namespace og::syscall {
 
 [[nodiscard]] Status DoSetWallTime(uint64_t seconds,
                                    uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoLocalTime(uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoSetTimeZone(uint64_t minutes,
+                                   uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoGetTimeZone(uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoChmod(uint64_t user_path, uint64_t mode,
+                             uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoGetUid(uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoSetUid(uint64_t uid, uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoGetGid(uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoSetGid(uint64_t gid, uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoChown(uint64_t user_path, uint64_t uid, uint64_t gid,
+                             uint64_t& result) noexcept;
 
 }  // namespace og::syscall
