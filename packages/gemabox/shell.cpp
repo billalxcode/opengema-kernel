@@ -9,6 +9,7 @@
 namespace {
 
 constexpr char kPrompt[] = "gemabox> ";
+constexpr char kTimezonePath[] = "/volumes/boot/gsl.tz";
 constexpr gemapi::usize kMaxArgs = 8;
 constexpr gemapi::usize kMaxName = 128;
 
@@ -583,6 +584,38 @@ CommandResult RunDate(const char* args, gemapi::usize args_length) {
 
 CommandResult RunTz(const char* args, gemapi::usize args_length) {
   trim(args, args_length);
+  if (text_equals(args, args_length, "save")) {
+    const auto zone = gemapi::time::timezone_minutes();
+    if (!zone) {
+      gemapi::io::write("tz: unavailable\n");
+      return CommandResult::kContinue;
+    }
+    auto file = gemapi::fs::File::open(
+      kTimezonePath, gemapi::fs::kOpenWrite | gemapi::fs::kOpenCreate |
+                       gemapi::fs::kOpenTruncate);
+    if (!file) {
+      gemapi::io::write("tz: save failed\n");
+      return CommandResult::kContinue;
+    }
+    char text[16];
+    gemapi::usize cursor = 0;
+    gemapi::i64 minutes = zone.value();
+    if (minutes < 0) {
+      text[cursor] = '-';
+      ++cursor;
+      minutes = -minutes;
+    }
+    cursor = append_dec(text, sizeof(text), cursor,
+                        static_cast<gemapi::u64>(minutes));
+    text[cursor] = '\n';
+    ++cursor;
+    if (file.value().write(text, cursor) != gemapi::Status::ok) {
+      gemapi::io::write("tz: save failed\n");
+      return CommandResult::kContinue;
+    }
+    gemapi::io::write("tz: saved\n");
+    return CommandResult::kContinue;
+  }
   if (args_length != 0U) {
     const bool negative = args[0] == '-';
     const char* digits = args;

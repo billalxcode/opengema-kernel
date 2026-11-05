@@ -24,6 +24,12 @@ struct DmaBuffer {
   uint64_t size;
 };
 
+struct Stats {
+  uint64_t allocations;
+  uint64_t frees;
+  uint64_t live_bytes;
+};
+
 // Allocates page backed, zeroed memory suitable for device access.
 // alignment must be a power of two up to 4096.
 [[nodiscard]] Result<DmaBuffer> AllocCoherent(uint64_t size, uint64_t alignment) noexcept;
@@ -38,6 +44,7 @@ struct DmaBuffer {
 // Manual cache maintenance for drivers that own the timing.
 [[nodiscard]] Status SyncForDevice(void* cpu_address, uint64_t size) noexcept;
 [[nodiscard]] Status SyncForCpu(void* cpu_address, uint64_t size) noexcept;
+[[nodiscard]] Stats GetStats() noexcept;
 
 // Fixed size coherent block pool. Useful for drivers that need a stable
 // number of requests or descriptors.

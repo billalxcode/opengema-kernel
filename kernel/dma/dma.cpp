@@ -19,6 +19,10 @@ namespace {
   return (value + alignment - 1U) & ~(alignment - 1U);
 }
 
+uint64_t g_dma_allocations = 0;
+uint64_t g_dma_frees = 0;
+uint64_t g_dma_live_bytes = 0;
+
 }  // namespace
 
 Result<DmaBuffer> AllocCoherent(uint64_t size, uint64_t alignment) noexcept {
@@ -47,6 +51,8 @@ Result<DmaBuffer> AllocCoherent(uint64_t size, uint64_t alignment) noexcept {
   buffer.cpu_address = cpu;
   buffer.device_address = address.value();
   buffer.size = total;
+  (void)__atomic_add_fetch(&g_dma_allocations, 1U, __ATOMIC_RELAXED);
+  (void)__atomic_add_fetch(&g_dma_live_bytes, total, __ATOMIC_RELAXED);
   return Result<DmaBuffer>::Ok(buffer);
 }
 
@@ -60,7 +66,13 @@ Status FreeCoherent(DmaBuffer buffer) noexcept {
   if ((buffer.size % mem::kPageSize) != 0) {
     return Status::kInvalidArg;
   }
-  return mem::PmmFreePages(buffer.device_address, buffer.size / mem::kPageSize);
+  const Status status =
+    mem::PmmFreePages(buffer.device_address, buffer.size / mem::kPageSize);
+  if (IsOk(status)) {
+    (void)__atomic_add_fetch(&g_dma_frees, 1U, __ATOMIC_RELAXED);
+    (void)__atomic_sub_fetch(&g_dma_live_bytes, buffer.size, __ATOMIC_RELAXED);
+  }
+  return status;
 }
 
 Result<DmaAddress> MapStreaming(void* cpu_address, uint64_t size,
@@ -122,6 +134,14 @@ Status SyncForCpu(void* cpu_address, uint64_t size) noexcept {
   const uint64_t begin = reinterpret_cast<uint64_t>(cpu_address);
   arch::aarch64::InvalidateDcacheRange(begin, begin + size);
   return Status::kOk;
+}
+
+Stats GetStats() noexcept {
+  Stats stats{};
+  stats.allocations = __atomic_load_n(&g_dma_allocations, __ATOMIC_ACQUIRE);
+  stats.frees = __atomic_load_n(&g_dma_frees, __ATOMIC_ACQUIRE);
+  stats.live_bytes = __atomic_load_n(&g_dma_live_bytes, __ATOMIC_ACQUIRE);
+  return stats;
 }
 
 }  // namespace og::dma

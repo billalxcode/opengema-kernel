@@ -381,6 +381,30 @@ uint64_t FsOperationCount() noexcept {
   return g_operation_total;
 }
 
+uint32_t FsMountSnapshot(MountInfo* out, uint32_t capacity) noexcept {
+  if (out == nullptr || capacity == 0U) {
+    return 0;
+  }
+  LockGuard guard(g_lock);
+  uint32_t count = 0;
+  for (uint32_t index = 0; index < kMaxMounts && count < capacity; ++index) {
+    const MountEntry& entry = g_mounts[index];
+    if (!entry.used || !entry.mounted) {
+      continue;
+    }
+    const std::size_t length = mem::Length(entry.path);
+    if (length >= kMaxPath) {
+      continue;
+    }
+    mem::Copy(out[count].path, entry.path, length + 1U);
+    out[count].refs = entry.refs;
+    out[count].open_files = entry.open_files;
+    out[count].pinned = entry.pinned;
+    ++count;
+  }
+  return count;
+}
+
 Status FsMount(const char* path, Node* root) noexcept {
   if (path == nullptr || root == nullptr) {
     return Status::kInvalidArg;

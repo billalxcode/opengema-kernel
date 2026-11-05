@@ -51,8 +51,10 @@ SOCKET="$SERIAL_DIR/serial.sock"
 LOG="$SERIAL_DIR/serial.log"
 MONITOR="$SERIAL_DIR/monitor.sock"
 SCREEN="$SERIAL_DIR/screen.ppm"
+DISK="$SERIAL_DIR/disk.img"
 DATA_DISK="$SERIAL_DIR/data.img"
 VARS_TMP="$(mktemp /tmp/AAVMF_VARS.XXXXXX)"
+cp "$ESP" "$DISK"
 cp "$ESP" "$DATA_DISK"
 cleanup() {
   if [ -n "${QEMU_PID:-}" ]; then
@@ -73,7 +75,7 @@ qemu-system-aarch64 \
   -nic none \
   -drive if=pflash,format=raw,file="$CODE",readonly=on \
   -drive if=pflash,format=raw,file="$VARS_TMP" \
-  -drive file="$ESP",format=raw,if=virtio \
+  -drive file="$DISK",format=raw,if=virtio \
   -drive file="$DATA_DISK",format=raw,if=virtio \
   -device virtio-gpu-pci,xres=$DISPLAY_WIDTH,yres=$DISPLAY_HEIGHT \
   -device virtio-keyboard-pci \
@@ -153,15 +155,21 @@ check "gemabox> "
 check "commands: help, echo, cat, ls, stat, clear, acpi, uptime, date, tz, sleep, ps, id, setuid, setgid, dmesg, loglevel, mkdir, rm, mv, chmod, chown, mount, umount, halt, shutdown, reboot"
 check "uptime: "
 check "pid ppid"
+check "uid gid"
 check "cpu_ms"
+check "regions"
+check "cpu0:"
 check "frames_free:"
+check "dma_allocs:"
 check "context_switches:"
 check "vfs_ops:"
 check "block_reads:"
 check "context_switch "
 check "pl031"
 check "pl011 serial"
+check "order name"
 check "irq count"
+check "path refs"
 check "virtio-blk0 block 0x"
 check "/system/boot/init"
 check "dmesg:"
@@ -171,6 +179,7 @@ check "2023-11-14 22:13:"
 check "2023-11-15 05:13:"
 check "UTC+07:00"
 check "sysrq: stats"
+check "tz: saved"
 check "e/"
 check "mode: 0644"
 check "mode: 0600"
@@ -189,6 +198,8 @@ check "system/"
 check "ls: list failed"
 check "run: spawn failed"
 check "hello from applications"
+check "user fault: pid"
+check "FAULT-DONE"
 check "append ok"
 check "process: remaining: 0"
 check "kernel: halt"

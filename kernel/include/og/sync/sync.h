@@ -11,6 +11,8 @@
 
 namespace og::sync {
 
+class ConditionVariable;
+
 class Mutex {
  public:
   constexpr Mutex() noexcept = default;
@@ -26,10 +28,53 @@ class Mutex {
   void unlock() noexcept;
 
  private:
+  friend class ConditionVariable;
+
+  // Caller holds gate_. Releases the mutex and wakes one waiter.
+  void ReleaseLocked() noexcept;
+
   arch::aarch64::Spinlock gate_;
   sched::WaitQueue waiters_{};
   bool locked_ = false;
   const char* name_ = nullptr;
+};
+
+class ConditionVariable {
+ public:
+  ConditionVariable() noexcept = default;
+
+  ConditionVariable(const ConditionVariable&) = delete;
+  ConditionVariable& operator=(const ConditionVariable&) = delete;
+
+  // Caller must hold mutex. Returns with mutex locked again.
+  void wait(Mutex& mutex) noexcept;
+  void signal() noexcept;
+  void broadcast() noexcept;
+
+ private:
+  arch::aarch64::Spinlock gate_;
+  sched::WaitQueue waiters_{};
+};
+
+class RwLock {
+ public:
+  RwLock() noexcept = default;
+
+  RwLock(const RwLock&) = delete;
+  RwLock& operator=(const RwLock&) = delete;
+
+  void lock_read() noexcept;
+  void unlock_read() noexcept;
+  void lock_write() noexcept;
+  void unlock_write() noexcept;
+
+ private:
+  Mutex mutex_;
+  ConditionVariable readers_cond_;
+  ConditionVariable writers_cond_;
+  uint32_t readers_ = 0;
+  uint32_t waiting_writers_ = 0;
+  bool writer_ = false;
 };
 
 class Semaphore {

@@ -22,6 +22,7 @@ enum class ProcKind : uint32_t {
   kTrace = 8,
   kDevices = 9,
   kInterrupts = 10,
+  kMounts = 11,
 };
 
 struct ProcFile {
@@ -32,7 +33,7 @@ struct ProcFile {
 
 struct ProcDir {
   Node node;
-  ProcFile files[11];
+  ProcFile files[12];
   uint32_t count;
 };
 
@@ -45,6 +46,7 @@ TextFn g_stat_text = nullptr;
 TextFn g_trace_text = nullptr;
 TextFn g_devices_text = nullptr;
 TextFn g_interrupts_text = nullptr;
+TextFn g_mounts_text = nullptr;
 
 void GenerateAcpi(og::fmt::LineBuilder& line) noexcept {
   const acpi::Info& info = acpi::GetInfo();
@@ -151,6 +153,13 @@ Status Generate(const ProcFile& file, char* buffer, std::size_t capacity,
         line.Text("interrupts unavailable\n");
       } else {
         return g_interrupts_text(buffer, capacity, length);
+      }
+      break;
+    case ProcKind::kMounts:
+      if (g_mounts_text == nullptr) {
+        line.Text("mounts unavailable\n");
+      } else {
+        return g_mounts_text(buffer, capacity, length);
       }
       break;
     default:
@@ -264,7 +273,8 @@ Result<Node*> Create(ThreadCountFn thread_count,
                      TextFn stat_text,
                      TextFn trace_text,
                      TextFn devices_text,
-                     TextFn interrupts_text) noexcept {
+                     TextFn interrupts_text,
+                     TextFn mounts_text) noexcept {
   g_thread_count = thread_count;
   g_process_text = process_text;
   g_block_text = block_text;
@@ -273,6 +283,7 @@ Result<Node*> Create(ThreadCountFn thread_count,
   g_trace_text = trace_text;
   g_devices_text = devices_text;
   g_interrupts_text = interrupts_text;
+  g_mounts_text = mounts_text;
   mem::Zero(&g_root, sizeof(g_root));
   g_root.node.name = "/";
   g_root.node.type = NodeType::kDirectory;
@@ -293,7 +304,8 @@ Result<Node*> Create(ThreadCountFn thread_count,
   AddFile(8, "trace", ProcKind::kTrace);
   AddFile(9, "devices", ProcKind::kDevices);
   AddFile(10, "interrupts", ProcKind::kInterrupts);
-  g_root.count = 11;
+  AddFile(11, "mounts", ProcKind::kMounts);
+  g_root.count = 12;
   return Result<Node*>::Ok(&g_root.node);
 }
 

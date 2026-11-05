@@ -105,6 +105,14 @@ inline uint64_t NowSeconds() noexcept {
 constexpr uint32_t kMaxMounts = 16;
 constexpr uint32_t kMaxFiles = 16;
 constexpr uint32_t kMaxPath = 256;
+
+struct MountInfo {
+  char path[kMaxPath];
+  uint32_t refs;
+  uint32_t open_files;
+  bool pinned;
+};
+
 // Open flags. Write implies read access until a separate mode is needed.
 constexpr uint32_t kOpenRead = 0;
 constexpr uint32_t kOpenWrite = 1U << 0;
@@ -124,6 +132,8 @@ struct FileTable {
 
 [[nodiscard]] Status FsInit() noexcept;
 [[nodiscard]] uint64_t FsOperationCount() noexcept;
+[[nodiscard]] uint32_t FsMountSnapshot(MountInfo* out,
+                                        uint32_t capacity) noexcept;
 [[nodiscard]] Status FileTableInit(FileTable& table) noexcept;
 
 // Mounts root at path. Kernel mounts are pinned and cannot be unmounted.

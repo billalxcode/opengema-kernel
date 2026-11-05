@@ -61,6 +61,7 @@ struct ProcessInfo {
   uint32_t gid;
   ProcessState state;
   uint64_t cpu_ms;
+  uint32_t regions;
   char name[32];
 };
 

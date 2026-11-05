@@ -77,6 +77,17 @@ void SysRqHaltWork(void* /*context*/) noexcept {
   arch::aarch64::HaltForever();
 }
 
+void UserFault(arch::aarch64::TrapFrame* frame) noexcept {
+  process::Process* process = process::Current();
+  if (process == nullptr) {
+    Panic("trap: user fault without process");
+  }
+  LogDec(LogLevel::kError, "user fault: pid", process->pid);
+  LogHex(LogLevel::kError, "user fault: elr", frame->elr);
+  LogHex(LogLevel::kError, "user fault: far", arch::aarch64::ReadFarEl1());
+  process::Exit(-1);
+}
+
 void SysRqHandler(char key) noexcept {
   if (key == 's') {
     Log(LogLevel::kInfo, "sysrq: stats\n");
@@ -230,6 +241,7 @@ void kmain(BootInfo* info) noexcept {
 
   // Install vectors first so any fault after this point panics with context.
   events::InstallVectorTable();
+  events::SetUserFaultHook(&UserFault);
 
   __stack_chk_guard = arch::aarch64::ReadCntpctEl0() ^ 0x9E3779B97F4A7C15ULL;
   __security_cookie = __stack_chk_guard;

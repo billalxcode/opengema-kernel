@@ -38,6 +38,8 @@ namespace {
   return vector == 0U || vector == 4U || vector == 8U;
 }
 
+UserFaultHook g_user_fault = nullptr;
+
 void DispatchTrap(arch::aarch64::TrapFrame* frame, uint64_t vector) noexcept {
   if (IsIrqVector(vector)) {
     const Status status = HandleIrq();
@@ -53,6 +55,9 @@ void DispatchTrap(arch::aarch64::TrapFrame* frame, uint64_t vector) noexcept {
     if (IsOk(status)) {
       return;
     }
+    if (vector == 8U && g_user_fault != nullptr) {
+      g_user_fault(frame);
+    }
   }
 
   LogHex(LogLevel::kError, "trap: vector", vector);
@@ -65,6 +70,10 @@ void DispatchTrap(arch::aarch64::TrapFrame* frame, uint64_t vector) noexcept {
 void InstallVectorTable() noexcept {
   arch::aarch64::WriteVbarEl1(reinterpret_cast<uint64_t>(g_vector_table));
   arch::aarch64::InstructionSync();
+}
+
+void SetUserFaultHook(UserFaultHook hook) noexcept {
+  g_user_fault = hook;
 }
 
 }  // namespace og::events

@@ -36,6 +36,9 @@ class Blk {
   [[nodiscard]] uint64_t mmio_base() const noexcept {
     return transport_.common_base();
   }
+  [[nodiscard]] uint64_t dma_bytes() const noexcept {
+    return request_memory_.size + queue_.memory_bytes();
+  }
 
   // Reads whole 512 byte sectors. buffer.size() must be a multiple of 512
   // and at most 4096 bytes.

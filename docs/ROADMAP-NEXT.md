@@ -158,9 +158,8 @@ reboot.
 
 ## 7. Fase 18 - Driver framework, jaringan, dan input
 
-- [~] DRV-10 Registry device tersedia dan `/proc/devices` menampilkan nama,
-      kelas, MMIO, IRQ, clock, dan kapasitas. MMIO virtio, IRQ UART/legacy
-      line, dan clock UART sudah diisi; DMA dan probe terurut belum.
+- [x] DRV-10 Registry device menampilkan nama, kelas, MMIO, IRQ, clock,
+      DMA per device, kapasitas, dan urutan probe lewat `/proc/devices`.
 - [ ] DRV-11 Virtio IRQ/MSI-X, completion tanpa polling.
 - [ ] DRV-12 virtio-net: transmit/receive, queue, interrupt.
 - [ ] NET-01 Ethernet, ARP, IPv4, ICMP echo.
@@ -173,9 +172,9 @@ reboot.
 - [ ] DRV-13d Mouse sebagai device input kedua dan hotplug.
 - [x] DRV-14 TTY input dari keyboard, bukan hanya UART.
 - [x] LOG-01 Log kernel hanya ke serial; display untuk output user dan TTY.
-- [x] TIME-06 RTC settime, waktu dinding, dan offset zona waktu runtime
-      selesai lewat `wall_time`/`set_wall_time`/`local_time` serta command
-      `date` dan `tz`. Konfigurasi zona waktu persisten belum.
+- [x] TIME-06 RTC settime, waktu dinding, dan offset zona waktu selesai
+      lewat `wall_time`/`set_wall_time`/`local_time`, command `date`/`tz`,
+      dan `tz save` ke `/volumes/boot/gsl.tz` yang dimuat saat boot.
 - [x] OPS-01 shutdown/reboot lewat ACPI FADT dan PSCI SYSTEM_OFF/SYSTEM_RESET.
 
 **Selesai bila:** kernel menjawab ping/UDP dari host dan menerima input
@@ -191,7 +190,8 @@ keyboard di jendela QEMU.
 - [ ] MEM-15 Accounting per proses, limit, dan OOM killer minimal.
 - [ ] MEM-16 TLB shootdown lintas core dan ASID reuse yang aman.
 - [ ] MEM-17 ASLR untuk stack, mmap, dan executable.
-- [ ] MEM-18 Uji: fault invalid, COW, limit memori, dan isolasi.
+- [~] MEM-18 User fault dari EL0 sekarang mematikan proses, bukan panic.
+      COW, limit memori, dan uji fault lain belum.
 
 **Selesai bila:** user tidak bisa mengeksekusi data, dan fork/COW serta
 demand paging lulus uji.
@@ -201,7 +201,8 @@ demand paging lulus uji.
 - [ ] SCH-10 Migrasi thread dan work stealing antar core.
 - [ ] SCH-11 Prioritas dan nice, plus aging agar tidak starvation.
 - [ ] SCH-12 Thread join dan reklamasi stack.
-- [ ] SCH-13 Condition variable dan read/write lock.
+- [x] SCH-13 Condition variable dan read/write lock, diuji lewat self-test
+      scheduler.
 - [ ] SCH-14 Futex untuk user space.
 - [ ] SCH-15 TLS dan dukungan thread-local storage.
 - [x] SCH-16 Accounting CPU per proses: tick scheduler menambah `cpu_ticks`

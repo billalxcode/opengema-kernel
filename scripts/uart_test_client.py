@@ -67,6 +67,8 @@ def main(argv):
     level_seen = False
     date_sent = False
     date_seen = False
+    tzsave_sent = False
+    tzsave_seen = False
     sysrq_sent = False
     sysrq_seen = False
     fs_sent = False
@@ -86,7 +88,7 @@ def main(argv):
         b"mkdir \"/tmp/quoted dir\"\nrm \"/tmp/quoted dir\"\nchmod 600 /tmp/hello\nstat /tmp/hello\n",
         b"mkdir /tmp/mnt\nmount ramfs /tmp/mnt\nmount ramfs /tmp/mnt\n",
         b"umount /tmp/mnt\numount /tmp/mnt\nrm /tmp/mnt\ncat /proc/meminfo\ncat /proc/stat\n",
-        b"cat /proc/block\nls /volumes/boot\ncat /proc/trace\ncat /proc/devices\ncat /proc/interrupts\necho MOUNT-DONE\n",
+        b"cat /proc/block\nls /volumes/boot\ncat /proc/trace\ncat /proc/devices\ncat /proc/interrupts\ncat /proc/mounts\necho MOUNT-DONE\n",
     ]
     clear_sent = False
     clear_ready = False
@@ -95,6 +97,8 @@ def main(argv):
     ls_error_sent = False
     spawn_error_sent = False
     hello_sent = False
+    fault_sent = False
+    fault_seen = False
     halt_sent = False
     halted = False
 
@@ -190,7 +194,18 @@ def main(argv):
                     b"UTC+07:00" in buffer):
                 date_seen = True
 
-            if (date_seen and not sysrq_sent and
+            if (date_seen and not tzsave_sent and
+                    time.time() - last_data > 0.5 and
+                    b"gemabox> " in buffer):
+                send_line(client, b"tz 420\ntz save\ncat /volumes/boot/gsl.tz\ntz 0\n")
+                tzsave_sent = True
+                buffer.clear()
+
+            if (tzsave_sent and not tzsave_seen and
+                    b"tz: saved" in buffer):
+                tzsave_seen = True
+
+            if (tzsave_seen and not sysrq_sent and
                     time.time() - last_data > 0.5 and
                     b"gemabox> " in buffer):
                 send_line(client, b"\x01s\n")
@@ -223,9 +238,9 @@ def main(argv):
                 for marker in (b"e/", b"mode: 0644", b"mode: 0600",
                                b"mount: mounted", b"umount: unmounted",
                                b"virtio-blk1", b"frames_free:",
-                               b"context_switches:", b"vfs_ops:",
+                               b"dma_allocs:", b"context_switches:", b"vfs_ops:",
                                b"block_reads:", b"context_switch ", b"pl031",
-                               b"irq count"):
+                               b"irq count", b"path refs"):
                     if marker not in fs_output:
                         missing.append(marker.decode())
                 if missing or b"mount: failed" in fs_output or \
@@ -301,7 +316,15 @@ def main(argv):
                 send_line(client, b"hello\n")
                 hello_sent = True
 
-            if hello_sent and not halt_sent and b"hello from applications" in buffer:
+            if hello_sent and not fault_sent and b"hello from applications" in buffer:
+                send_line(client, b"hello fault\necho FAULT-DONE\n")
+                fault_sent = True
+                buffer.clear()
+
+            if fault_sent and not fault_seen and b"FAULT-DONE" in buffer:
+                fault_seen = True
+
+            if fault_seen and not halt_sent and b"FAULT-DONE" in buffer:
                 send_line(client, b"halt\n")
                 halt_sent = True
 

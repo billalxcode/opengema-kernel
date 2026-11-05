@@ -30,6 +30,9 @@ class Input {
   [[nodiscard]] uint64_t mmio_base() const noexcept {
     return transport_.common_base();
   }
+  [[nodiscard]] uint64_t dma_bytes() const noexcept {
+    return events_.size + queue_.memory_bytes();
+  }
 
  private:
   [[nodiscard]] Status submit_events() noexcept;

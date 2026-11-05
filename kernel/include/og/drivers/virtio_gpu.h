@@ -39,6 +39,10 @@ class Gpu {
   [[nodiscard]] uint64_t mmio_base() const noexcept {
     return transport_.common_base();
   }
+  [[nodiscard]] uint64_t dma_bytes() const noexcept {
+    return request_memory_.size + response_memory_.size + framebuffer_.size +
+           queue_.memory_bytes();
+  }
 
  private:
   [[nodiscard]] Status command(const void* request, uint32_t request_size,

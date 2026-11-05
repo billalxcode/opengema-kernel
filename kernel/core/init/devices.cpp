@@ -171,6 +171,7 @@ void InitBlockDevice() noexcept {
     device.name = kBlockNames[index];
     device.mmio_base = block.mmio_base();
     AssignPciIrq(device, info.value());
+    device.dma_bytes = block.dma_bytes();
     device.device_class = drivers::DeviceClass::kBlock;
     device.capacity = block.capacity_sectors();
     device.driver_data = &block;
@@ -229,6 +230,7 @@ void InitGpu() noexcept {
   device.name = "virtio-gpu0";
   device.mmio_base = g_gpu.mmio_base();
   AssignPciIrq(device, info.value());
+  device.dma_bytes = g_gpu.dma_bytes();
   device.device_class = drivers::DeviceClass::kDisplay;
   device.capacity = static_cast<uint64_t>(g_gpu.width()) * g_gpu.height();
   device.driver_data = &g_gpu;
@@ -275,6 +277,7 @@ void InitInput() noexcept {
   device.name = "virtio-input0";
   device.mmio_base = g_input.mmio_base();
   AssignPciIrq(device, info.value());
+  device.dma_bytes = g_input.dma_bytes();
   device.device_class = drivers::DeviceClass::kInput;
   device.driver_data = &g_input;
   status = drivers::RegisterDevice(device);

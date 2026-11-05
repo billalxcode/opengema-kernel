@@ -96,6 +96,7 @@ class Queue {
 
   [[nodiscard]] uint32_t used_length() const noexcept { return used_length_; }
   [[nodiscard]] uint16_t size() const noexcept { return size_; }
+  [[nodiscard]] uint64_t memory_bytes() const noexcept { return memory_.size; }
   [[nodiscard]] bool is_ready() const noexcept { return ready_; }
   [[nodiscard]] bool has_pending() const noexcept { return pending_count_ != 0U; }
 

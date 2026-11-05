@@ -250,15 +250,20 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   kembali terlihat setelah unmount. Descriptor yang masih terbuka menahan
   root sampai ditutup, lalu node dibebaskan.
 - Test dmesg: `/proc/dmesg` dibaca lewat procfs dan command shell.
-- Test CPU accounting: `/proc/processes` menampilkan kolom `cpu_ms` yang
-  dihitung dari tick scheduler.
+- Test CPU accounting: `/proc/processes` menampilkan kolom `cpu_ms`, uid,
+  gid, dan jumlah region user; `/proc/stat` menampilkan heartbeat per CPU.
+- Test sync: condition variable wait/signal dan read/write lock dijalankan
+  di self-test scheduler.
 - Test observability: `/proc/meminfo` menampilkan frame dan heap,
   `/proc/stat` menampilkan tick, thread, context switch, proses, operasi
   VFS, dan counter block device. `/proc/trace` menampilkan ring event,
-  `/proc/devices` menampilkan registry device, dan `/proc/interrupts`
-  menampilkan jumlah interrupt per IRQ.
+  `/proc/devices` menampilkan registry device, `/proc/interrupts`
+  menampilkan jumlah interrupt per IRQ, dan `/proc/mounts` menampilkan
+  mount table beserta referensinya.
 - Test SysRq: `Ctrl-A` lalu `s` lewat UART mencetak statistik kernel;
   `b`, `o`, dan `h` menjadwalkan reboot, shutdown, dan halt.
+- Test user fault: program `hello fault` menyentuh alamat 0, kernel mencatat
+  fault, mematikan proses, dan shell tetap berjalan.
 - Test watchdog: timer periodik membandingkan heartbeat tiap CPU dan panic
   bila salah satu CPU berhenti menerima tick.
 - Test SMP: `SMP=4` membuat worker thread satu per CPU dan memverifikasi
@@ -266,7 +271,8 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 - Test loglevel: filter runtime bisa dibaca dan diubah dari shell.
 - Test wall clock: `date <unix-seconds>` menyetel RTC PL031, `date`
   mencetak waktu lokal, dan `tz <menit>` menggeser offset dengan format
-  `YYYY-MM-DD HH:MM:SS UTC+HH:MM`.
+  `YYYY-MM-DD HH:MM:SS UTC+HH:MM`. `tz save` menulis offset ke
+  `/volumes/boot/gsl.tz` dan nilainya dimuat lagi setelah reboot.
 - Verifikasi manual block write: baca, tulis pola, baca ulang, lalu pulihkan
   sector terakhir pada salinan `esp.img`.
 - Test persistensi: aplikasi `/applications/fstest/fstest` menjalankan
@@ -286,6 +292,8 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 - Test multi block device: QEMU memakai dua virtio-blk, kernel mencatat
   kapasitas keduanya, dan `/proc/block` menampilkan `virtio-blk0` serta
   `virtio-blk1`. Capability MSI-X dibaca dan jumlah vector dicatat.
+- Test device resource: `/proc/devices` menampilkan urutan probe, MMIO,
+  IRQ, clock, DMA, dan kapasitas tiap device.
 
 Verifikasi branch `dev`:
 

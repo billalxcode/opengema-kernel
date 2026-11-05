@@ -237,6 +237,17 @@ int main() {
     std::printf("procfs probe: interrupts content mismatch\n");
     return 1;
   }
+  og::fs::Node* mounts = nullptr;
+  if (og::IsErr(root.value()->ops->lookup(root.value(), "mounts", &mounts)) ||
+      mounts == nullptr) {
+    std::printf("procfs probe: mounts lookup failed\n");
+    return 1;
+  }
+  if (!ReadAll(mounts, 0, text, sizeof(text), read) || read != 19U ||
+      text[0] != 'm' || text[18] != '\n') {
+    std::printf("procfs probe: mounts content mismatch\n");
+    return 1;
+  }
 
   if (root.value()->ops->lookup(root.value(), "missing", &threads) !=
       og::Status::kNotFound) {
@@ -302,6 +313,11 @@ int main() {
     return 1;
   }
   if (og::IsErr(root.value()->ops->iterate(root.value(), 11, entry, found)) ||
+      !found || entry.name[0] != 'm') {
+    std::printf("procfs probe: iterate twelfth entry failed\n");
+    return 1;
+  }
+  if (og::IsErr(root.value()->ops->iterate(root.value(), 12, entry, found)) ||
       found) {
     std::printf("procfs probe: iterate past end failed\n");
     return 1;

@@ -652,6 +652,7 @@ uint32_t Snapshot(ProcessInfo* out, uint32_t capacity) noexcept {
     out[count].state = process.state;
     out[count].cpu_ms =
       process.thread == nullptr ? 0U : process.thread->cpu_ticks;
+    out[count].regions = process.space.region_count;
     mem::Copy(out[count].name, process.name, sizeof(out[count].name));
     out[count].name[sizeof(out[count].name) - 1U] = '\0';
     ++count;

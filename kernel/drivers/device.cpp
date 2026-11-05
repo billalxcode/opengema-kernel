@@ -41,6 +41,7 @@ Status RegisterDevice(const Device& device) noexcept {
     return Status::kNoMem;
   }
   g_devices[g_count] = device;
+  g_devices[g_count].order = g_count;
   ++g_count;
   return Status::kOk;
 }

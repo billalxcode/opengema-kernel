@@ -43,6 +43,7 @@ def main(argv):
     buffer = bytearray()
     sent = False
     halted = False
+    halt_sent_at = None
 
     with open(log_path, "wb") as log:
         while time.time() < deadline:
@@ -66,13 +67,17 @@ def main(argv):
                 send_line(client, b"halt\n")
                 sent = False
                 halted = True
+                halt_sent_at = time.time()
 
             if b"kernel: halt" in buffer:
+                break
+            if (halted and halt_sent_at is not None and
+                    time.time() - halt_sent_at > 3.0):
                 break
 
     client.close()
     if not halted:
-        print("persist client: marker 'persist: ' missing")
+        print("persist client: marker %r missing" % argv[4])
         return 1
     return 0
 

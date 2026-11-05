@@ -31,6 +31,11 @@ uint64_t g_once_runs = 0;
 uint64_t g_timeout_fired = 0;
 sync::Mutex g_test_mutex;
 sync::Semaphore g_test_semaphore;
+sync::Mutex g_cond_mutex;
+sync::ConditionVariable g_cond_var;
+sync::RwLock g_test_rwlock;
+uint32_t g_cond_ready = 0;
+uint32_t g_cond_seen = 0;
 
 struct AddressSpaceTestState {
   uint64_t expected;
@@ -63,6 +68,17 @@ void MutexWorker(void* /*argument*/) noexcept {
 void SemaphoreWorker(void* /*argument*/) noexcept {
   (void)g_test_semaphore.wait();
   (void)__atomic_add_fetch(&g_semaphore_seen, 1U, __ATOMIC_RELAXED);
+}
+
+void CondWorker(void* /*argument*/) noexcept {
+  if (IsErr(g_cond_mutex.lock())) {
+    return;
+  }
+  while (g_cond_ready == 0U) {
+    g_cond_var.wait(g_cond_mutex);
+  }
+  g_cond_mutex.unlock();
+  __atomic_store_n(&g_cond_seen, 1U, __ATOMIC_RELEASE);
 }
 
 void OnceHandler(void* /*argument*/) noexcept {
@@ -251,6 +267,36 @@ void RunSchedulerSelfTest() noexcept {
       Panic("sched: worker reclaim failed");
     }
   }
+
+  const Result<sched::Thread*> cond_worker =
+    sched::ThreadCreate("cond", &CondWorker, nullptr);
+  if (cond_worker.is_err()) {
+    Panic("sync: cond create failed");
+  }
+  (void)sched::ThreadSleep(5);
+  if (IsErr(g_cond_mutex.lock())) {
+    Panic("sync: cond lock failed");
+  }
+  g_cond_ready = 1U;
+  g_cond_var.signal();
+  g_cond_mutex.unlock();
+  uint32_t cond_waits = 0;
+  while (__atomic_load_n(&g_cond_seen, __ATOMIC_ACQUIRE) == 0U &&
+         cond_waits < 1000U) {
+    (void)sched::ThreadSleep(1);
+    ++cond_waits;
+  }
+  if (__atomic_load_n(&g_cond_seen, __ATOMIC_ACQUIRE) == 0U) {
+    Panic("sync: cond timeout");
+  }
+  if (!ReclaimThread(cond_worker.value())) {
+    Panic("sync: cond reclaim failed");
+  }
+
+  g_test_rwlock.lock_read();
+  g_test_rwlock.unlock_read();
+  g_test_rwlock.lock_write();
+  g_test_rwlock.unlock_write();
 }
 
 void RunAddressSpaceSelfTest() noexcept {

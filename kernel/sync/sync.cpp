@@ -32,10 +32,40 @@ bool Mutex::try_lock() noexcept {
   return acquired;
 }
 
+void Mutex::ReleaseLocked() noexcept {
+  locked_ = false;
+  sched::Thread* waiter = waiters_.head;
+  if (waiter != nullptr) {
+    waiters_.head = waiter->next_wait;
+    waiter->next_wait = nullptr;
+    sched::WakeThread(waiter);
+  }
+}
+
 void Mutex::unlock() noexcept {
   const uint64_t daif = arch::aarch64::IrqSave();
   gate_.lock();
-  locked_ = false;
+  ReleaseLocked();
+  gate_.unlock();
+  arch::aarch64::IrqRestore(daif);
+}
+
+void ConditionVariable::wait(Mutex& mutex) noexcept {
+  const uint64_t daif = arch::aarch64::IrqSave();
+  gate_.lock();
+  mutex.gate_.lock();
+  mutex.ReleaseLocked();
+  sched::WaitQueueEnqueueCurrent(waiters_);
+  mutex.gate_.unlock();
+  gate_.unlock();
+  sched::ScheduleCurrent();
+  (void)mutex.lock();
+  arch::aarch64::IrqRestore(daif);
+}
+
+void ConditionVariable::signal() noexcept {
+  const uint64_t daif = arch::aarch64::IrqSave();
+  gate_.lock();
   sched::Thread* waiter = waiters_.head;
   if (waiter != nullptr) {
     waiters_.head = waiter->next_wait;
@@ -44,6 +74,63 @@ void Mutex::unlock() noexcept {
   }
   gate_.unlock();
   arch::aarch64::IrqRestore(daif);
+}
+
+void ConditionVariable::broadcast() noexcept {
+  const uint64_t daif = arch::aarch64::IrqSave();
+  gate_.lock();
+  sched::Thread* waiter = waiters_.head;
+  waiters_.head = nullptr;
+  while (waiter != nullptr) {
+    sched::Thread* next = waiter->next_wait;
+    waiter->next_wait = nullptr;
+    sched::WakeThread(waiter);
+    waiter = next;
+  }
+  gate_.unlock();
+  arch::aarch64::IrqRestore(daif);
+}
+
+void RwLock::lock_read() noexcept {
+  (void)mutex_.lock();
+  while (writer_ || waiting_writers_ > 0U) {
+    readers_cond_.wait(mutex_);
+  }
+  ++readers_;
+  mutex_.unlock();
+}
+
+void RwLock::unlock_read() noexcept {
+  (void)mutex_.lock();
+  if (readers_ > 0U) {
+    --readers_;
+  }
+  if (readers_ == 0U && waiting_writers_ > 0U) {
+    writers_cond_.signal();
+  }
+  mutex_.unlock();
+}
+
+void RwLock::lock_write() noexcept {
+  (void)mutex_.lock();
+  ++waiting_writers_;
+  while (writer_ || readers_ > 0U) {
+    writers_cond_.wait(mutex_);
+  }
+  --waiting_writers_;
+  writer_ = true;
+  mutex_.unlock();
+}
+
+void RwLock::unlock_write() noexcept {
+  (void)mutex_.lock();
+  writer_ = false;
+  if (waiting_writers_ > 0U) {
+    writers_cond_.signal();
+  } else {
+    readers_cond_.broadcast();
+  }
+  mutex_.unlock();
 }
 
 Status Semaphore::wait() noexcept {

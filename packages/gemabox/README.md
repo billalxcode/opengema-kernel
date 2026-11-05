@@ -47,8 +47,8 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
     membaca ring log kernel dari `/proc/dmesg`, dan `loglevel`
     menampilkan atau mengubah filter level log. `date` mencetak waktu
     lokal dari RTC, dan `date <unix-seconds>` menyetel RTC. `tz`
-    menampilkan offset zona waktu, dan `tz <menit>` mengubahnya dalam
-    rentang -840..840. `stat` menampilkan tipe, ukuran, mode, uid,
+    menampilkan offset zona waktu, `tz <menit>` mengubahnya dalam rentang
+    -840..840, dan `tz save` menyimpannya ke `/volumes/boot/gsl.tz`. `stat` menampilkan tipe, ukuran, mode, uid,
     gid, dan mtime. `chmod <mode> <path>` mengubah permission ramfs,
     `chown <uid> <gid> <path>` mengubah owner, `id` mencetak identity,
     dan `setuid`/`setgid` mengubah identity proses. `mkdir`, `rm`, dan
@@ -56,14 +56,15 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
     `mount ramfs <path>` memasang
     ramfs baru dengan referensi global, dan `umount <path>` melepas
     referensi proses tersebut. `cat /proc/block` menampilkan nama dan
-    kapasitas device blok. `cat /proc/meminfo` menampilkan frame dan heap,
-    sedangkan `cat /proc/stat` menampilkan tick, thread, context switch,
+    kapasitas device blok. `cat /proc/meminfo` menampilkan frame, heap, dan
+    statistik DMA, sedangkan `cat /proc/stat` menampilkan tick, thread, context switch,
     jumlah proses, operasi VFS, dan counter block device. `cat /proc/trace`
     menampilkan ring event block, context switch, spawn, dan exit.
-    `cat /proc/devices` menampilkan registry device beserta kelas, MMIO,
-    IRQ, clock, dan kapasitasnya. `cat /proc/interrupts` menampilkan
-    jumlah interrupt per IRQ. `Ctrl-A` lalu `s` mencetak statistik kernel,
-    `b` reboot, `o` shutdown, dan `h` halt. Pengujian persistensi FAT32 ada di aplikasi terpisah
+    `cat /proc/devices` menampilkan urutan probe, kelas, MMIO, IRQ,
+    clock, DMA, dan kapasitas device. `cat /proc/interrupts` menampilkan
+    jumlah interrupt per IRQ, dan `cat /proc/mounts` menampilkan mount
+    table beserta jumlah referensi. `Ctrl-A` lalu `s` mencetak statistik
+    kernel, `b` reboot, `o` shutdown, dan `h` halt. Pengujian persistensi FAT32 ada di aplikasi terpisah
     `/applications/fstest/fstest`, bukan command shell.
     `halt` menghentikan shell dan init sehingga kernel menyelesaikan self
     test lalu berhenti. `shutdown` dan `reboot` memakai ACPI/PSCI untuk
@@ -90,8 +91,8 @@ gemabox> uptime
 uptime: 12345 ms
 gemabox> sleep 50
 gemabox> ps
-pid ppid state cpu_ms name
-1 0 ready 0 /system/boot/init
+pid ppid uid gid state cpu_ms regions name
+1 0 0 0 ready 0 5 /system/boot/init
 ...
 gemabox> dmesg
 dmesg:

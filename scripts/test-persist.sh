@@ -28,6 +28,7 @@ cp "$ESP" "$DISK"
 run_boot() {
   local command="$1"
   local marker="$2"
+  local started="$(date +%s)"
   rm -f "$SOCKET" "$LOG"
   cp "$VARS" "$VARS_TMP"
   qemu-system-aarch64 \
@@ -56,17 +57,13 @@ run_boot() {
     tail -n 20 "$LOG" || true
     return 1
   fi
+  echo "persist boot: $(( $(date +%s) - started ))s"
   return 0
 }
 
-run_boot $'fstest write\nfstest create' "fstest: create ok"
-run_boot $'fstest read\nfstest read2' "fstest: read2 ok"
-run_boot $'fstest mkdir\nfstest delete' "fstest: delete ok"
-run_boot $'fstest rename\nls /volumes/boot' "RENAMED.BIN"
-run_boot "fstest truncate" "fstest: truncate ok"
-run_boot "fstest empty" "fstest: empty ok"
-run_boot "fstest long" "fstest: long ok"
-run_boot "fstest readlong" "fstest: readlong ok"
-run_boot $'mv "/volumes/boot/persist long name.txt" /volumes/boot/long2.txt\ncat /volumes/boot/long2.txt' "persist ok"
-run_boot $'rm /volumes/boot/long2.txt\ncat /volumes/boot/long2.txt' "cat: open failed"
+run_boot $'fstest write\nfstest create\nfstest mkdir\nfstest long' "fstest: long ok"
+run_boot $'fstest read\nfstest read2\nfstest delete\nfstest rename\nfstest readlong\nfstest truncate\nls /volumes/boot' "RENAMED.BIN"
+run_boot $'fstest empty\nmv "/volumes/boot/persist long name.txt" /volumes/boot/long2.txt\ncat /volumes/boot/long2.txt\nrm /volumes/boot/long2.txt\ncat /volumes/boot/long2.txt' "cat: open failed"
+run_boot $'tz 420\ntz save' "tz: saved"
+run_boot "tz" "tz: +07:00"
 echo "persist probe: OK"

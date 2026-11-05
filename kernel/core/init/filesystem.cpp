@@ -3,9 +3,11 @@
 #include "format.h"
 #include "gsl/layout.h"
 #include "memory.h"
+#include "og/arch/spinlock.h"
 #include "og/core/log.h"
 #include "og/core/status.h"
 #include "og/core/trace.h"
+#include "og/dma/dma.h"
 #include "og/drivers/device.h"
 #include "og/drivers/virtio_blk.h"
 #include "og/events/irq.h"
@@ -20,6 +22,7 @@
 #include "og/io/print.h"
 #include "og/mem/heap.h"
 #include "og/mem/pmm.h"
+#include "og/platform/smp.h"
 #include "og/process/process.h"
 #include "og/sched/sched.h"
 #include "og/time/timer.h"
@@ -32,6 +35,7 @@ fs::FileTable g_boot_files;
 
 // Test file under the fixed /tmp mount.
 constexpr char kHelloPath[] = "/tmp/hello";
+constexpr char kTimezonePath[] = "/volumes/boot/gsl.tz";
 
 Status BlockReadAdapter(void* context, uint64_t sector,
                         std::span<uint8_t> buffer) noexcept {
@@ -209,6 +213,48 @@ Status SetupWritableFs() noexcept {
   return Status::kOk;
 }
 
+void LoadTimeZone() noexcept {
+  const Result<uint32_t> file = fs::FsOpen(g_boot_files, kTimezonePath);
+  if (file.is_err()) {
+    return;
+  }
+  char text[16]{};
+  uint64_t read = 0;
+  const Status status = fs::FsRead(
+    g_boot_files, file.value(),
+    std::span<uint8_t>(reinterpret_cast<uint8_t*>(text), sizeof(text)), read);
+  (void)fs::FsClose(g_boot_files, file.value());
+  if (IsErr(status) || read == 0U) {
+    return;
+  }
+
+  uint64_t index = 0;
+  bool negative = false;
+  if (text[0] == '-') {
+    negative = true;
+    index = 1;
+  }
+  int32_t value = 0;
+  for (; index < read; ++index) {
+    const char symbol = text[index];
+    if (symbol == '\n' || symbol == '\r') {
+      break;
+    }
+    if (symbol < '0' || symbol > '9') {
+      return;
+    }
+    value = (value * 10) + static_cast<int32_t>(symbol - '0');
+    if (value > 840) {
+      return;
+    }
+  }
+  if (negative) {
+    value = -value;
+  }
+  (void)time::SetTimeZoneMinutes(value);
+  Log(LogLevel::kInfo, "time: timezone loaded\n");
+}
+
 Status MountFat32(const fs::BlockDevice& disk) noexcept {
   const Result<fs::Partition> partition = fs::FindEspPartition(disk);
   if (partition.is_err()) {
@@ -227,6 +273,7 @@ Status MountFat32(const fs::BlockDevice& disk) noexcept {
   if (IsErr(status)) {
     return status;
   }
+  LoadTimeZone();
 
   const Result<uint32_t> program =
     fs::FsOpen(g_boot_files, "/volumes/boot/EFI/BOOT/BOOTAA64.EFI");
@@ -272,15 +319,18 @@ const char* ProcessStateName(process::ProcessState state) noexcept {
 Status FormatProcesses(char* buffer, std::size_t capacity,
                        std::size_t& length) noexcept {
   og::fmt::LineBuilder line(buffer, capacity);
-  line.Text("pid ppid state cpu_ms name\n");
+  line.Text("pid ppid uid gid state cpu_ms regions name\n");
   process::ProcessInfo info[process::kMaxProcesses];
   const uint32_t count =
     process::Snapshot(info, process::kMaxProcesses);
   for (uint32_t index = 0; index < count; ++index) {
     line.Dec(info[index].pid).Char(' ')
         .Dec(info[index].parent_pid).Char(' ')
+        .Dec(info[index].uid).Char(' ')
+        .Dec(info[index].gid).Char(' ')
         .Text(ProcessStateName(info[index].state)).Char(' ')
         .Dec(info[index].cpu_ms).Char(' ')
+        .Dec(info[index].regions).Char(' ')
         .Text(info[index].name).Char('\n');
   }
   length = line.size();
@@ -318,6 +368,10 @@ Status FormatMemInfo(char* buffer, std::size_t capacity,
   line.Text("heap_pages: ").Dec(heap.pages).Char('\n');
   line.Text("heap_allocations: ").Dec(heap.allocations).Char('\n');
   line.Text("heap_frees: ").Dec(heap.frees).Char('\n');
+  const dma::Stats dma_stats = dma::GetStats();
+  line.Text("dma_allocs: ").Dec(dma_stats.allocations).Char('\n');
+  line.Text("dma_frees: ").Dec(dma_stats.frees).Char('\n');
+  line.Text("dma_bytes: ").Dec(dma_stats.live_bytes).Char('\n');
   length = line.size();
   return Status::kOk;
 }
@@ -329,6 +383,11 @@ Status FormatStat(char* buffer, std::size_t capacity,
   line.Text("threads: ").Dec(sched::ThreadCount()).Char('\n');
   line.Text("context_switches: ").Dec(sched::ContextSwitchCount()).Char('\n');
   line.Text("processes: ").Dec(process::Count()).Char('\n');
+  const uint32_t online = smp::OnlineCount();
+  for (uint32_t cpu = 0; cpu < online; ++cpu) {
+    line.Text("cpu").Dec(cpu).Text(": ")
+        .Dec(sched::CpuHeartbeat(cpu)).Char('\n');
+  }
   line.Text("vfs_ops: ").Dec(fs::FsOperationCount()).Char('\n');
   const drivers::virtio::BlkStats block = drivers::virtio::GetBlkStats();
   line.Text("block_reads: ").Dec(block.reads).Char('\n');
@@ -356,7 +415,7 @@ Status FormatTrace(char* buffer, std::size_t capacity,
 Status FormatDevices(char* buffer, std::size_t capacity,
                      std::size_t& length) noexcept {
   og::fmt::LineBuilder line(buffer, capacity);
-  line.Text("name class mmio irq clock capacity\n");
+  line.Text("order name class mmio irq clock dma capacity\n");
   for (uint32_t index = 0; index < drivers::kMaxDevices; ++index) {
     const Result<drivers::Device> device = drivers::DeviceAt(index);
     if (device.is_err()) {
@@ -385,10 +444,12 @@ Status FormatDevices(char* buffer, std::size_t capacity,
       default:
         break;
     }
-    line.Text(device.value().name).Char(' ').Text(class_name).Char(' ')
+    line.Dec(device.value().order).Char(' ')
+        .Text(device.value().name).Char(' ').Text(class_name).Char(' ')
         .Hex(device.value().mmio_base).Char(' ')
         .Dec(device.value().irq).Char(' ')
         .Dec(device.value().clock_hz).Char(' ')
+        .Dec(device.value().dma_bytes).Char(' ')
         .Dec(device.value().capacity).Char('\n');
   }
   length = line.size();
@@ -410,11 +471,33 @@ Status FormatInterrupts(char* buffer, std::size_t capacity,
   return Status::kOk;
 }
 
+fs::MountInfo g_mount_snapshot[fs::kMaxMounts];
+arch::aarch64::IrqSpinlock g_mount_snapshot_lock;
+
+Status FormatMounts(char* buffer, std::size_t capacity,
+                    std::size_t& length) noexcept {
+  og::fmt::LineBuilder line(buffer, capacity);
+  line.Text("path refs open_files flags\n");
+  arch::aarch64::LockGuard<arch::aarch64::IrqSpinlock> guard(
+    g_mount_snapshot_lock);
+  const uint32_t count =
+    fs::FsMountSnapshot(g_mount_snapshot, fs::kMaxMounts);
+  for (uint32_t index = 0; index < count; ++index) {
+    line.Text(g_mount_snapshot[index].path).Char(' ')
+        .Dec(g_mount_snapshot[index].refs).Char(' ')
+        .Dec(g_mount_snapshot[index].open_files).Char(' ')
+        .Text(g_mount_snapshot[index].pinned ? "pinned" : "user").Char('\n');
+  }
+  length = line.size();
+  return Status::kOk;
+}
+
 Status MountProcfs() noexcept {
   Result<fs::Node*> proc =
     fs::procfs::Create(&sched::ThreadCount, &FormatProcesses,
                        &FormatBlockDevices, &FormatMemInfo, &FormatStat,
-                       &FormatTrace, &FormatDevices, &FormatInterrupts);
+                       &FormatTrace, &FormatDevices, &FormatInterrupts,
+                       &FormatMounts);
   if (proc.is_err()) {
     return proc.status();
   }
