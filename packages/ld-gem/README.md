@@ -30,7 +30,7 @@ sebagai bagian dari layer libraries, bukan `libgemapi`.
 | `include/ldgem/image.h` | Parsing dan pemetaan shared object |
 | `include/ldgem/linker.h` | Scope simbol, relokasi, dan initializer |
 | `src/elf.cpp` | Pembaca little-endian dan hash SYSV |
-| `src/image.cpp` | `mmap_executable`, salin `PT_LOAD`, load bias |
+| `src/image.cpp` | `mmap` writable, salin `PT_LOAD`, `mprotect` per segmen, load bias |
 | `src/linker.cpp` | `DT_NEEDED`, symbol lookup, relokasi |
 | `src/main.cpp` | Pembacaan environment dan orkestrasi |
 | `src/start.cpp` | Titik masuk EL0 statis |

@@ -2,7 +2,8 @@ ENTRY(_start)
 
 PHDRS
 {
-  image PT_LOAD FLAGS(7);
+  text PT_LOAD FLAGS(5);
+  data PT_LOAD FLAGS(6);
 }
 
 SECTIONS
@@ -13,14 +14,18 @@ SECTIONS
   .text : {
     KEEP(*(.text.entry))
     *(.text*)
-  } :image
-  .rodata : { *(.rodata*) } :image
-  .data : { *(.data*) } :image
+  } :text
+  .rodata : { *(.rodata*) } :text
+  .rela.dyn : { *(.rela.dyn) } :text
+
+  . = ALIGN(0x1000);
+  .data : { *(.data*) } :data
+  .got : { *(.got*) } :data
   .init_array : {
     __init_array_start = .;
     KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*)))
     KEEP(*(.init_array))
     __init_array_end = .;
-  } :image
-  .bss : { *(.bss*) *(COMMON) } :image
+  } :data
+  .bss : { *(.bss*) *(COMMON) } :data
 }

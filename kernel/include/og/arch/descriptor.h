@@ -25,6 +25,9 @@ constexpr uint64_t kUxn = 1ULL << 54U;
 constexpr uint64_t kApShift = 6;
 constexpr uint64_t kApUserRw = 1ULL << kApShift;
 constexpr uint64_t kApEl1Ro = 2ULL << kApShift;
+// AP[1:0] = 0b11: EL1 read-only, EL0 read-only. This is the encoding user
+// read-only pages need; kApEl1Ro would deny EL0 access entirely.
+constexpr uint64_t kApUserRo = 3ULL << kApShift;
 
 // MAIR attr0 is Normal write back, attr1 is Device nGnRnE.
 constexpr uint64_t kMairNormalWriteBack = 0xFFULL;
@@ -61,7 +64,8 @@ enum class MemoryKind : uint32_t {
 }
 
 [[nodiscard]] inline uint64_t BlockDescriptor(uint64_t address, MemoryKind kind,
-                                             bool executable, bool user = false) noexcept {
+                                             bool executable, bool user = false,
+                                             bool writable = true) noexcept {
   uint64_t descriptor = address | kDescriptorBlock |
                         (static_cast<uint64_t>(kind) << kAttrIndexShift) | kAccessFlag;
   if (kind == MemoryKind::kNormal) {
@@ -74,13 +78,14 @@ enum class MemoryKind : uint32_t {
     descriptor |= kPxn | kUxn;
   }
   if (user) {
-    descriptor |= kApUserRw | kPxn | kNonGlobal;
+    descriptor |= (writable ? kApUserRw : kApUserRo) | kPxn | kNonGlobal;
   }
   return descriptor;
 }
 
 [[nodiscard]] inline uint64_t PageDescriptor(uint64_t address, MemoryKind kind,
-                                            bool executable, bool user = false) noexcept {
+                                            bool executable, bool user = false,
+                                            bool writable = true) noexcept {
   uint64_t descriptor = address | kDescriptorPage |
                         (static_cast<uint64_t>(kind) << kAttrIndexShift) | kAccessFlag;
   if (kind == MemoryKind::kNormal) {
@@ -93,7 +98,7 @@ enum class MemoryKind : uint32_t {
     descriptor |= kPxn | kUxn;
   }
   if (user) {
-    descriptor |= kApUserRw | kPxn | kNonGlobal;
+    descriptor |= (writable ? kApUserRw : kApUserRo) | kPxn | kNonGlobal;
   }
   return descriptor;
 }

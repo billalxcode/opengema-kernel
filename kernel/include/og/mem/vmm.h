@@ -51,7 +51,7 @@ void AddressSpaceActivate(const AddressSpace* space) noexcept;
 // Chooses 1 GiB, 2 MiB, or 4 KiB pages based on alignment and size.
 [[nodiscard]] Status VmmMap(uint64_t virtual_address, uint64_t physical_address, uint64_t size,
                            arch::aarch64::MemoryKind kind, bool executable,
-                           bool user = false) noexcept;
+                           bool user = false, bool writable = true) noexcept;
 
 [[nodiscard]] Status VmmUnmap(uint64_t virtual_address, uint64_t size) noexcept;
 
@@ -76,12 +76,18 @@ struct PageAttributes {
 
 // Allocates and zeroes user accessible pages in the given address space.
 [[nodiscard]] Status VmmMapUser(AddressSpace& space, uint64_t virtual_address,
-                                uint64_t size, bool executable) noexcept;
+                                uint64_t size, bool executable,
+                                bool writable = true) noexcept;
 
 // Unmaps a user region and frees its physical frames. The range must match
 // a region created by VmmMapUser exactly.
 [[nodiscard]] Status VmmUnmapUser(AddressSpace& space, uint64_t virtual_address,
                                   uint64_t size) noexcept;
+
+// Rewrites user page permissions for code or data mappings.
+[[nodiscard]] Status VmmProtectUser(AddressSpace& space, uint64_t base,
+                                    uint64_t size, bool executable,
+                                    bool writable) noexcept;
 
 // Validated copies between kernel buffers and user mappings. The copy walks
 // the page tables, so it does not depend on which space is active.

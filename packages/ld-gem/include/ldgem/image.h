@@ -15,6 +15,7 @@ struct Segment {
   u64 file_size;
   u64 memory_size;
   bool executable;
+  bool writable;
 };
 
 struct Image {

@@ -103,6 +103,7 @@ bool ParseImage(const u8* data, u64 size, u64 file_size, Image& out) noexcept {
     segment.file_size = file_bytes;
     segment.memory_size = memory_bytes;
     segment.executable = (elf::Read32(data, base + 4U) & 1U) != 0U;
+    segment.writable = (elf::Read32(data, base + 4U) & 2U) != 0U;
     ++image.segment_count;
 
     if (virtual_address < image.min_address) {
@@ -153,7 +154,7 @@ bool LoadImage(const char* path, Image& image, u64& base, u64& dynamic) noexcept
   }
 
   const u64 span = image.max_address - image.min_address;
-  void* mapping = kgema::mmap_executable(span);
+  void* mapping = kgema::mmap(span);
   if (mapping == nullptr) {
     Report("mmap failed", path);
     (void)kgema::close(descriptor);
@@ -174,6 +175,24 @@ bool LoadImage(const char* path, Image& image, u64& base, u64& dynamic) noexcept
     auto* destination = reinterpret_cast<u8*>(base + segment.virtual_address);
     if (!ReadExact(descriptor, destination, segment.file_size)) {
       Report("segment read failed", path);
+      (void)kgema::close(descriptor);
+      return false;
+    }
+  }
+
+  // The mapping starts writable and NX so the image can be populated. Each
+  // segment then gets its final permission: code RX, data RW NX (W^X).
+  for (u32 index = 0; index < image.segment_count; ++index) {
+    const Segment& segment = image.segments[index];
+    const u64 address = base + segment.virtual_address;
+    const u64 page_base = address & ~kPageMask;
+    const u64 page_size =
+      elf::AlignUp((address - page_base) + segment.memory_size, kPageSize);
+    const bool executable = segment.executable;
+    const bool writable = !executable && segment.writable;
+    if (!kgema::mprotect(reinterpret_cast<void*>(page_base), page_size,
+                         executable, writable)) {
+      Report("mprotect failed", path);
       (void)kgema::close(descriptor);
       return false;
     }

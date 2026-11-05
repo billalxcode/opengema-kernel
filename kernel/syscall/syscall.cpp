@@ -52,6 +52,9 @@ constexpr uint64_t kResultError = static_cast<uint64_t>(-1);
     case kSysMunmap:
       status = DoMunmap(frame->x[0], frame->x[1], result);
       break;
+    case kSysMprotect:
+      status = DoMprotect(frame->x[0], frame->x[1], frame->x[2], result);
+      break;
     case kSysOpen:
       status = DoOpen(frame->x[0], frame->x[1], result);
       break;

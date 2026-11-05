@@ -57,9 +57,11 @@ namespace {
   PageAttributes attributes{};
   attributes.executable_el1 = (descriptor & arch::aarch64::kPxn) == 0;
   attributes.executable_el0 = (descriptor & arch::aarch64::kUxn) == 0;
-  const uint64_t access = descriptor & (3ULL << 6U);
-  attributes.writable = access != arch::aarch64::kApEl1Ro;
-  attributes.user = access == arch::aarch64::kApUserRw;
+  const uint64_t access = descriptor & (3ULL << arch::aarch64::kApShift);
+  // AP[1] clears write access for both EL1 and EL0; AP[0] grants EL0 access.
+  attributes.writable =
+    (access & (1ULL << (arch::aarch64::kApShift + 1U))) == 0U;
+  attributes.user = (access & (1ULL << arch::aarch64::kApShift)) != 0U;
   return attributes;
 }
 

@@ -40,7 +40,13 @@ Status MapImage(fs::FileTable& files, uint32_t file, const elf::Image& image,
     const uint64_t map_size =
       bits::AlignUp(page_offset + segment.memory_size, elf::kPageSize);
     status = mem::VmmMapUser(space, map_base, map_size, segment.executable);
-    if (IsErr(status) || segment.file_size == 0U) {
+    if (IsErr(status)) {
+      continue;
+    }
+    if (segment.file_size == 0U) {
+      if (segment.executable) {
+        status = mem::VmmProtectUser(space, map_base, map_size, true, false);
+      }
       continue;
     }
 
@@ -64,6 +70,9 @@ Status MapImage(fs::FileTable& files, uint32_t file, const elf::Image& image,
     if (IsOk(status)) {
       status = mem::VmmCopyOut(space, segment.virtual_address, buffer.value(),
                                segment.file_size);
+    }
+    if (IsOk(status) && segment.executable) {
+      status = mem::VmmProtectUser(space, map_base, map_size, true, false);
     }
     (void)mem::HeapFree(buffer.value());
   }

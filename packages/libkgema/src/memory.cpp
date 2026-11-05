@@ -37,4 +37,22 @@ bool munmap(void* address, usize size) noexcept {
   return result == 0;
 }
 
+bool mprotect(void* address, usize size, bool executable,
+              bool writable) noexcept {
+  if (address == nullptr || size == 0 || (executable && writable)) {
+    return false;
+  }
+  i64 flags = 0;
+  if (executable) {
+    flags |= 1;
+  }
+  if (writable) {
+    flags |= 2;
+  }
+  const i64 result = syscall::invoke3(syscall::kMprotect,
+                                      reinterpret_cast<i64>(address),
+                                      static_cast<i64>(size), flags);
+  return result == 0;
+}
+
 }  // namespace kgema

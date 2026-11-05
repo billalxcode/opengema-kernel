@@ -264,10 +264,21 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   `b`, `o`, dan `h` menjadwalkan reboot, shutdown, dan halt.
 - Test user fault: program `hello fault` menyentuh alamat 0, kernel mencatat
   fault, mematikan proses, dan shell tetap berjalan.
+- Test pointer invalid: `hello badptr` memanggil `open` dengan pointer `1`,
+  kernel menolaknya, dan proses tetap hidup.
+- Test fuzz argumen: `hello fuzz` menjalankan 512 panggilan dengan pointer,
+  ukuran, flag, argc, dan pid acak deterministik. Semua kegagalan ditolak
+  tanpa panic dan program mencetak `FUZZ-DONE`.
+- Test W^X user: `hello wx` mencoba menulis ke halaman code; proses fault,
+  shell tetap berjalan, dan tidak ada `code write allowed`.
+- Test mprotect dynamic linker: ld-gem memetakan shared object writable,
+  menyalin segmen, lalu memanggil `mprotect` agar teks RX dan data RW NX;
+  seluruh program dynamic tetap berjalan.
 - Test watchdog: timer periodik membandingkan heartbeat tiap CPU dan panic
   bila salah satu CPU berhenti menerima tick.
 - Test SMP: `SMP=4` membuat worker thread satu per CPU dan memverifikasi
-  seluruh CPU menjalankan worker.
+  seluruh CPU menjalankan worker. Ping-pong semaphore 200 kali menguji lost
+  wakeup, dan sleep overshoot dicatat sebagai metrik latency.
 - Test loglevel: filter runtime bisa dibaca dan diubah dari shell.
 - Test wall clock: `date <unix-seconds>` menyetel RTC PL031, `date`
   mencetak waktu lokal, dan `tz <menit>` menggeser offset dengan format

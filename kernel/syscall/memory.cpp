@@ -25,7 +25,8 @@ Status DoMmap(uint64_t size, uint64_t flags, uint64_t& result) noexcept {
   const uint64_t address = process->space.mmap_next;
   const bool executable = (flags & kMmapFlagExecutable) != 0U;
   const Status status =
-    mem::VmmMapUser(process->space, address, aligned, executable);
+    mem::VmmMapUser(process->space, address, aligned, executable,
+                    !executable);
   if (IsErr(status)) {
     return status;
   }
@@ -47,6 +48,41 @@ Status DoMunmap(uint64_t address, uint64_t size, uint64_t& result) noexcept {
   }
   const uint64_t aligned = (size + kPageSize - 1U) & ~(kPageSize - 1U);
   const Status status = mem::VmmUnmapUser(process->space, address, aligned);
+  if (IsErr(status)) {
+    return status;
+  }
+  result = 0;
+  return Status::kOk;
+}
+
+Status DoMprotect(uint64_t address, uint64_t size, uint64_t flags,
+                  uint64_t& result) noexcept {
+  constexpr uint64_t kAllowed =
+    kProtectFlagExecutable | kProtectFlagWritable;
+  const bool executable = (flags & kProtectFlagExecutable) != 0U;
+  const bool writable = (flags & kProtectFlagWritable) != 0U;
+  if (size == 0U || (flags & ~kAllowed) != 0U || (executable && writable)) {
+    return Status::kInvalidArg;
+  }
+  if ((address % kPageSize) != 0U || address < mem::kUserSpaceBase) {
+    return Status::kInvalidArg;
+  }
+  process::Process* process = CurrentProcess();
+  if (process == nullptr) {
+    return Status::kNotInit;
+  }
+  if (size > mem::kUserSpaceSize) {
+    return Status::kInvalidArg;
+  }
+  const uint64_t aligned = (size + kPageSize - 1U) & ~(kPageSize - 1U);
+  if (address > (kUserMmapLimit - aligned)) {
+    return Status::kInvalidArg;
+  }
+  if (!mem::VmmUserContains(process->space, address, aligned)) {
+    return Status::kInvalidArg;
+  }
+  const Status status =
+    mem::VmmProtectUser(process->space, address, aligned, executable, writable);
   if (IsErr(status)) {
     return status;
   }

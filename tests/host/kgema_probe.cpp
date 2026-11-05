@@ -41,6 +41,7 @@ i64 invoke3(i64 number, i64 arg0, i64 arg1, i64 arg2) noexcept {
     case kSeek:
     case kChdir:
     case kMunmap:
+    case kMprotect:
       return 0;
     case kRead:
       if (arg0 != 42 || arg1 == 0 || arg2 <= 0) {
@@ -217,6 +218,21 @@ int main() {
   void* executable = kgema::mmap_executable(16U);
   if (executable != reinterpret_cast<void*>(0x2000)) {
     return Fail("mmap executable failed");
+  }
+  if (!kgema::mprotect(mapped, 16U, true, false)) {
+    return Fail("mprotect failed");
+  }
+  if (g_last_number != kgema::syscall::kMprotect ||
+      g_last_arg0 != reinterpret_cast<i64>(mapped) ||
+      g_last_arg1 != 16 || g_last_arg2 != 1) {
+    return Fail("mprotect args");
+  }
+  if (kgema::mprotect(mapped, 16U, true, true)) {
+    return Fail("mprotect w+x accepted");
+  }
+  if (kgema::mprotect(nullptr, 16U, false, true) ||
+      kgema::mprotect(mapped, 0U, false, true)) {
+    return Fail("mprotect invalid args");
   }
   if (!kgema::munmap(mapped, 16U)) {
     return Fail("munmap failed");

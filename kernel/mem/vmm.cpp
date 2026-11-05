@@ -120,7 +120,8 @@ void DropUserRegion(AddressSpace& space, uint32_t index) noexcept {
 
 [[nodiscard]] Status MapChunk(uint64_t* root, uint64_t virtual_address,
                              uint64_t physical_address, uint64_t size,
-                             MemoryKind kind, bool executable, bool user) noexcept {
+                             MemoryKind kind, bool executable, bool user,
+                             bool writable) noexcept {
   uint64_t* table = root;
   for (unsigned level = 0; level < 3; ++level) {
     const uint64_t index = Index(virtual_address, level);
@@ -128,14 +129,16 @@ void DropUserRegion(AddressSpace& space, uint32_t index) noexcept {
       if (DescriptorValid(table[index])) {
         return Status::kExists;
       }
-      table[index] = BlockDescriptor(physical_address, kind, executable, user);
+      table[index] = BlockDescriptor(physical_address, kind, executable, user,
+                                     writable);
       return Status::kOk;
     }
     if (level == 2 && size == kBlockSize2M) {
       if (DescriptorValid(table[index])) {
         return Status::kExists;
       }
-      table[index] = BlockDescriptor(physical_address, kind, executable, user);
+      table[index] = BlockDescriptor(physical_address, kind, executable, user,
+                                     writable);
       return Status::kOk;
     }
     const Result<uint64_t*> next = NextTable(table, index);
@@ -149,7 +152,8 @@ void DropUserRegion(AddressSpace& space, uint32_t index) noexcept {
   if (DescriptorValid(table[index])) {
     return Status::kExists;
   }
-  table[index] = PageDescriptor(physical_address, kind, executable, user);
+  table[index] = PageDescriptor(physical_address, kind, executable, user,
+                                writable);
   return Status::kOk;
 }
 
@@ -204,7 +208,8 @@ void DropUserRegion(AddressSpace& space, uint32_t index) noexcept {
 
 [[nodiscard]] Status MapRange(uint64_t* root, uint64_t virtual_address,
                              uint64_t physical_address, uint64_t size,
-                             MemoryKind kind, bool executable, bool user) noexcept {
+                             MemoryKind kind, bool executable, bool user,
+                             bool writable) noexcept {
   uint64_t offset = 0;
   while (offset < size) {
     const uint64_t current_virtual = virtual_address + offset;
@@ -212,7 +217,8 @@ void DropUserRegion(AddressSpace& space, uint32_t index) noexcept {
     const uint64_t remaining = size - offset;
     const uint64_t step = ChunkSize(current_virtual, current_physical, remaining);
     const Status status =
-      MapChunk(root, current_virtual, current_physical, step, kind, executable, user);
+      MapChunk(root, current_virtual, current_physical, step, kind, executable,
+               user, writable);
     if (IsErr(status)) {
       return status;
     }
@@ -287,12 +293,13 @@ Status VmmInit(const BootInfo& info) noexcept {
   g_root = tables;
 
   // Device space below RAM, then RAM itself.
-  Status status = MapRange(g_root, 0, 0, info.ram_base, MemoryKind::kDevice, false, false);
+  Status status = MapRange(g_root, 0, 0, info.ram_base, MemoryKind::kDevice,
+                           false, false, true);
   if (IsErr(status)) {
     return status;
   }
   status = MapRange(g_root, info.ram_base, info.ram_base, info.ram_size,
-                    MemoryKind::kNormal, false, false);
+                    MemoryKind::kNormal, false, false, true);
   if (IsErr(status)) {
     return status;
   }
@@ -310,7 +317,8 @@ Status VmmInit(const BootInfo& info) noexcept {
 }
 
 Status VmmMap(uint64_t virtual_address, uint64_t physical_address, uint64_t size,
-              MemoryKind kind, bool executable, bool user) noexcept {
+              MemoryKind kind, bool executable, bool user,
+              bool writable) noexcept {
   if (g_root == nullptr) {
     return Status::kNotInit;
   }
@@ -332,7 +340,8 @@ Status VmmMap(uint64_t virtual_address, uint64_t physical_address, uint64_t size
   if ((physical_address + size) < physical_address) {
     return Status::kInvalidArg;
   }
-  return MapRange(g_root, virtual_address, physical_address, size, kind, executable, user);
+  return MapRange(g_root, virtual_address, physical_address, size, kind,
+                  executable, user, writable);
 }
 
 Status VmmUnmap(uint64_t virtual_address, uint64_t size) noexcept {
@@ -445,8 +454,57 @@ Status VmmMapDevice(uint64_t base, uint64_t size) noexcept {
   return Status::kOk;
 }
 
+Status VmmProtectUser(AddressSpace& space, uint64_t base, uint64_t size,
+                      bool executable, bool writable) noexcept {
+  if (g_root == nullptr || space.root == 0) {
+    return Status::kNotInit;
+  }
+  if (size == 0U || (base % kPageSize) != 0U) {
+    return Status::kInvalidArg;
+  }
+  if ((base + size) < base) {
+    return Status::kInvalidArg;
+  }
+  const uint64_t aligned = (size + kPageSize - 1U) & ~(kPageSize - 1U);
+  auto* root = reinterpret_cast<uint64_t*>(space.root);
+  for (uint64_t offset = 0; offset < aligned; offset += kPageSize) {
+    const uint64_t address = base + offset;
+    const uint64_t root_entry = root[Index(address, 0)];
+    if (!DescriptorValid(root_entry) || !DescriptorIsTable(root_entry)) {
+      return Status::kNotFound;
+    }
+    auto* level1 = reinterpret_cast<uint64_t*>(DescriptorAddress(root_entry));
+    const uint64_t level1_entry = level1[Index(address, 1)];
+    if (!DescriptorValid(level1_entry) || !DescriptorIsTable(level1_entry)) {
+      return Status::kNotFound;
+    }
+    auto* level2 = reinterpret_cast<uint64_t*>(DescriptorAddress(level1_entry));
+    const uint64_t level2_entry = level2[Index(address, 2)];
+    if (!DescriptorValid(level2_entry) || !DescriptorIsTable(level2_entry)) {
+      return Status::kNotFound;
+    }
+    auto* level3 = reinterpret_cast<uint64_t*>(DescriptorAddress(level2_entry));
+    uint64_t& entry = level3[Index(address, 3)];
+    if (!DescriptorValid(entry)) {
+      return Status::kNotFound;
+    }
+    entry &= ~(arch::aarch64::kPxn | arch::aarch64::kUxn |
+               arch::aarch64::kApUserRw | arch::aarch64::kApEl1Ro |
+               arch::aarch64::kApUserRo);
+    entry |= arch::aarch64::kPxn | arch::aarch64::kNonGlobal;
+    if (!executable) {
+      entry |= arch::aarch64::kUxn;
+    }
+    entry |= writable ? arch::aarch64::kApUserRw
+                      : arch::aarch64::kApUserRo;
+    arch::aarch64::InvalidateTlbVaLocal(address);
+  }
+  arch::aarch64::InvalidateTlbSync();
+  return Status::kOk;
+}
+
 Status VmmMapUser(AddressSpace& space, uint64_t virtual_address, uint64_t size,
-                  bool executable) noexcept {
+                  bool executable, bool writable) noexcept {
   if (g_root == nullptr || space.root == 0) {
     return Status::kNotInit;
   }
@@ -479,7 +537,8 @@ Status VmmMapUser(AddressSpace& space, uint64_t virtual_address, uint64_t size,
     }
     mem::Zero(reinterpret_cast<void*>(frame.value()), kPageSize);
     const Status status = MapChunk(root, virtual_address + offset, frame.value(),
-                                   kPageSize, MemoryKind::kNormal, executable, true);
+                                   kPageSize, MemoryKind::kNormal, executable,
+                                   true, writable);
     if (IsErr(status)) {
       (void)PmmFreePage(frame.value());
       return status;
@@ -577,6 +636,10 @@ void AddressSpaceActivate(const AddressSpace* space) noexcept {
   if (active.valid && active.root == root && active.asid == asid) {
     return;
   }
+  // User permission changes only invalidate the TLB of the CPU that made
+  // them. Flushing on every address-space change keeps a migrated thread
+  // from reusing an older translation (for example writable code).
+  arch::aarch64::InvalidateTlbAllLocal();
   arch::aarch64::SwitchAddressSpace(root, asid);
   active.root = root;
   active.asid = asid;

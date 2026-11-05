@@ -17,6 +17,8 @@ constexpr uint64_t kTtyLine = 128;
 constexpr uint64_t kStdout = 1;
 constexpr uint64_t kPageSize = 4096;
 constexpr uint64_t kMmapFlagExecutable = 1;
+constexpr uint64_t kProtectFlagExecutable = 1;
+constexpr uint64_t kProtectFlagWritable = 2;
 constexpr uint64_t kUserMmapLimit =
   mem::kUserSpaceBase + mem::kUserSpaceSize;
 
@@ -58,6 +60,9 @@ namespace og::syscall {
 
 [[nodiscard]] Status DoMunmap(uint64_t address, uint64_t size,
                               uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoMprotect(uint64_t address, uint64_t size,
+                                uint64_t flags, uint64_t& result) noexcept;
 
 [[nodiscard]] Status DoRead(uint64_t descriptor, uint64_t user_buffer,
                             uint64_t length, uint64_t& result) noexcept;

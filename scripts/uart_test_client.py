@@ -99,6 +99,12 @@ def main(argv):
     hello_sent = False
     fault_sent = False
     fault_seen = False
+    wx_sent = False
+    wx_seen = False
+    badptr_sent = False
+    badptr_seen = False
+    fuzz_sent = False
+    fuzz_seen = False
     halt_sent = False
     halted = False
 
@@ -324,7 +330,31 @@ def main(argv):
             if fault_sent and not fault_seen and b"FAULT-DONE" in buffer:
                 fault_seen = True
 
-            if fault_seen and not halt_sent and b"FAULT-DONE" in buffer:
+            if fault_seen and not wx_sent and b"FAULT-DONE" in buffer:
+                send_line(client, b"hello wx\necho WX-DONE\n")
+                wx_sent = True
+                buffer.clear()
+
+            if wx_sent and not wx_seen and b"WX-DONE" in buffer:
+                wx_seen = True
+
+            if wx_seen and not badptr_sent and b"WX-DONE" in buffer:
+                send_line(client, b"hello badptr\necho BADPTR-DONE\n")
+                badptr_sent = True
+                buffer.clear()
+
+            if badptr_sent and not badptr_seen and b"BADPTR-DONE" in buffer:
+                badptr_seen = True
+
+            if badptr_seen and not fuzz_sent and b"BADPTR-DONE" in buffer:
+                send_line(client, b"hello fuzz\necho FUZZ-DONE\n")
+                fuzz_sent = True
+                buffer.clear()
+
+            if fuzz_sent and not fuzz_seen and b"FUZZ-DONE" in buffer:
+                fuzz_seen = True
+
+            if fuzz_seen and not halt_sent and b"FUZZ-DONE" in buffer:
                 send_line(client, b"halt\n")
                 halt_sent = True
 

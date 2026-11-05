@@ -16,15 +16,15 @@ Prioritas: P0 blocker, P1 penting, P2 menengah, P3 nanti.
 | Reklamasi | Stack, address space, FD, dan slot proses dibebaskan; frame kembali | PID reuse, reklamasi saat gagal di tengah jalan | Aman untuk dua proses, belum untuk beban besar | P0 |
 | SDK dan shell | API berkas/proses/waktu, argv, konstruktor C++, shell multi perintah | Packaging SDK, contoh program, dan template package | Belum ada pengalaman userland yang nyata | P1 |
 | Filesystem | FAT32 read-only, ramfs statis, mount internal | Tulis berkas, mkdir, unlink, rename, mount/umount, permission, sync | Data tidak bisa disimpan atau diubah | P1 |
-| Memori user | Semua halaman user RWX, tanpa demand paging | W^X user, guard stack, stack growth, COW, file-backed mmap, accounting, OOM | Isolasi dan keamanan user lemah | P1 |
+| Memori user | W^X user, stack statis, tanpa demand paging | Guard stack, stack growth, COW, file-backed mmap, accounting, OOM | Isolasi dan keamanan user membaik, belum ada demand paging | P1 |
 | Scheduler | Per-CPU, thread tidak migrasi, tanpa prioritas | Migrasi/work stealing, prioritas, join, condvar, rwlock, futex, TLS | Beban tidak seimbang, primitif sinkronisasi kurang | P1 |
 | TLB dan SMP | ASID dipakai, AS dipin ke satu core | TLB shootdown lintas core, ASID reuse yang aman, 4 core test | Mappings kernel/user bisa basi pada SMP | P1 |
 | Driver | UART, RTC, PCI, virtio-blk, virtio-gpu | virtio-net, input, MSI-X, virtio IRQ, multi device, DMA streaming | Belum ada jaringan atau input interaktif | P1 |
 | Platform | QEMU virt hardcoded, DTB dan ACPI discovery dasar | GTDT detail, ACPI memory map, discovery RAM/device, initrd, cmdline | Sulit pindah board atau boot ACPI penuh | P2 |
 | Daya dan waktu | RTC dibaca saat boot, shutdown/reboot ACPI dan PSCI | settime, timezone, shutdown dari service manager | Mesin bisa dimatikan dan di-reboot dari shell | P2 |
 | Observability | Log serial, panic, procfs uptime/threads | dmesg ring, tracing, counter, watchdog, statistik memori/CPU | Debug produksi dan regresi sulit | P1 |
-| Test dan CI | Satu smoke test QEMU, host test libs/core | Unit test VMM/sched/FS, matriks QEMU, negative test, fuzzing, sanitizer, CI | Regresi mahal dan mudah lolos | P1 |
-| Keamanan | W^X kernel, stack canary | W^X user, KASLR, PAC/BTI, PAN, validasi syscall, fuzzing | Permukaan serangan user ke kernel masih lebar | P1 |
+| Test dan CI | Smoke QEMU, host test libs/core, fuzz argumen deterministik | Unit test VMM/sched/FS, fuzz coverage-guided, sanitizer, CI | Regresi mahal dan mudah lolos | P1 |
+| Keamanan | W^X kernel dan user, stack canary, fuzz argumen deterministik | KASLR, PAC/BTI, PAN, fuzz coverage-guided | W^X dan fuzz dasar aktif, mitigasi hardware belum | P1 |
 | Dev experience | compile_commands sudah mencakup packages | SDK install/export, contoh program, template package | Program baru masih menyalin konfigurasi | P2 |
 | Jaringan | Tidak ada | Ethernet, ARP, IPv4, ICMP, UDP, socket | Tidak ada konektivitas | P2 |
 
@@ -186,9 +186,13 @@ keyboard di jendela QEMU.
 - [ ] MEM-11 COW untuk fork atau clone.
 - [ ] MEM-12 Stack growth dan guard page user.
 - [ ] MEM-13 File-backed mmap dan shared memory.
-- [ ] MEM-14 W^X user: code RX, data/stack RW dan NX.
+- [x] MEM-14 W^X user: segmen executable dipetakan RX, data/stack dan
+      mmap non-executable RW NX, mmap executable RX, serta syscall
+      `mprotect` untuk mengubah permission tanpa W+X.
 - [ ] MEM-15 Accounting per proses, limit, dan OOM killer minimal.
-- [ ] MEM-16 TLB shootdown lintas core dan ASID reuse yang aman.
+- [~] MEM-16 TLB shootdown lintas core dan ASID reuse yang aman.
+      Flush lokal saat address space berganti sudah ada; shootdown lintas
+      core dan reuse ASID belum.
 - [ ] MEM-17 ASLR untuk stack, mmap, dan executable.
 - [~] MEM-18 User fault dari EL0 sekarang mematikan proses, bukan panic.
       COW, limit memori, dan uji fault lain belum.
@@ -207,7 +211,8 @@ demand paging lulus uji.
 - [ ] SCH-15 TLS dan dukungan thread-local storage.
 - [x] SCH-16 Accounting CPU per proses: tick scheduler menambah `cpu_ticks`
       thread dan `/proc/processes` menampilkan `cpu_ms`.
-- [~] SCH-17 Uji stres 4 core: thread worker dibuat satu per CPU dan QEMU\n      menerima `SMP=4`. Latency preemption dan lost wakeup belum diuji\n      terpisah.
+- [x] SCH-17 Uji stres 4 core: worker per CPU, ping-pong semaphore 200 kali,
+      metrik sleep overshoot, dan QEMU `SMP=4`.
 
 **Selesai bila:** beban merata di 4 core, thread bisa join, dan primitif
 sinkronisasi lulus uji stres.
@@ -243,7 +248,10 @@ bekerja dari shell.
 - [ ] SEC-01 KASLR dan relokasi image.
 - [ ] SEC-02 PAN dan validasi akses user yang seragam.
 - [ ] SEC-03 PAC/BTI bila tersedia di target.
-- [ ] SEC-04 Validasi syscall dan fuzzing argumen user.
+- [x] SEC-04 Validasi pointer user diuji dari EL0: `hello badptr` menolak
+      pointer invalid, dan `hello fuzz` menjalankan 512 panggilan dengan
+      pointer/ukuran acak deterministik tanpa panic. Fuzz coverage-guided
+      belum.
 - [ ] CI-01 GitHub Actions: build, host test, QEMU smoke, clang-tidy.
 - [ ] CI-02 Sanitizer host test dan coverage.
 - [ ] CI-03 Artifact image dan firmware versi terkunci.

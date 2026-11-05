@@ -15,7 +15,7 @@ masuk `_start` berada di `libgemapi`.
 | `kgema/syscall.h` | Nomor syscall dan `invoke3` |
 | `kgema/io.h` | `write` untuk buffer dan string literal |
 | `kgema/file.h` | `open`, `close`, `read`, `write`, `seek`, `stat`, `chdir`, `list`, `chmod`, `chown`, `mount`, dan `umount` |
-| `kgema/memory.h` | `mmap`, `mmap_executable`, dan `munmap` |
+| `kgema/memory.h` | `mmap`, `mmap_executable`, `munmap`, dan `mprotect` |
 | `kgema/process.h` | `getpid`, `spawn`, `wait`, `exit`, `uid`, `gid`, `setuid`, dan `setgid` |
 
 `src/runtime.cpp` menyediakan `memset`, `memcpy`, dan `memmove` yang mungkin
@@ -53,5 +53,6 @@ build/libkgema.so -> libkgema.so.1
 - Descriptor 0, 1, dan 2 dicadangkan untuk stdio. Berkas mulai dari fd 3.
 - `read` pada fd 0 membaca satu baris dari UART dengan echo, backspace, dan
   blocking sampai newline.
-- `mmap_executable` hanya dipakai dynamic linker. Aplikasi biasa memakai
-  `gemapi::memory::map` yang tidak executable.
+- `mmap_executable` memetakan satu region RX. Dynamic linker memakai `mmap`
+  writable, menyalin segmen, lalu `mprotect` agar teks RX dan data RW NX.
+  Aplikasi biasa memakai `gemapi::memory::map` yang tidak executable.

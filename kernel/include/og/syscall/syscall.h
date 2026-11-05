@@ -45,6 +45,7 @@ constexpr uint64_t kSysSetUid = 35;
 constexpr uint64_t kSysGetGid = 36;
 constexpr uint64_t kSysSetGid = 37;
 constexpr uint64_t kSysChown = 38;
+constexpr uint64_t kSysMprotect = 39;
 
 void SyscallInit() noexcept;
 

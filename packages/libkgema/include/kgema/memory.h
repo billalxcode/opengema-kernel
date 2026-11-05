@@ -16,4 +16,9 @@ namespace kgema {
 // Returns true when the kernel accepted the unmap.
 [[nodiscard]] bool munmap(void* address, usize size) noexcept;
 
+// Rewrites permissions for a mapped region. Requesting executable and
+// writable together is rejected by the kernel (W^X).
+[[nodiscard]] bool mprotect(void* address, usize size, bool executable,
+                            bool writable) noexcept;
+
 }  // namespace kgema

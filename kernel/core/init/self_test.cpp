@@ -36,6 +36,12 @@ sync::ConditionVariable g_cond_var;
 sync::RwLock g_test_rwlock;
 uint32_t g_cond_ready = 0;
 uint32_t g_cond_seen = 0;
+sync::Semaphore g_ping_sem;
+sync::Semaphore g_pong_sem;
+uint32_t g_ping_count = 0;
+uint32_t g_pong_count = 0;
+uint32_t g_ping_done = 0;
+uint32_t g_pong_done = 0;
 
 struct AddressSpaceTestState {
   uint64_t expected;
@@ -79,6 +85,24 @@ void CondWorker(void* /*argument*/) noexcept {
   }
   g_cond_mutex.unlock();
   __atomic_store_n(&g_cond_seen, 1U, __ATOMIC_RELEASE);
+}
+
+void PingWorker(void* /*argument*/) noexcept {
+  for (uint32_t index = 0; index < 200U; ++index) {
+    (void)g_ping_sem.wait();
+    (void)__atomic_add_fetch(&g_ping_count, 1U, __ATOMIC_RELAXED);
+    g_pong_sem.signal();
+  }
+  (void)__atomic_add_fetch(&g_ping_done, 1U, __ATOMIC_RELEASE);
+}
+
+void PongWorker(void* /*argument*/) noexcept {
+  for (uint32_t index = 0; index < 200U; ++index) {
+    (void)g_pong_sem.wait();
+    (void)__atomic_add_fetch(&g_pong_count, 1U, __ATOMIC_RELAXED);
+    g_ping_sem.signal();
+  }
+  (void)__atomic_add_fetch(&g_pong_done, 1U, __ATOMIC_RELEASE);
 }
 
 void OnceHandler(void* /*argument*/) noexcept {
@@ -297,6 +321,49 @@ void RunSchedulerSelfTest() noexcept {
   g_test_rwlock.unlock_read();
   g_test_rwlock.lock_write();
   g_test_rwlock.unlock_write();
+
+  uint64_t max_overshoot = 0;
+  for (uint32_t index = 0; index < 20U; ++index) {
+    const uint64_t started = time::TimeNowMs();
+    (void)sched::ThreadSleep(5);
+    const uint64_t elapsed = time::TimeNowMs() - started;
+    if (elapsed > 5U && (elapsed - 5U) > max_overshoot) {
+      max_overshoot = elapsed - 5U;
+    }
+  }
+  LogDec(LogLevel::kInfo, "sched: sleep max overshoot", max_overshoot);
+  if (max_overshoot > 1000U) {
+    Panic("sched: sleep latency too high");
+  }
+
+  g_ping_sem.init(1);
+  g_pong_sem.init(0);
+  const uint32_t ping_cpu = 0;
+  const uint32_t pong_cpu = online > 1U ? 1U : 0U;
+  const Result<sched::Thread*> ping =
+    sched::ThreadCreateOn("ping", &PingWorker, nullptr, ping_cpu);
+  const Result<sched::Thread*> pong =
+    sched::ThreadCreateOn("pong", &PongWorker, nullptr, pong_cpu);
+  if (ping.is_err() || pong.is_err()) {
+    Panic("sync: ping-pong create failed");
+  }
+  uint32_t ping_waits = 0;
+  while ((__atomic_load_n(&g_ping_done, __ATOMIC_ACQUIRE) == 0U ||
+          __atomic_load_n(&g_pong_done, __ATOMIC_ACQUIRE) == 0U) &&
+         ping_waits < 2000U) {
+    (void)sched::ThreadSleep(1);
+    ++ping_waits;
+  }
+  if (__atomic_load_n(&g_ping_done, __ATOMIC_ACQUIRE) == 0U ||
+      __atomic_load_n(&g_pong_done, __ATOMIC_ACQUIRE) == 0U ||
+      __atomic_load_n(&g_ping_count, __ATOMIC_ACQUIRE) != 200U ||
+      __atomic_load_n(&g_pong_count, __ATOMIC_ACQUIRE) != 200U) {
+    Panic("sync: ping-pong lost wakeup");
+  }
+  if (!ReclaimThread(ping.value()) || !ReclaimThread(pong.value())) {
+    Panic("sync: ping-pong reclaim failed");
+  }
+  Log(LogLevel::kInfo, "sched: ping-pong ok\n");
 }
 
 void RunAddressSpaceSelfTest() noexcept {
