@@ -19,6 +19,7 @@ namespace og::mem {
 constexpr uint64_t kUserSpaceBase = 1ULL << 40U;   // 1 TiB
 constexpr uint64_t kUserSpaceSize = 1ULL << 39U;   // 512 GiB
 constexpr uint32_t kMaxUserRegions = 8;
+constexpr uint64_t kUserMemoryLimit = 32ULL * 1024U * 1024U;  // 32 MiB
 
 struct UserRegion {
   uint64_t base;
@@ -28,6 +29,7 @@ struct UserRegion {
 struct AddressSpace {
   uint64_t root;
   uint64_t mmap_next;
+  uint64_t user_bytes;
   uint16_t asid;
   uint32_t region_count;
   UserRegion regions[kMaxUserRegions];
@@ -79,10 +81,22 @@ struct PageAttributes {
                                 uint64_t size, bool executable,
                                 bool writable = true) noexcept;
 
+// Maps pages adjacent to an existing user region and extends that region.
+// Used by stack growth so growth does not consume another region slot.
+[[nodiscard]] Status VmmGrowUser(AddressSpace& space, uint64_t virtual_address,
+                                 uint64_t size, bool executable,
+                                 bool writable) noexcept;
+
 // Unmaps a user region and frees its physical frames. The range must match
 // a region created by VmmMapUser exactly.
 [[nodiscard]] Status VmmUnmapUser(AddressSpace& space, uint64_t virtual_address,
                                   uint64_t size) noexcept;
+
+// Invalidates the local TLB and, when configured, asks every other online
+// CPU to do the same. Used after permission changes and unmaps.
+using TlbShootdownHook = void (*)() noexcept;
+void SetTlbShootdownHook(TlbShootdownHook hook) noexcept;
+void TlbShootdown() noexcept;
 
 // Rewrites user page permissions for code or data mappings.
 [[nodiscard]] Status VmmProtectUser(AddressSpace& space, uint64_t base,

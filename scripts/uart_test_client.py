@@ -11,6 +11,7 @@ gate_dir/clear-ready, so the caller can inspect the framebuffer.
 """
 
 import os
+import re
 import socket
 import sys
 import time
@@ -88,7 +89,10 @@ def main(argv):
         b"mkdir \"/tmp/quoted dir\"\nrm \"/tmp/quoted dir\"\nchmod 600 /tmp/hello\nstat /tmp/hello\n",
         b"mkdir /tmp/mnt\nmount ramfs /tmp/mnt\nmount ramfs /tmp/mnt\n",
         b"umount /tmp/mnt\numount /tmp/mnt\nrm /tmp/mnt\ncat /proc/meminfo\ncat /proc/stat\n",
-        b"cat /proc/block\nls /volumes/boot\ncat /proc/trace\ncat /proc/devices\ncat /proc/interrupts\ncat /proc/mounts\necho MOUNT-DONE\n",
+        b"cat /proc/block\nls /volumes/boot\n",
+        b"cat /proc/trace\n",
+        b"cat /proc/devices\ncat /proc/interrupts\n",
+        b"cat /proc/mounts\necho MOUNT-DONE\n",
     ]
     clear_sent = False
     clear_ready = False
@@ -105,6 +109,15 @@ def main(argv):
     badptr_seen = False
     fuzz_sent = False
     fuzz_seen = False
+    mem_sent = False
+    mem_seen = False
+    aslr_sent = False
+    aslr_first = None
+    aslr_seen = False
+    stack_sent = False
+    stack_seen = False
+    guard_sent = False
+    guard_seen = False
     halt_sent = False
     halted = False
 
@@ -354,7 +367,61 @@ def main(argv):
             if fuzz_sent and not fuzz_seen and b"FUZZ-DONE" in buffer:
                 fuzz_seen = True
 
-            if fuzz_seen and not halt_sent and b"FUZZ-DONE" in buffer:
+            if fuzz_seen and not mem_sent and b"FUZZ-DONE" in buffer:
+                send_line(client, b"hello mem\necho MEM-DONE\n")
+                mem_sent = True
+                buffer.clear()
+
+            if mem_sent and not mem_seen and b"MEM-DONE" in buffer:
+                mem_seen = True
+
+            if mem_seen and not aslr_sent and b"MEM-DONE" in buffer:
+                send_line(client, b"hello aslr\necho ASLR-1\n")
+                aslr_sent = True
+                buffer.clear()
+
+            if aslr_sent and aslr_first is None and b"ASLR-1" in buffer:
+                match = re.search(
+                    rb"aslr: stack (\d+) mmap (\d+) code (\d+)", buffer)
+                if match is None:
+                    print("uart client: ASLR first run missing")
+                    return 1
+                aslr_first = (int(match.group(1)), int(match.group(2)),
+                              int(match.group(3)))
+                send_line(client, b"hello aslr\necho ASLR-2\n")
+                buffer.clear()
+
+            if (aslr_sent and aslr_first is not None and not aslr_seen and
+                    b"ASLR-2" in buffer):
+                match = re.search(
+                    rb"aslr: stack (\d+) mmap (\d+) code (\d+)", buffer)
+                if match is None:
+                    print("uart client: ASLR second run missing")
+                    return 1
+                second = (int(match.group(1)), int(match.group(2)),
+                          int(match.group(3)))
+                if second == aslr_first:
+                    print("uart client: ASLR did not vary")
+                    return 1
+                aslr_seen = True
+
+            if aslr_seen and not stack_sent and b"ASLR-2" in buffer:
+                send_line(client, b"hello stack\necho STACK-DONE\n")
+                stack_sent = True
+                buffer.clear()
+
+            if stack_sent and not stack_seen and b"STACK-DONE" in buffer:
+                stack_seen = True
+
+            if stack_seen and not guard_sent and b"STACK-DONE" in buffer:
+                send_line(client, b"hello stackguard\necho STACKGUARD-DONE\n")
+                guard_sent = True
+                buffer.clear()
+
+            if guard_sent and not guard_seen and b"STACKGUARD-DONE" in buffer:
+                guard_seen = True
+
+            if guard_seen and not halt_sent and b"STACKGUARD-DONE" in buffer:
                 send_line(client, b"halt\n")
                 halt_sent = True
 

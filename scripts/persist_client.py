@@ -23,7 +23,7 @@ def main(argv):
 
     socket_path = argv[1]
     log_path = argv[2]
-    command = (argv[3] + "\n").encode()
+    lines = (argv[3] + "\n").encode().splitlines()
     marker = argv[4].encode()
     timeout = float(argv[5]) if len(argv) > 5 else 90.0
     deadline = time.time() + timeout
@@ -41,7 +41,7 @@ def main(argv):
 
     client.settimeout(0.5)
     buffer = bytearray()
-    sent = False
+    line_index = 0
     halted = False
     halt_sent_at = None
 
@@ -58,14 +58,14 @@ def main(argv):
                 log.flush()
                 buffer.extend(chunk)
 
-            if not sent and b"gemabox> " in buffer:
-                send_line(client, command)
-                sent = True
+            if line_index < len(lines) and b"gemabox> " in buffer:
+                send_line(client, lines[line_index] + b"\n")
+                line_index += 1
                 buffer.clear()
 
-            if sent and marker in buffer:
+            if (line_index >= len(lines) and marker in buffer and
+                    b"gemabox> " in buffer):
                 send_line(client, b"halt\n")
-                sent = False
                 halted = True
                 halt_sent_at = time.time()
 

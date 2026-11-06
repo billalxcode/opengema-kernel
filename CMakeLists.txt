@@ -187,7 +187,8 @@ set(OG_GEMABOX_STATIC ${CMAKE_BINARY_DIR}/gemabox-static.elf)
 # Its own image provides _start from the API runtime object.
 add_custom_command(
   OUTPUT ${OG_GEMABOX_ELF}
-  COMMAND ${OG_GEMABOX_LD} -T ${CMAKE_SOURCE_DIR}/packages/libgemapi/link.ld
+  COMMAND ${OG_GEMABOX_LD} -pie
+          -T ${CMAKE_SOURCE_DIR}/packages/libgemapi/link.ld
           -z max-page-size=4096 -s
           --dynamic-linker=/system/boot/ld-gem
           -u _start
@@ -196,6 +197,7 @@ add_custom_command(
           -L${CMAKE_BINARY_DIR} -rpath-link=${CMAKE_BINARY_DIR} -lgemapi
           -o ${OG_GEMABOX_ELF}
   DEPENDS
+    $<TARGET_OBJECTS:og_gemabox_user>
     og_gemabox_user
     og_gemapi_start
     ${OG_GEMAPI_SO}
@@ -206,14 +208,16 @@ add_custom_command(
 # Bootstrap fallback and recovery image. Not copied to the ESP by default.
 add_custom_command(
   OUTPUT ${OG_GEMABOX_STATIC}
-  COMMAND ${OG_GEMABOX_LD} -T ${CMAKE_SOURCE_DIR}/packages/libgemapi/link.ld
+  COMMAND ${OG_GEMABOX_LD}
+          -T ${CMAKE_SOURCE_DIR}/packages/libgemapi/link-static.ld
           -z max-page-size=4096 -s
           -u _start $<TARGET_OBJECTS:og_gemabox_user> ${OG_GEMAPI_ARCHIVE}
           -o ${OG_GEMABOX_STATIC}
   DEPENDS
+    $<TARGET_OBJECTS:og_gemabox_user>
     og_gemabox_user
     og_libgemapi
-    ${CMAKE_SOURCE_DIR}/packages/libgemapi/link.ld
+    ${CMAKE_SOURCE_DIR}/packages/libgemapi/link-static.ld
   COMMAND_EXPAND_LISTS
   COMMENT "link gemabox static")
 
@@ -265,7 +269,8 @@ target_compile_options(og_init_user PRIVATE ${OG_USER_CXX_FLAGS})
 set(OG_INIT_ELF ${CMAKE_BINARY_DIR}/init.elf)
 add_custom_command(
   OUTPUT ${OG_INIT_ELF}
-  COMMAND ${OG_GEMABOX_LD} -T ${CMAKE_SOURCE_DIR}/packages/libgemapi/link.ld
+  COMMAND ${OG_GEMABOX_LD} -pie
+          -T ${CMAKE_SOURCE_DIR}/packages/libgemapi/link.ld
           -z max-page-size=4096 -s
           --dynamic-linker=/system/boot/ld-gem
           -u _start
@@ -274,6 +279,7 @@ add_custom_command(
           -L${CMAKE_BINARY_DIR} -rpath-link=${CMAKE_BINARY_DIR} -lgemapi
           -o ${OG_INIT_ELF}
   DEPENDS
+    $<TARGET_OBJECTS:og_init_user>
     og_init_user
     og_gemapi_start
     ${OG_GEMAPI_SO}
@@ -293,7 +299,8 @@ target_compile_options(og_hello_user PRIVATE ${OG_USER_CXX_FLAGS})
 set(OG_HELLO_ELF ${CMAKE_BINARY_DIR}/hello.elf)
 add_custom_command(
   OUTPUT ${OG_HELLO_ELF}
-  COMMAND ${OG_GEMABOX_LD} -T ${CMAKE_SOURCE_DIR}/packages/libgemapi/link.ld
+  COMMAND ${OG_GEMABOX_LD} -pie
+          -T ${CMAKE_SOURCE_DIR}/packages/libgemapi/link.ld
           -z max-page-size=4096 -s
           --dynamic-linker=/system/boot/ld-gem
           -u _start
@@ -302,6 +309,7 @@ add_custom_command(
           -L${CMAKE_BINARY_DIR} -rpath-link=${CMAKE_BINARY_DIR} -lgemapi
           -o ${OG_HELLO_ELF}
   DEPENDS
+    $<TARGET_OBJECTS:og_hello_user>
     og_hello_user
     og_gemapi_start
     ${OG_GEMAPI_SO}
@@ -321,7 +329,8 @@ target_compile_options(og_fstest_user PRIVATE ${OG_USER_CXX_FLAGS})
 set(OG_FSTEST_ELF ${CMAKE_BINARY_DIR}/fstest.elf)
 add_custom_command(
   OUTPUT ${OG_FSTEST_ELF}
-  COMMAND ${OG_GEMABOX_LD} -T ${CMAKE_SOURCE_DIR}/packages/libgemapi/link.ld
+  COMMAND ${OG_GEMABOX_LD} -pie
+          -T ${CMAKE_SOURCE_DIR}/packages/libgemapi/link.ld
           -z max-page-size=4096 -s
           --dynamic-linker=/system/boot/ld-gem
           -u _start
@@ -330,6 +339,7 @@ add_custom_command(
           -L${CMAKE_BINARY_DIR} -rpath-link=${CMAKE_BINARY_DIR} -lgemapi
           -o ${OG_FSTEST_ELF}
   DEPENDS
+    $<TARGET_OBJECTS:og_fstest_user>
     og_fstest_user
     og_gemapi_start
     ${OG_GEMAPI_SO}
@@ -470,8 +480,8 @@ og_add_module(og_io
 
 og_add_module(og_core
   SOURCES kernel/core/log.cpp kernel/core/log_ring.cpp kernel/core/panic.cpp
-          kernel/core/power.cpp kernel/core/stack_guard.cpp
-          kernel/core/trace.cpp
+          kernel/core/power.cpp kernel/core/random.cpp
+          kernel/core/stack_guard.cpp kernel/core/trace.cpp
   DEPS og_io og_inc_kernel)
 
 og_add_module(og_acpi
@@ -675,7 +685,7 @@ install(FILES ${OG_GEMAPI_SO} ${OG_KGEMA_SO}
         DESTINATION ${CMAKE_INSTALL_LIBDIR})
 install(FILES ${CMAKE_BINARY_DIR}/libgemapi.so ${CMAKE_BINARY_DIR}/libkgema.so
         DESTINATION ${CMAKE_INSTALL_LIBDIR})
-install(FILES packages/libgemapi/link.ld
+install(FILES packages/libgemapi/link.ld packages/libgemapi/link-static.ld
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/opengema)
 install(FILES cmake/opengema-sdk-toolchain.cmake
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/opengema)

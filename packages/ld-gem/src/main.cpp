@@ -62,16 +62,18 @@ namespace {
 int run(long argc, char** argv, char** envp) noexcept {
   u64 dynamic = 0;
   u64 entry = 0;
+  u64 base = 0;
   if (!FindEnvironment(envp, "GEM_DYNAMIC=", dynamic) ||
-      !FindEnvironment(envp, "GEM_ENTRY=", entry)) {
-    WriteText("ld-gem: missing GEM_DYNAMIC or GEM_ENTRY\n");
+      !FindEnvironment(envp, "GEM_ENTRY=", entry) ||
+      !FindEnvironment(envp, "GEM_BASE=", base)) {
+    WriteText("ld-gem: missing GEM_DYNAMIC, GEM_ENTRY, or GEM_BASE\n");
     return 2;
   }
 
   const char* name =
     (argc > 0 && argv != nullptr && argv[0] != nullptr) ? argv[0] : "main";
   Linker linker;
-  if (!linker.AddMain(dynamic, name)) {
+  if (!linker.AddMain(dynamic, base, name)) {
     WriteText("ld-gem: cannot read the main executable\n");
     return 3;
   }

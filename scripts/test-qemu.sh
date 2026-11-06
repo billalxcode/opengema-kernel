@@ -31,6 +31,8 @@ case "$ACPI" in
 esac
 
 SMP="${SMP:-2}"
+CPU="${CPU:-cortex-a72}"
+PAN_EXPECT="${PAN_EXPECT:-any}"
 if [[ ! "$SMP" =~ ^[1-4]$ ]]; then
   echo "qemu test: SMP must be 1, 2, 3, or 4"
   exit 1
@@ -69,7 +71,7 @@ cp "$VARS" "$VARS_TMP"
 
 qemu-system-aarch64 \
   -M virt,gic-version=3,acpi=$ACPI \
-  -cpu cortex-a72 \
+  -cpu "$CPU" \
   -smp "$SMP" \
   -m 512M \
   -nic none \
@@ -145,8 +147,16 @@ check "virtio-blk: msix vectors"
 check "virtio-gpu: scanout ok"
 check "virtio-input: ready"
 check "hardening: wx attributes ok"
+if [ "$PAN_EXPECT" = "on" ]; then
+  check "hardening: pan enabled"
+elif [ "$PAN_EXPECT" = "off" ]; then
+  check "hardening: pan unsupported"
+else
+  check "hardening: pan"
+fi
 check "smp: cpus online: $SMP"
 check "smp: ipi count: 1"
+check "smp: tlb shootdown ok"
 check "smp: worker cpus: $WORKER_MASK"
 check "mem: address space switch ok"
 check "sched: round robin ok"
@@ -159,6 +169,9 @@ check "uptime: "
 check "pid ppid"
 check "uid gid"
 check "cpu_ms"
+check "mem_kb"
+check "limit_kb"
+check "32768"
 check "regions"
 check "cpu0:"
 check "frames_free:"
@@ -208,6 +221,13 @@ check "bad pointer rejected"
 check "BADPTR-DONE"
 check "fuzz: arguments done"
 check "FUZZ-DONE"
+check "mem: limit enforced"
+check "MEM-DONE"
+check "aslr: stack"
+check "stack: grew"
+check "STACK-DONE"
+check "STACKGUARD-DONE"
+check_absent "stack: guard missing"
 check "append ok"
 check "process: remaining: 0"
 check "kernel: halt"

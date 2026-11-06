@@ -27,6 +27,7 @@ struct CpuInfo {
 [[nodiscard]] uint32_t CpuCount() noexcept;
 [[nodiscard]] uint32_t CurrentIndex() noexcept;
 [[nodiscard]] CpuInfo* CurrentCpu() noexcept;
+[[nodiscard]] CpuInfo* CpuAt(uint32_t index) noexcept;
 [[nodiscard]] CpuInfo* FindCpuFor(uint64_t mpidr) noexcept;
 
 }  // namespace og::smp

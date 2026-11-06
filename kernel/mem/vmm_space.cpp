@@ -4,10 +4,19 @@
 #include "og/arch/cache.h"
 #include "og/arch/descriptor.h"
 #include "og/arch/tlb.h"
+#include "og/core/random.h"
 #include "og/mem/pmm.h"
 #include "og/mem/vmm_internal.h"
 
 namespace og::mem {
+
+namespace {
+
+constexpr uint64_t kMmapBase = kUserSpaceBase + 0x1000000ULL;
+constexpr uint64_t kMmapRandomRange = 16ULL * 1024U * 1024U;
+constexpr uint64_t kMmapRandomSlots = kMmapRandomRange / kPageSize;
+
+}  // namespace
 
 Status AddressSpaceInit(AddressSpace& space) noexcept {
   uint64_t* kernel_root = detail::KernelRoot();
@@ -35,7 +44,9 @@ Status AddressSpaceInit(AddressSpace& space) noexcept {
 
   mem::Zero(space.regions, sizeof(space.regions));
   space.root = root.value();
-  space.mmap_next = kUserSpaceBase + 0x1000000ULL;
+  space.mmap_next =
+    kMmapBase + ((core::Random64() % kMmapRandomSlots) * kPageSize);
+  space.user_bytes = 0;
   space.asid = static_cast<uint16_t>(asid);
   space.region_count = 0;
   return Status::kOk;

@@ -269,13 +269,31 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 - Test fuzz argumen: `hello fuzz` menjalankan 512 panggilan dengan pointer,
   ukuran, flag, argc, dan pid acak deterministik. Semua kegagalan ditolak
   tanpa panic dan program mencetak `FUZZ-DONE`.
+- Test memory limit: `hello mem` memetakan 8 MiB, melepasnya, lalu map 40 MiB
+  ditolak oleh limit 32 MiB. `/proc/processes` menampilkan `mem_kb`,
+  `limit_kb`, uid, dan gid per proses.
+- Test ASLR user: `hello aslr` dijalankan dua kali; alamat stack, mmap, dan
+  code harus berbeda. Stack diacak 8 MiB, mmap 16 MiB, dan executable
+  memakai PIE/ET_DYN dengan load bias 128 MiB.
+- Test stack growth: `hello stack` memakai frame 4 KiB dan tumbuh melewati
+  stack awal 16 KiB sampai batas 64 KiB. `hello stackguard` melewati batas
+  tersebut dan harus mati pada guard page.
+- Test TLB shootdown: setiap perubahan permission atau unmap user mengirim
+  SGI `kIpiIrq` ke CPU online lain. Handler IPI mem-flush TLB lokal.
+  Shootdown bersifat non-blocking agar dua CPU dengan IRQ termask tidak
+  saling menunggu.
+- Test PAN: `-cpu max` menyalakan PAN (`hardening: pan enabled`) dan
+  seluruh tes lulus; cortex-a72 melaporkan `pan unsupported`. Self-test
+  address space memakai `VmmCopyIn`, bukan membaca VA user langsung.
+- OOM killer minimal membunuh proses yang gagal `mmap` saat free frame di
+  bawah reserve 4 MiB. Jalur ini belum dipicu oleh tes QEMU.
 - CI GitHub Actions menjalankan host test, sanitizer, clang-tidy, coverage,
   build native, SDK probe, image boot, smoke test QEMU DTB dan ACPI, serta
   persistensi.
 - Host test bisa dijalankan dengan ASan+UBSan lewat
   `scripts/test-sanitize.sh`. Seluruh probe lulus; `ramfs_probe` sekarang
   melepas root tree lewat `NodeOps::release` sehingga tidak ada leak.
-- Coverage source-based LLVM untuk host test inti menghasilkan 58,25 persen
+- Coverage source-based LLVM untuk host test inti menghasilkan 57,88 persen
   baris dengan ambang CI 55 persen. Laporan ada di
   `build/coverage/report.txt`.
 - Firmware UEFI dipin di `scripts/firmware.lock` ke paket Debian
@@ -326,13 +344,23 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 
 Verifikasi branch `dev`:
 
-- `python3 scripts/compile-check.py`: 135 file OK, 0 dilewati.
+- `python3 scripts/compile-check.py`: 136 file OK, 0 dilewati.
 - `./scripts/build.sh` lewat podman: kernel build dan link OK,
   `arch-check` dan `gsl-check` OK.
-- `./scripts/test-tidy.sh`: 117 file C++ OK dengan clang-tidy.
+- `./scripts/test-tidy.sh`: 118 file C++ OK dengan clang-tidy.
 - Sanitizer host test dengan ASan+UBSan: seluruh probe OK.
-- `./scripts/test-coverage.sh`: host test inti 58,25 persen baris,
+- `./scripts/test-coverage.sh`: host test inti 57,88 persen baris,
   ambang 55 persen.
+- `hello mem`: map 8 MiB lalu unmap berhasil, map 40 MiB ditolak limit
+  32 MiB, dan `/proc/processes` menampilkan `mem_kb` serta `limit_kb`.
+- `hello aslr` dua kali: alamat stack, mmap, dan code berbeda. Aplikasi
+  dynamic adalah ET_DYN dan kernel memilih load bias acak.
+- `hello stack`: growth melewati 16 KiB awal berhasil. `hello stackguard`
+  melewati 64 KiB dan mati pada guard page tanpa panic kernel.
+- TLB shootdown: `smp: ipi count: 1` dan `smp: tlb shootdown ok` muncul;
+  QEMU SMP=4 lulus tanpa deadlock.
+- PAN: QEMU `-cpu max` mencetak `hardening: pan enabled` dan lulus
+  ACPI/SMP=4; cortex-a72 mencetak `hardening: pan unsupported`.
 - `.github/workflows/ci.yml`: build native Linux, host test, sanitizer,
   clang-tidy, coverage, SDK, QEMU DTB/ACPI, dan persistensi. Semua langkah
   lulus lokal; workflow belum dijalankan di GitHub.

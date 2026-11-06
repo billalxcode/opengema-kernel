@@ -44,6 +44,10 @@ CpuInfo* FindCpuFor(uint64_t mpidr) noexcept {
   return nullptr;
 }
 
+CpuInfo* CpuAt(uint32_t index) noexcept {
+  return index < g_cpu_count ? &g_cpus[index] : nullptr;
+}
+
 Status SmpInit() noexcept {
   const platform::Platform& board = platform::Current();
   g_cpu_count = board.cpu_count > kMaxCpus ? kMaxCpus : board.cpu_count;

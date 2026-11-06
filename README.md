@@ -72,9 +72,9 @@ Laporan lengkap ditulis ke `build/coverage/report.txt`.
 ## CI
 
 GitHub Actions menjalankan build, host test, sanitizer, clang-tidy,
-coverage, SDK probe, image boot, smoke test QEMU DTB dan ACPI, serta tes
-persistensi. Workflow ada di `.github/workflows/ci.yml` dan memakai LLVM 19
-di runner Ubuntu 24.04.
+coverage, SDK probe, image boot, smoke test QEMU DTB, ACPI, dan PAN dengan
+CPU `max`, serta tes persistensi. Workflow ada di `.github/workflows/ci.yml`
+dan memakai LLVM 19 di runner Ubuntu 24.04.
 
 Firmware UEFI dipin di `scripts/firmware.lock` ke paket Debian
 `qemu-efi-aarch64` versi `2022.11-6+deb12u2`. `get-firmware.sh` memverifikasi

@@ -30,13 +30,14 @@ Status ReadImage(fs::FileTable& files, uint32_t file, uint64_t file_size,
 }
 
 Status MapImage(fs::FileTable& files, uint32_t file, const elf::Image& image,
-                mem::AddressSpace& space) noexcept {
+                mem::AddressSpace& space, uint64_t base) noexcept {
   Status status = Status::kOk;
   for (uint32_t index = 0;
        index < image.segment_count && IsOk(status); ++index) {
     const elf::Segment& segment = image.segments[index];
-    const uint64_t page_offset = segment.virtual_address & (elf::kPageSize - 1U);
-    const uint64_t map_base = segment.virtual_address - page_offset;
+    const uint64_t virtual_address = base + segment.virtual_address;
+    const uint64_t page_offset = virtual_address & (elf::kPageSize - 1U);
+    const uint64_t map_base = virtual_address - page_offset;
     const uint64_t map_size =
       bits::AlignUp(page_offset + segment.memory_size, elf::kPageSize);
     status = mem::VmmMapUser(space, map_base, map_size, segment.executable);
@@ -68,7 +69,7 @@ Status MapImage(fs::FileTable& files, uint32_t file, const elf::Image& image,
       status = Status::kIoError;
     }
     if (IsOk(status)) {
-      status = mem::VmmCopyOut(space, segment.virtual_address, buffer.value(),
+      status = mem::VmmCopyOut(space, virtual_address, buffer.value(),
                                segment.file_size);
     }
     if (IsOk(status) && segment.executable) {

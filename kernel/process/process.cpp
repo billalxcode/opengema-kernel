@@ -4,6 +4,7 @@
 #include "og/arch/spinlock.h"
 #include "og/arch/user.h"
 #include "og/core/log.h"
+#include "og/core/random.h"
 #include "og/core/trace.h"
 #include "og/process/elf.h"
 #include "og/process/loader.h"
@@ -20,6 +21,7 @@ uint32_t g_next_pid = 1;
 bool g_ready = false;
 
 struct UserStack {
+  uint64_t stack_base;
   uint64_t stack_pointer;
   uint64_t argv;
   uint64_t envp;
@@ -29,6 +31,12 @@ struct UserStack {
 constexpr uint32_t kMaxEnv = 4;
 constexpr uint64_t kMaxEnvLength = 96;
 constexpr uint64_t kMaxInterpreterPath = 128;
+constexpr uint64_t kUserStackSlots =
+  kUserStackRandomRange / arch::aarch64::kPageSize;
+constexpr uint64_t kPieBase = mem::kUserSpaceBase + 0x10000000ULL;
+constexpr uint64_t kPieRandomRange = 128ULL * 1024U * 1024U;
+constexpr uint64_t kPieRandomSlots =
+  kPieRandomRange / arch::aarch64::kPageSize;
 
 [[nodiscard]] uint32_t FormatHex(char* out, uint64_t value) noexcept {
   constexpr char kDigits[] = "0123456789abcdef";
@@ -66,25 +74,31 @@ struct InterpreterEnvironment {
   uint32_t count;
   char entry[kMaxEnvLength];
   char dynamic[kMaxEnvLength];
+  char base[kMaxEnvLength];
 };
 
 void BuildInterpreterEnvironment(const elf::Image& image, bool dynamic,
+                                 uint64_t load_base,
                                  InterpreterEnvironment& out) noexcept {
   out.count = 0;
   if (!dynamic) {
     return;
   }
-  FormatEnv(out.entry, "GEM_ENTRY", image.entry);
-  FormatEnv(out.dynamic, "GEM_DYNAMIC", image.dynamic_address);
+  FormatEnv(out.entry, "GEM_ENTRY", image.entry + load_base);
+  FormatEnv(out.dynamic, "GEM_DYNAMIC", image.dynamic_address + load_base);
+  FormatEnv(out.base, "GEM_BASE", load_base);
   out.values[out.count] = out.entry;
   ++out.count;
   out.values[out.count] = out.dynamic;
+  ++out.count;
+  out.values[out.count] = out.base;
   ++out.count;
 }
 
 [[nodiscard]] Status BuildUserStack(const mem::AddressSpace& space, const char* path,
                                     const char* const* argv, uint32_t argc,
                                     const char* const* env, uint32_t env_count,
+                                    uint64_t stack_base,
                                     UserStack& out) noexcept {
   if (argc > kMaxArgs || env_count > kMaxEnv) {
     return Status::kInvalidArg;
@@ -107,7 +121,7 @@ void BuildInterpreterEnvironment(const elf::Image& image, bool dynamic,
     }
   }
 
-  uint64_t cursor = kUserStackVa + kUserStackSize;
+  uint64_t cursor = stack_base + kUserStackSize;
   uint64_t pointers[kMaxArgs]{};
   uint64_t environment[kMaxEnv]{};
 
@@ -116,7 +130,7 @@ void BuildInterpreterEnvironment(const elf::Image& image, bool dynamic,
       return Status::kInvalidArg;
     }
     const uint64_t length = mem::Length(env[index]);
-    if (length > kMaxEnvLength || (length + 1U) >= (cursor - kUserStackVa)) {
+    if (length > kMaxEnvLength || (length + 1U) >= (cursor - stack_base)) {
       return Status::kInvalidArg;
     }
     cursor -= (length + 1U);
@@ -130,7 +144,7 @@ void BuildInterpreterEnvironment(const elf::Image& image, bool dynamic,
 
   for (uint32_t index = 0; index < count; ++index) {
     const uint64_t length = mem::Length(values[index]);
-    if (length > kMaxArgLength || (length + 1U) >= (cursor - kUserStackVa)) {
+    if (length > kMaxArgLength || (length + 1U) >= (cursor - stack_base)) {
       return Status::kInvalidArg;
     }
     cursor -= (length + 1U);
@@ -168,8 +182,9 @@ void BuildInterpreterEnvironment(const elf::Image& image, bool dynamic,
   }
   out.argv = cursor;
   out.stack_pointer = cursor & ~15ULL;
+  out.stack_base = stack_base;
   out.argc = count;
-  if (out.stack_pointer < (kUserStackVa + 512U)) {
+  if (out.stack_pointer < (stack_base + 512U)) {
     return Status::kNoMem;
   }
   return Status::kOk;
@@ -277,6 +292,7 @@ struct LoadedProgram {
   elf::Image image;
   elf::Image interpreter_image;
   uint64_t file_size;
+  uint64_t base;
   bool dynamic;
 };
 
@@ -309,6 +325,10 @@ struct LoadedProgram {
   }
 
   out.dynamic = out.image.interpreter_size != 0U;
+  if (!out.dynamic && out.image.type == elf::ImageType::kDynamic) {
+    (void)fs::FsClose(files, file.value());
+    return Status::kUnsupported;
+  }
   char interpreter_path[kMaxInterpreterPath]{};
   uint32_t interpreter_descriptor = 0;
   bool interpreter_open = false;
@@ -365,10 +385,26 @@ struct LoadedProgram {
     return status;
   }
 
-  status = loader::MapImage(files, file.value(), out.image, out.space);
+  if (out.image.type == elf::ImageType::kDynamic) {
+    out.base = kPieBase +
+               ((core::Random64() % kPieRandomSlots) *
+                arch::aarch64::kPageSize);
+    if (out.base + out.image.max_address >
+        (mem::kUserSpaceBase + mem::kUserSpaceSize)) {
+      (void)mem::AddressSpaceDestroy(out.space);
+      (void)fs::FsClose(files, file.value());
+      if (interpreter_open) {
+        (void)fs::FsClose(files, interpreter_descriptor);
+      }
+      return Status::kInvalidArg;
+    }
+  }
+
+  status = loader::MapImage(files, file.value(), out.image, out.space,
+                            out.base);
   if (IsOk(status) && out.dynamic) {
     status = loader::MapImage(files, interpreter_descriptor,
-                              out.interpreter_image, out.space);
+                              out.interpreter_image, out.space, 0);
   }
   if (interpreter_open) {
     (void)fs::FsClose(files, interpreter_descriptor);
@@ -424,6 +460,9 @@ struct LoadedProgram {
   slot->used = 1;
   slot->space = program.space;
   slot->entry = entry;
+  slot->stack_base = user_stack.stack_base;
+  slot->stack_low = user_stack.stack_base;
+  slot->stack_limit = user_stack.stack_base - kUserStackGrowth;
   slot->stack_top = user_stack.stack_pointer;
   slot->argv = user_stack.argv;
   slot->envp = user_stack.envp;
@@ -483,14 +522,19 @@ Result<uint32_t> SpawnWithArgs(const char* path, uint32_t parent_pid,
     return Result<uint32_t>::Err(load_status);
   }
 
+  const uint64_t stack_base =
+    kUserStackVa +
+    ((core::Random64() % kUserStackSlots) * arch::aarch64::kPageSize);
   Status status =
-    mem::VmmMapUser(program.space, kUserStackVa, kUserStackSize, false);
+    mem::VmmMapUser(program.space, stack_base, kUserStackSize, false);
   InterpreterEnvironment environment{};
-  BuildInterpreterEnvironment(program.image, program.dynamic, environment);
+  BuildInterpreterEnvironment(program.image, program.dynamic, program.base,
+                              environment);
   UserStack user_stack{};
   if (IsOk(status)) {
     status = BuildUserStack(program.space, path, argv, argc,
-                            environment.values, environment.count, user_stack);
+                            environment.values, environment.count,
+                            stack_base, user_stack);
   }
   if (IsErr(status)) {
     (void)mem::AddressSpaceDestroy(program.space);
@@ -534,6 +578,33 @@ void Exit(int32_t status) noexcept {
     sched::WaitQueueWakeAll(g_waiters);
   }
   sched::ThreadExit();
+}
+
+void OutOfMemory(Process& process) noexcept {
+  LogDec(LogLevel::kError, "oom: kill pid", process.pid);
+  Exit(137);
+}
+
+bool GrowStack(Process& process, uint64_t fault_address) noexcept {
+  constexpr uint64_t kPage = arch::aarch64::kPageSize;
+  if (process.stack_low <= process.stack_limit) {
+    return false;
+  }
+  const uint64_t page_base = fault_address & ~(kPage - 1U);
+  if (page_base >= process.stack_low) {
+    return false;
+  }
+  if (page_base < process.stack_limit) {
+    return false;
+  }
+  const uint64_t grow_size = process.stack_low - page_base;
+  const Status status = mem::VmmGrowUser(process.space, page_base, grow_size,
+                                         false, true);
+  if (IsErr(status)) {
+    return false;
+  }
+  process.stack_low = page_base;
+  return true;
 }
 
 Process* Current() noexcept {
@@ -649,9 +720,13 @@ uint32_t Snapshot(ProcessInfo* out, uint32_t capacity) noexcept {
     }
     out[count].pid = process.pid;
     out[count].parent_pid = process.parent_pid;
+    out[count].uid = process.uid;
+    out[count].gid = process.gid;
     out[count].state = process.state;
     out[count].cpu_ms =
       process.thread == nullptr ? 0U : process.thread->cpu_ticks;
+    out[count].memory_bytes = process.space.user_bytes;
+    out[count].memory_limit = mem::kUserMemoryLimit;
     out[count].regions = process.space.region_count;
     mem::Copy(out[count].name, process.name, sizeof(out[count].name));
     out[count].name[sizeof(out[count].name) - 1U] = '\0';

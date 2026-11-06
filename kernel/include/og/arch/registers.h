@@ -77,6 +77,12 @@ inline void WriteTtbr0El1(uint64_t value) noexcept {
   return value;
 }
 
+[[nodiscard]] inline uint64_t ReadIdAa64Mmfr1El1() noexcept {
+  uint64_t value = 0;
+  __asm__ volatile("mrs %0, id_aa64mmfr1_el1" : "=r"(value));
+  return value;
+}
+
 [[nodiscard]] inline uint64_t ReadMairEl1() noexcept {
   uint64_t value = 0;
   __asm__ volatile("mrs %0, mair_el1" : "=r"(value));

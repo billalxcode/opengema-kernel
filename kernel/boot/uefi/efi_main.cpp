@@ -97,6 +97,9 @@ extern "C" EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE* system_table)
     og::boot::uefi::QueryImageSections(image, system_table, &g_boot_info);
   if (og::IsErr(image_status)) {
     og::Log(og::LogLevel::kWarn, "uefi: image sections unavailable\n");
+  } else {
+    og::LogHex(og::LogLevel::kInfo, "uefi: image base", g_boot_info.image_base);
+    og::LogHex(og::LogLevel::kInfo, "uefi: text base", g_boot_info.text_base);
   }
 
   const og::Status takeover = og::boot::uefi::TakeOver(image, system_table, &g_boot_info);

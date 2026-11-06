@@ -30,8 +30,8 @@ struct Object {
 class Linker {
  public:
   // dynamic is the address of the main executable's dynamic array. base is
-  // zero for ET_EXEC images.
-  [[nodiscard]] bool AddMain(u64 dynamic, const char* name) noexcept;
+  // the load bias chosen by the kernel, or zero for ET_EXEC images.
+  [[nodiscard]] bool AddMain(u64 dynamic, u64 base, const char* name) noexcept;
 
   // Loads every DT_NEEDED entry recursively from the search path.
   [[nodiscard]] bool LoadLibraries() noexcept;

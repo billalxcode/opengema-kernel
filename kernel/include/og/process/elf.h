@@ -1,8 +1,8 @@
 #pragma once
 
-// Validates a static ELF64 executable before the process loader maps it.
-// Only ET_EXEC AArch64 images are accepted. Dynamic images are detected via
-// PT_INTERP and rejected until ld-gem exists.
+// Validates a static or position independent ELF64 executable before the
+// process loader maps it. ET_EXEC and ET_DYN AArch64 images are accepted.
+// Dynamic images are detected via PT_INTERP.
 
 #include <cstdint>
 #include <span>
@@ -18,6 +18,12 @@ constexpr uint32_t kMaxProgramHeaders = 16;
 constexpr uint64_t kPageSize = 4096;
 constexpr uint32_t kHeaderBufferSize = 1024;
 
+enum class ImageType : uint32_t {
+  kUnknown = 0,
+  kExecutable = 2,
+  kDynamic = 3,
+};
+
 struct Segment {
   uint64_t virtual_address;
   uint64_t file_offset;
@@ -27,8 +33,11 @@ struct Segment {
 };
 
 struct Image {
+  ImageType type;
   uint64_t entry;
   uint64_t dynamic_address;
+  uint64_t min_address;
+  uint64_t max_address;
   uint32_t segment_count;
   Segment segments[kMaxSegments];
   uint64_t interpreter_offset;

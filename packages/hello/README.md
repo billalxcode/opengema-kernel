@@ -29,3 +29,12 @@ Manifest ada di `packages/system-root/applications/hello/manifest.txt`.
 - `hello fuzz` menjalankan 512 panggilan filesystem, proses, I/O, dan memori
   dengan pointer serta ukuran acak deterministik. Program harus hidup sampai
   mencetak `FUZZ-DONE`.
+- `hello mem` memetakan 8 MiB lalu melepasnya, kemudian memastikan map 40 MiB
+  ditolak oleh limit 32 MiB. Program mencetak `mem: limit enforced`.
+- `hello aslr` mencetak alamat stack, mmap, dan code. Dijalankan dua kali
+  oleh tes untuk memastikan ketiga alamat berubah. Aplikasi dynamic dibangun
+  sebagai PIE/ET_DYN dan kernel memilih load bias acak.
+- `hello stack` merekursi dengan frame 4 KiB sampai melewati stack awal
+  16 KiB, lalu harus tumbuh dan mencetak `stack: grew`.
+- `hello stackguard` merekursi melewati batas growth 64 KiB. Proses harus
+  mati pada guard page, bukan mencetak `stack: guard missing`.

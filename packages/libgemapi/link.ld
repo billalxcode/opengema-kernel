@@ -10,7 +10,8 @@ PHDRS
 
 SECTIONS
 {
-  . = 0x10000000000;
+  /* Position independent: the kernel chooses the load bias. */
+  . = 0x0;
   .text : {
     KEEP(*(.text.entry))
     *(.text*)

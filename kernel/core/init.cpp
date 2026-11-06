@@ -3,7 +3,9 @@
 #include "memory.h"
 #include "og/acpi/acpi.h"
 #include "og/arch/cpu.h"
+#include "og/arch/mmu.h"
 #include "og/arch/registers.h"
+#include "og/arch/tlb.h"
 #include "og/core/bootinfo.h"
 #include "og/core/log.h"
 #include "og/core/log_ring.h"
@@ -77,14 +79,34 @@ void SysRqHaltWork(void* /*context*/) noexcept {
   arch::aarch64::HaltForever();
 }
 
-void UserFault(arch::aarch64::TrapFrame* frame) noexcept {
+Status UserFault(arch::aarch64::TrapFrame* frame) noexcept {
   process::Process* process = process::Current();
   if (process == nullptr) {
     Panic("trap: user fault without process");
   }
+
+  constexpr uint64_t kEsrEcShift = 26U;
+  constexpr uint64_t kEsrEcMask = 0x3FU;
+  constexpr uint64_t kEsrIssMask = 0x1FFFFFFULL;
+  constexpr uint64_t kDfscMask = 0x3FU;
+  constexpr uint64_t kEcDataAbortLower = 0x24U;
+  constexpr uint64_t kDfscTranslationFirst = 0x04U;
+  constexpr uint64_t kDfscTranslationLast = 0x07U;
+
+  const uint64_t esr = arch::aarch64::ReadEsrEl1();
+  const uint64_t ec = (esr >> kEsrEcShift) & kEsrEcMask;
+  const uint64_t iss = esr & kEsrIssMask;
+  const uint64_t dfsc = iss & kDfscMask;
+  const uint64_t far = arch::aarch64::ReadFarEl1();
+
+  if (ec == kEcDataAbortLower && dfsc >= kDfscTranslationFirst &&
+      dfsc <= kDfscTranslationLast && process::GrowStack(*process, far)) {
+    return Status::kOk;
+  }
+
   LogDec(LogLevel::kError, "user fault: pid", process->pid);
   LogHex(LogLevel::kError, "user fault: elr", frame->elr);
-  LogHex(LogLevel::kError, "user fault: far", arch::aarch64::ReadFarEl1());
+  LogHex(LogLevel::kError, "user fault: far", far);
   process::Exit(-1);
 }
 
@@ -151,8 +173,23 @@ void StartWatchdog() noexcept {
   }
 }
 
+void BroadcastTlbShootdown() noexcept {
+  const uint32_t current = smp::CurrentIndex();
+  for (uint32_t index = 0; index < smp::CpuCount(); ++index) {
+    if (index == current) {
+      continue;
+    }
+    smp::CpuInfo* cpu = smp::CpuAt(index);
+    if (cpu != nullptr &&
+        __atomic_load_n(&cpu->online, __ATOMIC_ACQUIRE) != 0U) {
+      drivers::irq::Gicv3::SendSgi(smp::kIpiIrq, index);
+    }
+  }
+}
+
 Status IpiHandler(void* /*context*/, uint32_t /*irq*/) noexcept {
   __atomic_add_fetch(&g_ipi_count, 1U, __ATOMIC_RELAXED);
+  arch::aarch64::InvalidateTlbAllLocal();
   return Status::kOk;
 }
 
@@ -196,7 +233,12 @@ void InitSmp() noexcept {
   LogDec(LogLevel::kInfo, "smp: ipi count", ipis);
   if (ipis == 0U) {
     Log(LogLevel::kError, "smp: ipi not received\n");
+    return;
   }
+
+  mem::SetTlbShootdownHook(&BroadcastTlbShootdown);
+  mem::TlbShootdown();
+  Log(LogLevel::kInfo, "smp: tlb shootdown ok\n");
 }
 
 }  // namespace
@@ -263,6 +305,13 @@ void kmain(BootInfo* info) noexcept {
     Panic("mem: vmm init failed");
   }
   Log(LogLevel::kInfo, "vmm: identity map active\n");
+
+  if (arch::aarch64::PanSupported()) {
+    arch::aarch64::EnablePan();
+    Log(LogLevel::kInfo, "hardening: pan enabled\n");
+  } else {
+    Log(LogLevel::kInfo, "hardening: pan unsupported\n");
+  }
 
   if (info->text_size != 0U) {
     const Result<mem::PageAttributes> text_attributes =

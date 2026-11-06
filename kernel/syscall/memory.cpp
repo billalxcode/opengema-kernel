@@ -1,5 +1,6 @@
 #include "og/syscall/syscall_internal.h"
 
+#include "og/mem/pmm.h"
 #include "og/mem/vmm.h"
 
 namespace og::syscall {
@@ -28,6 +29,10 @@ Status DoMmap(uint64_t size, uint64_t flags, uint64_t& result) noexcept {
     mem::VmmMapUser(process->space, address, aligned, executable,
                     !executable);
   if (IsErr(status)) {
+    if (status == Status::kNoMem &&
+        mem::PmmFreeFrames() <= mem::kOomReserveFrames) {
+      process::OutOfMemory(*process);
+    }
     return status;
   }
   process->space.mmap_next += aligned;

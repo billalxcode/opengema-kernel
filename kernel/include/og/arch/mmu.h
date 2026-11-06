@@ -19,4 +19,10 @@ void SwitchAddressSpace(uint64_t ttbr0, uint16_t asid) noexcept;
 
 [[nodiscard]] bool IsMmuEnabled() noexcept;
 
+// True when ID_AA64MMFR1_EL1 reports PAN support.
+[[nodiscard]] bool PanSupported() noexcept;
+
+// Clears SCTLR_EL1.SPAN so exception entry from EL0 sets PSTATE.PAN.
+void EnablePan() noexcept;
+
 }  // namespace og::arch::aarch64

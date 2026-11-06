@@ -56,7 +56,10 @@ void DispatchTrap(arch::aarch64::TrapFrame* frame, uint64_t vector) noexcept {
       return;
     }
     if (vector == 8U && g_user_fault != nullptr) {
-      g_user_fault(frame);
+      const Status handled = g_user_fault(frame);
+      if (IsOk(handled)) {
+        return;
+      }
     }
   }
 

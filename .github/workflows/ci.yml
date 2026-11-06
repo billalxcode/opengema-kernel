@@ -118,5 +118,16 @@ jobs:
           done
           exit 1
 
+      - name: QEMU smoke ACPI PAN
+        run: |
+          for attempt in 1 2; do
+            if CPU=max PAN_EXPECT=on ACPI=on RESOLUTION=1920x1080 \
+                ./scripts/test-qemu.sh; then
+              exit 0
+            fi
+            echo "QEMU PAN attempt $attempt failed, retrying"
+          done
+          exit 1
+
       - name: Persistence
         run: ./scripts/test-persist.sh

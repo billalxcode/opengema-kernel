@@ -11,9 +11,11 @@ sebagai bagian dari layer libraries, bukan `libgemapi`.
 
 1. Kernel memvalidasi executable, memetakan segmen `PT_LOAD`, dan membaca
    `PT_INTERP`.
-2. Kernel memuat `/system/boot/ld-gem` ke address space yang sama dan menyerahkan
-   `GEM_DYNAMIC` serta `GEM_ENTRY` lewat environment.
-3. `ld-gem` membaca dynamic section executable utama.
+2. Kernel memilih load bias acak untuk executable PIE/ET_DYN, memuat
+   `/system/boot/ld-gem` di base fixed, lalu menyerahkan `GEM_DYNAMIC`,
+   `GEM_ENTRY`, dan `GEM_BASE` lewat environment.
+3. `ld-gem` membaca dynamic section executable utama dengan base yang
+   diberikan kernel.
 4. Setiap `DT_NEEDED` dimuat dari search path, lalu dependensinya diproses
    rekursif.
 5. Relokasi `R_AARCH64_RELATIVE`, `GLOB_DAT`, `JUMP_SLOT`, dan `ABS64`

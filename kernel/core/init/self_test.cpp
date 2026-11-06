@@ -44,6 +44,7 @@ uint32_t g_ping_done = 0;
 uint32_t g_pong_done = 0;
 
 struct AddressSpaceTestState {
+  mem::AddressSpace* space;
   uint64_t expected;
   uint64_t observed;
   uint32_t done;
@@ -126,9 +127,12 @@ void WorkerA(void* /*argument*/) noexcept {
 void AddressSpaceWorker(void* argument) noexcept {
   auto* state = static_cast<AddressSpaceTestState*>(argument);
   uint64_t observed = 0;
-  mem::Copy(&observed, reinterpret_cast<const void*>(kAddressSpaceTestVa),
-            sizeof(observed));
-  state->observed = observed;
+  if (IsErr(mem::VmmCopyIn(*state->space, kAddressSpaceTestVa, &observed,
+                           sizeof(observed)))) {
+    state->observed = 0;
+  } else {
+    state->observed = observed;
+  }
   __atomic_store_n(&state->done, 1U, __ATOMIC_RELEASE);
 }
 
@@ -395,8 +399,10 @@ void RunAddressSpaceSelfTest() noexcept {
     Panic("mem: address space b copy failed");
   }
 
+  g_as_state_a.space = &g_as_a;
   g_as_state_a.expected = kValueA;
   g_as_state_a.done = 0;
+  g_as_state_b.space = &g_as_b;
   g_as_state_b.expected = kValueB;
   g_as_state_b.done = 0;
 

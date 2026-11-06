@@ -14,6 +14,7 @@ constexpr uint32_t kElfClass64 = 2;
 constexpr uint32_t kElfDataLittleEndian = 1;
 constexpr uint32_t kElfVersionCurrent = 1;
 constexpr uint16_t kTypeExecutable = 2;
+constexpr uint16_t kTypeDynamic = 3;
 constexpr uint16_t kMachineAarch64 = 183;
 constexpr uint32_t kProgramTypeLoad = 1;
 constexpr uint32_t kProgramTypeDynamic = 2;
@@ -46,11 +47,13 @@ Result<Image> Parse(std::span<const uint8_t> header, uint64_t file_size) noexcep
       header[6] != kElfVersionCurrent) {
     return Result<Image>::Err(Status::kInvalidArg);
   }
-  if (endian::ReadLe16(header.data() + 16) != kTypeExecutable ||
+  const uint16_t type = endian::ReadLe16(header.data() + 16);
+  if ((type != kTypeExecutable && type != kTypeDynamic) ||
       endian::ReadLe16(header.data() + 18) != kMachineAarch64 ||
       endian::ReadLe32(header.data() + 20) != kElfVersionCurrent) {
     return Result<Image>::Err(Status::kUnsupported);
   }
+  const bool position_independent = type == kTypeDynamic;
 
   const uint64_t entry = endian::ReadLe64(header.data() + 24);
   const uint64_t program_offset = endian::ReadLe64(header.data() + 32);
@@ -68,13 +71,20 @@ Result<Image> Parse(std::span<const uint8_t> header, uint64_t file_size) noexcep
                    header.size())) {
     return Result<Image>::Err(Status::kInvalidArg);
   }
-  if (entry < mem::kUserSpaceBase ||
-      entry >= (mem::kUserSpaceBase + mem::kUserSpaceSize)) {
+  if (position_independent) {
+    if (entry >= mem::kUserSpaceSize) {
+      return Result<Image>::Err(Status::kInvalidArg);
+    }
+  } else if (entry < mem::kUserSpaceBase ||
+             entry >= (mem::kUserSpaceBase + mem::kUserSpaceSize)) {
     return Result<Image>::Err(Status::kInvalidArg);
   }
 
   Image image{};
+  image.type = position_independent ? ImageType::kDynamic
+                                    : ImageType::kExecutable;
   image.entry = entry;
+  image.min_address = ~0ULL;
 
   for (uint32_t index = 0; index < program_count; ++index) {
     const uint64_t base =
@@ -101,8 +111,13 @@ Result<Image> Parse(std::span<const uint8_t> header, uint64_t file_size) noexcep
       if (file_bytes == 0U) {
         continue;
       }
-      if (virtual_address < mem::kUserSpaceBase ||
-          virtual_address >= (mem::kUserSpaceBase + mem::kUserSpaceSize)) {
+      if (position_independent) {
+        if (!RangeInside(virtual_address, file_bytes, mem::kUserSpaceSize)) {
+          return Result<Image>::Err(Status::kInvalidArg);
+        }
+      } else if (virtual_address < mem::kUserSpaceBase ||
+                 virtual_address >=
+                   (mem::kUserSpaceBase + mem::kUserSpaceSize)) {
         return Result<Image>::Err(Status::kInvalidArg);
       }
       image.dynamic_address = virtual_address;
@@ -120,9 +135,13 @@ Result<Image> Parse(std::span<const uint8_t> header, uint64_t file_size) noexcep
     if (!RangeInside(offset, file_bytes, file_size)) {
       return Result<Image>::Err(Status::kInvalidArg);
     }
-    if (virtual_address < mem::kUserSpaceBase ||
-        !RangeInside(virtual_address, memory_bytes,
-                     mem::kUserSpaceBase + mem::kUserSpaceSize)) {
+    if (position_independent) {
+      if (!RangeInside(virtual_address, memory_bytes, mem::kUserSpaceSize)) {
+        return Result<Image>::Err(Status::kInvalidArg);
+      }
+    } else if (virtual_address < mem::kUserSpaceBase ||
+               !RangeInside(virtual_address, memory_bytes,
+                            mem::kUserSpaceBase + mem::kUserSpaceSize)) {
       return Result<Image>::Err(Status::kInvalidArg);
     }
     const uint64_t page_offset = virtual_address & kPageMask;
@@ -136,10 +155,22 @@ Result<Image> Parse(std::span<const uint8_t> header, uint64_t file_size) noexcep
     segment.file_size = file_bytes;
     segment.memory_size = memory_bytes;
     segment.executable = (flags & kProgramFlagExecute) != 0U;
+    if (virtual_address < image.min_address) {
+      image.min_address = virtual_address;
+    }
+    const uint64_t segment_end = virtual_address + memory_bytes;
+    if (segment_end > image.max_address) {
+      image.max_address = segment_end;
+    }
     ++image.segment_count;
   }
 
   if (image.segment_count == 0U) {
+    return Result<Image>::Err(Status::kInvalidArg);
+  }
+  image.min_address &= ~kPageMask;
+  image.max_address = (image.max_address + kPageMask) & ~kPageMask;
+  if (image.max_address <= image.min_address) {
     return Result<Image>::Err(Status::kInvalidArg);
   }
   if (image.dynamic_address != 0U && image.interpreter_size == 0U) {

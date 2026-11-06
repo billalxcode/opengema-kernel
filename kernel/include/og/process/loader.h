@@ -17,7 +17,8 @@ namespace og::process::loader {
 
 [[nodiscard]] Status MapImage(fs::FileTable& files, uint32_t file,
                               const elf::Image& image,
-                              mem::AddressSpace& space) noexcept;
+                              mem::AddressSpace& space,
+                              uint64_t base) noexcept;
 
 [[nodiscard]] Status ReadInterpreterPath(fs::FileTable& files, uint32_t file,
                                          const elf::Image& image, char* path,

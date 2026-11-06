@@ -32,6 +32,7 @@ constexpr uint32_t kUserSpaceL0Index =
 constexpr uint32_t kMaxCpus = 4;
 
 uint64_t* g_root = nullptr;
+TlbShootdownHook g_tlb_shootdown = nullptr;
 
 struct ActiveSpace {
   uint64_t root;
@@ -58,6 +59,104 @@ void DropUserRegion(AddressSpace& space, uint32_t index) noexcept {
   if (space.region_count > 0U) {
     --space.region_count;
   }
+}
+
+[[nodiscard]] Status MapChunk(uint64_t* root, uint64_t virtual_address,
+                             uint64_t physical_address, uint64_t size,
+                             MemoryKind kind, bool executable, bool user,
+                             bool writable) noexcept;
+
+// Frees the 4 KiB user pages in a range. Missing entries are skipped so the
+// same helper can roll back a partially mapped range.
+void FreeUserPages(uint64_t* root, uint64_t virtual_address,
+                   uint64_t size) noexcept {
+  for (uint64_t offset = 0; offset < size; offset += kPageSize) {
+    const uint64_t address = virtual_address + offset;
+    const uint64_t root_entry = root[Index(address, 0)];
+    if (!DescriptorValid(root_entry) || !DescriptorIsTable(root_entry)) {
+      continue;
+    }
+    auto* level1 = reinterpret_cast<uint64_t*>(DescriptorAddress(root_entry));
+    const uint64_t level1_entry = level1[Index(address, 1)];
+    if (!DescriptorValid(level1_entry) || !DescriptorIsTable(level1_entry)) {
+      continue;
+    }
+    auto* level2 = reinterpret_cast<uint64_t*>(DescriptorAddress(level1_entry));
+    const uint64_t level2_entry = level2[Index(address, 2)];
+    if (!DescriptorValid(level2_entry) || !DescriptorIsTable(level2_entry)) {
+      continue;
+    }
+    auto* level3 = reinterpret_cast<uint64_t*>(DescriptorAddress(level2_entry));
+    uint64_t& entry = level3[Index(address, 3)];
+    if (!DescriptorValid(entry)) {
+      continue;
+    }
+    const uint64_t physical = DescriptorAddress(entry);
+    entry = 0;
+    (void)PmmFreePage(physical);
+    arch::aarch64::InvalidateTlbVaLocal(address);
+  }
+  arch::aarch64::InvalidateTlbSync();
+}
+
+[[nodiscard]] Status ValidateUserRange(const AddressSpace& space,
+                                       uint64_t virtual_address,
+                                       uint64_t size,
+                                       uint64_t& aligned) noexcept {
+  if (g_root == nullptr || space.root == 0) {
+    return Status::kNotInit;
+  }
+  if (size == 0) {
+    return Status::kInvalidArg;
+  }
+  if ((virtual_address % kPageSize) != 0) {
+    return Status::kUnaligned;
+  }
+  if (size > kUserSpaceSize) {
+    return Status::kInvalidArg;
+  }
+  aligned = (size + kPageSize - 1U) & ~(kPageSize - 1U);
+  if (virtual_address < kUserSpaceBase) {
+    return Status::kInvalidArg;
+  }
+  if (aligned > kUserSpaceSize) {
+    return Status::kInvalidArg;
+  }
+  const uint64_t offset_in_space = virtual_address - kUserSpaceBase;
+  if (offset_in_space > (kUserSpaceSize - aligned)) {
+    return Status::kInvalidArg;
+  }
+  if (space.user_bytes > kUserMemoryLimit ||
+      aligned > (kUserMemoryLimit - space.user_bytes)) {
+    return Status::kNoMem;
+  }
+  return Status::kOk;
+}
+
+[[nodiscard]] Status MapUserPages(AddressSpace& space, uint64_t virtual_address,
+                                  uint64_t aligned, bool executable,
+                                  bool writable) noexcept {
+  auto* root = reinterpret_cast<uint64_t*>(space.root);
+  for (uint64_t offset = 0; offset < aligned; offset += kPageSize) {
+    const Result<uint64_t> frame = PmmAllocPage();
+    if (frame.is_err()) {
+      FreeUserPages(root, virtual_address, offset);
+      return frame.status();
+    }
+    mem::Zero(reinterpret_cast<void*>(frame.value()), kPageSize);
+    const Status status = MapChunk(root, virtual_address + offset, frame.value(),
+                                   kPageSize, MemoryKind::kNormal, executable,
+                                   true, writable);
+    if (IsErr(status)) {
+      (void)PmmFreePage(frame.value());
+      FreeUserPages(root, virtual_address, offset);
+      return status;
+    }
+  }
+
+  arch::aarch64::InvalidateTlbAllLocal();
+  space.user_bytes += aligned;
+  return Status::kOk;
 }
 
 [[nodiscard]] Result<uint64_t*> NextTable(uint64_t* table, uint64_t index) noexcept {
@@ -253,6 +352,17 @@ void DropUserRegion(AddressSpace& space, uint32_t index) noexcept {
 }
 
 }  // namespace
+
+void SetTlbShootdownHook(TlbShootdownHook hook) noexcept {
+  g_tlb_shootdown = hook;
+}
+
+void TlbShootdown() noexcept {
+  arch::aarch64::InvalidateTlbAllLocal();
+  if (g_tlb_shootdown != nullptr) {
+    g_tlb_shootdown();
+  }
+}
 
 namespace detail {
 
@@ -499,54 +609,71 @@ Status VmmProtectUser(AddressSpace& space, uint64_t base, uint64_t size,
                       : arch::aarch64::kApUserRo;
     arch::aarch64::InvalidateTlbVaLocal(address);
   }
-  arch::aarch64::InvalidateTlbSync();
+  TlbShootdown();
   return Status::kOk;
 }
 
 Status VmmMapUser(AddressSpace& space, uint64_t virtual_address, uint64_t size,
                   bool executable, bool writable) noexcept {
-  if (g_root == nullptr || space.root == 0) {
-    return Status::kNotInit;
+  uint64_t aligned = 0;
+  const Status valid =
+    ValidateUserRange(space, virtual_address, size, aligned);
+  if (IsErr(valid)) {
+    return valid;
   }
-  if (size == 0) {
-    return Status::kInvalidArg;
+  if (space.region_count >= kMaxUserRegions) {
+    return Status::kNoMem;
   }
-  if ((virtual_address % kPageSize) != 0) {
-    return Status::kUnaligned;
+  const Status status =
+    MapUserPages(space, virtual_address, aligned, executable, writable);
+  if (IsErr(status)) {
+    return status;
   }
-  if (size > kUserSpaceSize) {
-    return Status::kInvalidArg;
-  }
-  const uint64_t aligned = (size + kPageSize - 1U) & ~(kPageSize - 1U);
-  if (virtual_address < kUserSpaceBase) {
-    return Status::kInvalidArg;
-  }
-  if (aligned > kUserSpaceSize) {
-    return Status::kInvalidArg;
-  }
-  const uint64_t offset_in_space = virtual_address - kUserSpaceBase;
-  if (offset_in_space > (kUserSpaceSize - aligned)) {
-    return Status::kInvalidArg;
-  }
-
-  auto* root = reinterpret_cast<uint64_t*>(space.root);
-  for (uint64_t offset = 0; offset < aligned; offset += kPageSize) {
-    const Result<uint64_t> frame = PmmAllocPage();
-    if (frame.is_err()) {
-      return frame.status();
-    }
-    mem::Zero(reinterpret_cast<void*>(frame.value()), kPageSize);
-    const Status status = MapChunk(root, virtual_address + offset, frame.value(),
-                                   kPageSize, MemoryKind::kNormal, executable,
-                                   true, writable);
-    if (IsErr(status)) {
-      (void)PmmFreePage(frame.value());
-      return status;
-    }
-  }
-
-  arch::aarch64::InvalidateTlbAllLocal();
   TrackUserRegion(space, virtual_address, aligned);
+  return Status::kOk;
+}
+
+Status VmmGrowUser(AddressSpace& space, uint64_t virtual_address, uint64_t size,
+                   bool executable, bool writable) noexcept {
+  uint64_t aligned = 0;
+  const Status valid =
+    ValidateUserRange(space, virtual_address, size, aligned);
+  if (IsErr(valid)) {
+    return valid;
+  }
+
+  uint32_t region_index = 0;
+  bool grow_below = false;
+  bool found = false;
+  for (uint32_t index = 0; index < space.region_count; ++index) {
+    UserRegion& region = space.regions[index];
+    if ((virtual_address + aligned) == region.base) {
+      region_index = index;
+      grow_below = true;
+      found = true;
+      break;
+    }
+    if ((region.base + region.size) == virtual_address) {
+      region_index = index;
+      grow_below = false;
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
+    return Status::kNotFound;
+  }
+
+  const Status status =
+    MapUserPages(space, virtual_address, aligned, executable, writable);
+  if (IsErr(status)) {
+    return status;
+  }
+  UserRegion& region = space.regions[region_index];
+  if (grow_below) {
+    region.base = virtual_address;
+  }
+  region.size += aligned;
   return Status::kOk;
 }
 
@@ -581,37 +708,14 @@ Status VmmUnmapUser(AddressSpace& space, uint64_t virtual_address,
   }
 
   auto* root = reinterpret_cast<uint64_t*>(space.root);
-  for (uint64_t offset = 0; offset < aligned; offset += kPageSize) {
-    const uint64_t address = virtual_address + offset;
+  FreeUserPages(root, virtual_address, aligned);
+  TlbShootdown();
 
-    const uint64_t root_entry = root[Index(address, 0)];
-    if (!DescriptorValid(root_entry) || !DescriptorIsTable(root_entry)) {
-      return Status::kNotFound;
-    }
-    auto* level1 = reinterpret_cast<uint64_t*>(DescriptorAddress(root_entry));
-
-    const uint64_t level1_entry = level1[Index(address, 1)];
-    if (!DescriptorValid(level1_entry) || !DescriptorIsTable(level1_entry)) {
-      return Status::kNotFound;
-    }
-    auto* level2 = reinterpret_cast<uint64_t*>(DescriptorAddress(level1_entry));
-
-    const uint64_t level2_entry = level2[Index(address, 2)];
-    if (!DescriptorValid(level2_entry) || !DescriptorIsTable(level2_entry)) {
-      return Status::kNotFound;
-    }
-    auto* level3 = reinterpret_cast<uint64_t*>(DescriptorAddress(level2_entry));
-
-    uint64_t& entry = level3[Index(address, 3)];
-    if (!DescriptorValid(entry)) {
-      return Status::kNotFound;
-    }
-    const uint64_t physical = DescriptorAddress(entry);
-    entry = 0;
-    (void)PmmFreePage(physical);
+  if (space.user_bytes >= aligned) {
+    space.user_bytes -= aligned;
+  } else {
+    space.user_bytes = 0;
   }
-  arch::aarch64::InvalidateTlbAllLocal();
-
   DropUserRegion(space, region_index);
   return Status::kOk;
 }

@@ -91,8 +91,8 @@ gemabox> uptime
 uptime: 12345 ms
 gemabox> sleep 50
 gemabox> ps
-pid ppid uid gid state cpu_ms regions name
-1 0 0 0 ready 0 5 /system/boot/init
+pid ppid uid gid state cpu_ms mem_kb limit_kb regions name
+1 0 0 0 ready 0 12 32768 5 /system/boot/init
 ...
 gemabox> dmesg
 dmesg:

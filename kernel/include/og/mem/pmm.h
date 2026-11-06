@@ -13,6 +13,9 @@ namespace og::mem {
 
 constexpr uint64_t kPageSize = 4096;
 constexpr uint64_t kMaxFrames = 1ULL << 20U;  // 4 GiB of 4 KiB frames
+// Below this many free frames the syscall layer may kill the process that
+// failed to allocate, freeing its address space on reap.
+constexpr uint64_t kOomReserveFrames = 1024;  // 4 MiB
 
 [[nodiscard]] Status PmmInit(const BootInfo& info) noexcept;
 

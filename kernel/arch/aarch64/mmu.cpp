@@ -79,6 +79,19 @@ bool IsMmuEnabled() noexcept {
   return (ReadSctlrEl1() & kSctlrMmuEnable) != 0;
 }
 
+bool PanSupported() noexcept {
+  constexpr uint32_t kPanShift = 20U;
+  constexpr uint64_t kPanMask = 0xFULL << kPanShift;
+  return (ReadIdAa64Mmfr1El1() & kPanMask) != 0U;
+}
+
+void EnablePan() noexcept {
+  constexpr uint64_t kSctlrSpan = 1ULL << 23U;
+  const uint64_t sctlr = ReadSctlrEl1() & ~kSctlrSpan;
+  WriteSctlrEl1(sctlr);
+  InstructionSync();
+}
+
 void SwitchAddressSpace(uint64_t ttbr0, uint16_t asid) noexcept {
   const uint64_t value = ttbr0 | (static_cast<uint64_t>(asid) << kTtbrAsidShift);
   DsbSy();

@@ -20,6 +20,8 @@ constexpr uint32_t kMaxProcesses = 16;
 constexpr uint32_t kKernelPid = 0;
 constexpr uint64_t kUserStackVa = mem::kUserSpaceBase + 0x100000ULL;
 constexpr uint64_t kUserStackSize = 16384;
+constexpr uint64_t kUserStackRandomRange = 8ULL * 1024U * 1024U;
+constexpr uint64_t kUserStackGrowth = 48ULL * 1024U;
 constexpr uint64_t kMaxProgramSize = 65536;
 constexpr uint32_t kMaxArgs = 8;
 constexpr uint64_t kMaxArgLength = 64;
@@ -43,6 +45,9 @@ struct Process {
   fs::FileTable files;
   sched::Thread* thread;
   uint64_t entry;
+  uint64_t stack_base;
+  uint64_t stack_low;
+  uint64_t stack_limit;
   uint64_t stack_top;
   uint64_t argv;
   uint64_t envp;
@@ -61,6 +66,8 @@ struct ProcessInfo {
   uint32_t gid;
   ProcessState state;
   uint64_t cpu_ms;
+  uint64_t memory_bytes;
+  uint64_t memory_limit;
   uint32_t regions;
   char name[32];
 };
@@ -83,6 +90,14 @@ struct ProcessInfo {
                                          int32_t& status) noexcept;
 
 [[noreturn]] void Exit(int32_t status) noexcept;
+
+// Kills the requesting process when an allocation fails with the global
+// free-frame count below the OOM reserve.
+[[noreturn]] void OutOfMemory(Process& process) noexcept;
+
+// Maps one page below the current stack when fault_address falls in the
+// guard-adjacent window. Returns false when the fault is not growable.
+[[nodiscard]] bool GrowStack(Process& process, uint64_t fault_address) noexcept;
 
 [[nodiscard]] Process* Current() noexcept;
 [[nodiscard]] Status SetCwd(Process& process, const char* path) noexcept;

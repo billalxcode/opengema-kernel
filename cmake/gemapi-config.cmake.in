@@ -1,7 +1,7 @@
 @PACKAGE_INIT@
 
 set(GEMAPI_LINKER_SCRIPT
-    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/opengema/link.ld")
+    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/opengema/link-static.ld")
 set(GEMAPI_SDK_TOOLCHAIN
     "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/opengema/opengema-sdk-toolchain.cmake")
 set(GEMAPI_DYNAMIC_LINKER "/system/boot/ld-gem")

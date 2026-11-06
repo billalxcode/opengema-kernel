@@ -13,7 +13,9 @@ membangun aplikasi userland opengema. Aplikasi hanya memakai `libgemapi`.
 - `lib/libgemapi.a`: archive aplikasi, sudah membawa objek kgema.
 - `lib/libkgema.a`: archive ABI mentah.
 - `lib/libgemapi.so.1` dan `lib/libkgema.so.1`: library dynamic.
-- `lib/opengema/link.ld`: linker script aplikasi.
+- `lib/opengema/link.ld`: linker script PIE untuk aplikasi dynamic.
+- `lib/opengema/link-static.ld`: linker script fixed-base untuk archive
+  statis dan recovery build.
 - `lib/opengema/opengema-sdk-toolchain.cmake`: toolchain AArch64.
 - `lib/cmake/gemapi`: CMake package config.
 

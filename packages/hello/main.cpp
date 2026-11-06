@@ -24,6 +24,49 @@ bool same(const char* lhs, const char* rhs) {
   return *lhs == *rhs;
 }
 
+gemapi::usize append_text(char* out, gemapi::usize capacity,
+                          gemapi::usize cursor, const char* text) {
+  for (gemapi::usize index = 0; text[index] != '\0'; ++index) {
+    if (cursor >= capacity) {
+      return capacity;
+    }
+    out[cursor] = text[index];
+    ++cursor;
+  }
+  return cursor;
+}
+
+gemapi::usize append_dec(char* out, gemapi::usize capacity,
+                         gemapi::usize cursor, gemapi::u64 value) {
+  char digits[20];
+  gemapi::usize count = 0;
+  do {
+    digits[count] = static_cast<char>('0' + (value % 10U));
+    ++count;
+    value /= 10U;
+  } while (value != 0U);
+  while (count > 0U) {
+    if (cursor >= capacity) {
+      return capacity;
+    }
+    --count;
+    out[cursor] = digits[count];
+    ++cursor;
+  }
+  return cursor;
+}
+
+__attribute__((noinline)) int stack_recurse(unsigned depth) {
+  volatile unsigned char buffer[4096];
+  asm volatile("" : : "r"(buffer) : "memory");
+  buffer[0] = static_cast<unsigned char>(depth);
+  buffer[sizeof(buffer) - 1U] = static_cast<unsigned char>(depth + 1U);
+  if (depth == 0U) {
+    return buffer[0] + buffer[sizeof(buffer) - 1U];
+  }
+  return stack_recurse(depth - 1U) + buffer[0];
+}
+
 constexpr gemapi::u64 kFuzzIterations = 512;
 
 // Every entry lies outside all user regions: below the 1 TiB user base,
@@ -207,6 +250,64 @@ int main(int argc, char** argv, char** envp) {
     run_fuzz();
     gemapi::io::write("FUZZ-DONE\n");
     return 0;
+  }
+  if (argc > 1 && same(argv[1], "mem")) {
+    constexpr gemapi::usize kSmallMap = 8U * 1024U * 1024U;
+    constexpr gemapi::usize kLargeMap = 40U * 1024U * 1024U;
+    const auto small = gemapi::memory::map(kSmallMap);
+    if (!small) {
+      gemapi::io::write("mem: small map failed\n");
+      return 1;
+    }
+    if (gemapi::memory::unmap(small.value(), kSmallMap) != gemapi::Status::ok) {
+      gemapi::io::write("mem: unmap failed\n");
+      return 1;
+    }
+    const auto large = gemapi::memory::map(kLargeMap);
+    if (large) {
+      (void)gemapi::memory::unmap(large.value(), kLargeMap);
+      gemapi::io::write("mem: limit not enforced\n");
+      return 1;
+    }
+    gemapi::io::write("mem: limit enforced\n");
+    return 0;
+  }
+  if (argc > 1 && same(argv[1], "aslr")) {
+    volatile char stack_probe = 0;
+    const auto mapped = gemapi::memory::map(4096U);
+    if (!mapped) {
+      gemapi::io::write("aslr: map failed\n");
+      return 1;
+    }
+    char line[80];
+    gemapi::usize cursor = 0;
+    cursor = append_text(line, sizeof(line), cursor, "aslr: stack ");
+    cursor = append_dec(line, sizeof(line), cursor,
+                        reinterpret_cast<gemapi::u64>(&stack_probe));
+    cursor = append_text(line, sizeof(line), cursor, " mmap ");
+    cursor = append_dec(line, sizeof(line), cursor,
+                        reinterpret_cast<gemapi::u64>(mapped.value()));
+    cursor = append_text(line, sizeof(line), cursor, " code ");
+    cursor = append_dec(line, sizeof(line), cursor,
+                        reinterpret_cast<gemapi::u64>(&stack_recurse));
+    cursor = append_text(line, sizeof(line), cursor, "\n");
+    gemapi::io::write(line, cursor);
+    (void)gemapi::memory::unmap(mapped.value(), 4096U);
+    return 0;
+  }
+  if (argc > 1 && same(argv[1], "stack")) {
+    volatile int result = stack_recurse(6U);
+    if (result < 0) {
+      gemapi::io::write("stack: failed\n");
+      return 1;
+    }
+    gemapi::io::write("stack: grew\n");
+    return 0;
+  }
+  if (argc > 1 && same(argv[1], "stackguard")) {
+    (void)stack_recurse(20U);
+    gemapi::io::write("stack: guard missing\n");
+    return 1;
   }
   if (argc > 1 && same(argv[1], "fault")) {
     volatile int* invalid = reinterpret_cast<volatile int*>(0);

@@ -25,8 +25,8 @@ void CopyName(char* destination, u64 capacity, const char* source) noexcept {
 
 }  // namespace
 
-bool Linker::AddMain(u64 dynamic, const char* name) noexcept {
-  return AddObject(name, 0, dynamic, true);
+bool Linker::AddMain(u64 dynamic, u64 base, const char* name) noexcept {
+  return AddObject(name, base, dynamic, true);
 }
 
 bool Linker::AddObject(const char* name, u64 base, u64 dynamic,

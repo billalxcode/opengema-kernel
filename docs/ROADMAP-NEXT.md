@@ -16,15 +16,15 @@ Prioritas: P0 blocker, P1 penting, P2 menengah, P3 nanti.
 | Reklamasi | Stack, address space, FD, dan slot proses dibebaskan; frame kembali | PID reuse, reklamasi saat gagal di tengah jalan | Aman untuk dua proses, belum untuk beban besar | P0 |
 | SDK dan shell | API berkas/proses/waktu, argv, konstruktor C++, shell multi perintah | Packaging SDK, contoh program, dan template package | Belum ada pengalaman userland yang nyata | P1 |
 | Filesystem | FAT32 read-only, ramfs statis, mount internal | Tulis berkas, mkdir, unlink, rename, mount/umount, permission, sync | Data tidak bisa disimpan atau diubah | P1 |
-| Memori user | W^X user, stack statis, tanpa demand paging | Guard stack, stack growth, COW, file-backed mmap, accounting, OOM | Isolasi dan keamanan user membaik, belum ada demand paging | P1 |
+| Memori user | W^X user, stack growth 64 KiB, guard page, limit 32 MiB, ASLR stack/mmap/executable, OOM kill requester | COW, file-backed mmap, OOM selektif | Isolasi membaik, demand paging dan COW belum | P1 |
 | Scheduler | Per-CPU, thread tidak migrasi, tanpa prioritas | Migrasi/work stealing, prioritas, join, condvar, rwlock, futex, TLS | Beban tidak seimbang, primitif sinkronisasi kurang | P1 |
-| TLB dan SMP | ASID dipakai, AS dipin ke satu core | TLB shootdown lintas core, ASID reuse yang aman, 4 core test | Mappings kernel/user bisa basi pada SMP | P1 |
+| TLB dan SMP | ASID, flush lokal saat switch, IPI shootdown non-blocking | Ack sinkron, shootdown selektif per ASID, reuse ASID aman | Flush remote belum sinkron, tapi tidak deadlock | P1 |
 | Driver | UART, RTC, PCI, virtio-blk, virtio-gpu | virtio-net, input, MSI-X, virtio IRQ, multi device, DMA streaming | Belum ada jaringan atau input interaktif | P1 |
 | Platform | QEMU virt hardcoded, DTB dan ACPI discovery dasar | GTDT detail, ACPI memory map, discovery RAM/device, initrd, cmdline | Sulit pindah board atau boot ACPI penuh | P2 |
 | Daya dan waktu | RTC dibaca saat boot, shutdown/reboot ACPI dan PSCI | settime, timezone, shutdown dari service manager | Mesin bisa dimatikan dan di-reboot dari shell | P2 |
 | Observability | Log serial, panic, procfs uptime/threads | dmesg ring, tracing, counter, watchdog, statistik memori/CPU | Debug produksi dan regresi sulit | P1 |
 | Test dan CI | Smoke QEMU, host test, sanitizer, coverage 58%, clang-tidy, fuzz, workflow CI, artifact image, firmware terkunci | Fuzz coverage-guided, coverage seluruh probe, artifact SDK | CI dasar lengkap, workflow belum run di GitHub | P1 |
-| Keamanan | W^X kernel dan user, stack canary, fuzz argumen deterministik | KASLR, PAC/BTI, PAN, fuzz coverage-guided | W^X dan fuzz dasar aktif, mitigasi hardware belum | P1 |
+| Keamanan | W^X kernel/user, stack canary, PAN bila didukung, fuzz argumen | KASLR, PAC/BTI, fuzz coverage-guided | PAN default target belum ada, validasi user terpusat | P1 |
 | Dev experience | compile_commands sudah mencakup packages | SDK install/export, contoh program, template package | Program baru masih menyalin konfigurasi | P2 |
 | Jaringan | Tidak ada | Ethernet, ARP, IPv4, ICMP, UDP, socket | Tidak ada konektivitas | P2 |
 
@@ -184,18 +184,25 @@ keyboard di jendela QEMU.
 
 - [ ] MEM-10 Demand paging dan page fault handler yang aman.
 - [ ] MEM-11 COW untuk fork atau clone.
-- [ ] MEM-12 Stack growth dan guard page user.
+- [x] MEM-12 Stack growth dan guard page user. Stack tumbuh per halaman
+      sampai 64 KiB; fault di luar batas mematikan proses.
 - [ ] MEM-13 File-backed mmap dan shared memory.
 - [x] MEM-14 W^X user: segmen executable dipetakan RX, data/stack dan
       mmap non-executable RW NX, mmap executable RX, serta syscall
       `mprotect` untuk mengubah permission tanpa W+X.
-- [ ] MEM-15 Accounting per proses, limit, dan OOM killer minimal.
+- [~] MEM-15 Accounting per proses, limit 32 MiB, dan OOM kill requester
+      saat free frame di bawah reserve. Accounting dan limit diuji lewat
+      `hello mem`; jalur OOM kill belum diuji QEMU.
 - [~] MEM-16 TLB shootdown lintas core dan ASID reuse yang aman.
-      Flush lokal saat address space berganti sudah ada; shootdown lintas
-      core dan reuse ASID belum.
-- [ ] MEM-17 ASLR untuk stack, mmap, dan executable.
-- [~] MEM-18 User fault dari EL0 sekarang mematikan proses, bukan panic.
-      COW, limit memori, dan uji fault lain belum.
+      Semua CPU mem-flush TLB lokal saat address space berganti. Perubahan
+      permission dan unmap mengirim SGI flush ke CPU online secara
+      non-blocking. Ack sinkron dan reuse ASID belum.
+- [x] MEM-17 ASLR untuk stack, mmap, dan executable. Aplikasi dynamic
+      dibangun sebagai PIE/ET_DYN, kernel memilih load bias acak, dan
+      library dimuat di mmap acak. Build statis SDK tetap memakai image
+      fixed-base.
+- [~] MEM-18 User fault dari EL0 mematikan proses atau ditangani sebagai
+      stack growth, bukan panic. COW dan uji fault lain belum.
 
 **Selesai bila:** user tidak bisa mengeksekusi data, dan fork/COW serta
 demand paging lulus uji.
@@ -246,7 +253,10 @@ bekerja dari shell.
       dan 8 word stack. SysRq `Ctrl-A` lalu `s`/`b`/`o`/`h` untuk statistik,
       reboot, shutdown, dan halt. Watchdog memeriksa heartbeat tiap CPU.
 - [ ] SEC-01 KASLR dan relokasi image.
-- [ ] SEC-02 PAN dan validasi akses user yang seragam.
+- [x] SEC-02 PAN dan validasi akses user yang seragam. PAN diaktifkan
+      bila CPU mendukung dan diuji dengan QEMU `-cpu max`; cortex-a72
+      melaporkan tidak didukung. Semua akses user memakai copy helper
+      berbasis translasi fisik.
 - [ ] SEC-03 PAC/BTI bila tersedia di target.
 - [x] SEC-04 Validasi pointer user diuji dari EL0: `hello badptr` menolak
       pointer invalid, dan `hello fuzz` menjalankan 512 panggilan dengan
