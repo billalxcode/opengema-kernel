@@ -374,6 +374,7 @@ Status FormatMemInfo(char* buffer, std::size_t capacity,
   line.Text("dma_allocs: ").Dec(dma_stats.allocations).Char('\n');
   line.Text("dma_frees: ").Dec(dma_stats.frees).Char('\n');
   line.Text("dma_bytes: ").Dec(dma_stats.live_bytes).Char('\n');
+  line.Text("lazy_faults: ").Dec(mem::VmmLazyFaultCount()).Char('\n');
   length = line.size();
   return Status::kOk;
 }

@@ -23,6 +23,7 @@ constexpr uint64_t kOomReserveFrames = 1024;  // 4 MiB
 [[nodiscard]] Result<uint64_t> PmmAllocPages(uint64_t count) noexcept;
 [[nodiscard]] Status PmmFreePage(uint64_t address) noexcept;
 [[nodiscard]] Status PmmFreePages(uint64_t address, uint64_t count) noexcept;
+[[nodiscard]] Status PmmRetainPage(uint64_t address) noexcept;
 
 [[nodiscard]] uint64_t PmmFreeFrames() noexcept;
 [[nodiscard]] uint64_t PmmTotalFrames() noexcept;

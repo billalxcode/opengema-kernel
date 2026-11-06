@@ -24,6 +24,9 @@ constexpr uint64_t kUserMemoryLimit = 32ULL * 1024U * 1024U;  // 32 MiB
 struct UserRegion {
   uint64_t base;
   uint64_t size;
+  bool lazy;
+  bool executable;
+  bool writable;
 };
 
 struct AddressSpace {
@@ -42,6 +45,11 @@ struct AddressSpace {
 // Frees user pages, user page tables, and the level 0 table. Kernel entries
 // are shared and stay untouched. The space must not be active.
 [[nodiscard]] Status AddressSpaceDestroy(AddressSpace& space) noexcept;
+
+// Clones user page tables and shares pages with the parent through COW.
+// Page-table frames, FD entries, and child bookkeeping are duplicated.
+[[nodiscard]] Status VmmCloneAddressSpace(const AddressSpace& parent,
+                                          AddressSpace& child) noexcept;
 
 // Installs the space on the current CPU. Null selects the kernel space.
 void AddressSpaceActivate(const AddressSpace* space) noexcept;
@@ -87,6 +95,18 @@ struct PageAttributes {
                                  uint64_t size, bool executable,
                                  bool writable) noexcept;
 
+// Reserves a lazy user region. Pages are allocated on first access.
+[[nodiscard]] Status VmmMapUserLazy(AddressSpace& space,
+                                    uint64_t virtual_address, uint64_t size,
+                                    bool executable, bool writable) noexcept;
+
+// Allocates the page containing virtual_address if the address is inside a
+// lazy region.
+[[nodiscard]] Status VmmFaultUserPage(AddressSpace& space,
+                                      uint64_t virtual_address) noexcept;
+
+[[nodiscard]] uint64_t VmmLazyFaultCount() noexcept;
+
 // Unmaps a user region and frees its physical frames. The range must match
 // a region created by VmmMapUser exactly.
 [[nodiscard]] Status VmmUnmapUser(AddressSpace& space, uint64_t virtual_address,
@@ -102,6 +122,10 @@ void TlbShootdown() noexcept;
 [[nodiscard]] Status VmmProtectUser(AddressSpace& space, uint64_t base,
                                     uint64_t size, bool executable,
                                     bool writable) noexcept;
+
+// Resolves a write fault on a COW page by copying it into a private frame.
+[[nodiscard]] Status VmmHandleCow(AddressSpace& space,
+                                  uint64_t virtual_address) noexcept;
 
 // Validated copies between kernel buffers and user mappings. The copy walks
 // the page tables, so it does not depend on which space is active.

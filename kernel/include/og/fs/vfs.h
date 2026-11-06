@@ -135,6 +135,8 @@ struct FileTable {
 [[nodiscard]] uint32_t FsMountSnapshot(MountInfo* out,
                                         uint32_t capacity) noexcept;
 [[nodiscard]] Status FileTableInit(FileTable& table) noexcept;
+[[nodiscard]] Status FsCloneTable(const FileTable& source,
+                                  FileTable& destination) noexcept;
 
 // Mounts root at path. Kernel mounts are pinned and cannot be unmounted.
 [[nodiscard]] Status FsMount(const char* path, Node* root) noexcept;

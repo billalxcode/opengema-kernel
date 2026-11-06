@@ -13,4 +13,9 @@ extern "C" [[noreturn]] void EnterUserMode(uint64_t entry, uint64_t stack_pointe
                                            uint64_t argc, uint64_t argv,
                                            uint64_t envp) noexcept;
 
+// Resumes EL0 with a saved register frame. registers points to x[0..30].
+extern "C" [[noreturn]] void EnterForkedUserMode(
+  const uint64_t* registers, uint64_t elr, uint64_t spsr,
+  uint64_t stack_pointer) noexcept;
+
 }  // namespace og::arch::aarch64

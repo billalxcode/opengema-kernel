@@ -36,6 +36,14 @@ Manifest ada di `packages/system-root/applications/hello/manifest.txt`.
   sebagai PIE/ET_DYN dan kernel memilih load bias acak.
 - `hello stack` merekursi dengan frame 4 KiB sampai melewati stack awal
   16 KiB, lalu harus tumbuh dan mencetak `stack: grew`.
+- `hello fork` membuka `/system/config/version`, memanggil `fork`, lalu
+  child menulis global COW dan membaca berkas; parent memastikan global
+  lamanya tidak berubah dan membaca berkas dari offset FD sendiri.
+- `hello exec` mengganti image dirinya dengan `/applications/hello/hello`
+  dan argv `exec-child`. Image baru mencetak `exec: child`, lalu shell
+  melanjutkan setelah proses lama diganti.
+- `hello lazy` memetakan 8 MiB secara lazy, menulis halaman pertama dan
+  terakhir, lalu memastikan `/proc/meminfo` mencatat `lazy_faults: 2`.
 - `hello errno` memeriksa pemetaan errno: path hilang menjadi `not found`,
   pointer invalid menjadi `invalid argument`, dan map 40 MiB menjadi
   `out of memory`.

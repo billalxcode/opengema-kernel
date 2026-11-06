@@ -1,6 +1,7 @@
 #include "og/process/process.h"
 
 #include "memory.h"
+#include "og/arch/registers.h"
 #include "og/arch/spinlock.h"
 #include "og/arch/user.h"
 #include "og/core/log.h"
@@ -192,6 +193,11 @@ void BuildInterpreterEnvironment(const elf::Image& image, bool dynamic,
 
 void ProcessThreadEntry(void* argument) noexcept {
   auto* process = static_cast<Process*>(argument);
+  if (process->fork.active) {
+    arch::aarch64::EnterForkedUserMode(
+      process->fork.x, process->fork.elr, process->fork.spsr,
+      process->fork.sp);
+  }
   arch::aarch64::EnterUserMode(process->entry, process->stack_top, process->argc,
                                process->argv, process->envp);
 }
@@ -550,6 +556,183 @@ Result<uint32_t> SpawnWithArgs(const char* path, uint32_t parent_pid,
   LogDec(LogLevel::kInfo, "user: program bytes", program.file_size);
   LogDec(LogLevel::kInfo, "user: spawn pid", created.value());
   return created;
+}
+
+Result<uint32_t> Fork(arch::aarch64::TrapFrame* frame) noexcept {
+  if (!g_ready || frame == nullptr) {
+    return Result<uint32_t>::Err(Status::kNotInit);
+  }
+  Process* parent = Current();
+  if (parent == nullptr) {
+    return Result<uint32_t>::Err(Status::kNotInit);
+  }
+
+  mem::AddressSpace child_space{};
+  Status status = mem::VmmCloneAddressSpace(parent->space, child_space);
+  if (IsErr(status)) {
+    return Result<uint32_t>::Err(status);
+  }
+  fs::FileTable child_files{};
+  status = fs::FsCloneTable(parent->files, child_files);
+  if (IsErr(status)) {
+    (void)mem::AddressSpaceDestroy(child_space);
+    return Result<uint32_t>::Err(status);
+  }
+  auto close_child_files = [&child_files]() noexcept {
+    for (uint32_t index = fs::kFirstFileDescriptor; index < fs::kMaxFiles;
+         ++index) {
+      if (child_files.entries[index].in_use) {
+        (void)fs::FsClose(child_files, index);
+      }
+    }
+  };
+
+  g_lock.lock();
+  Process* slot = nullptr;
+  for (uint32_t index = 0; index < kMaxProcesses; ++index) {
+    if (g_processes[index].used == 0U) {
+      slot = &g_processes[index];
+      break;
+    }
+  }
+  if (slot == nullptr) {
+    g_lock.unlock();
+    close_child_files();
+    (void)mem::AddressSpaceDestroy(child_space);
+    return Result<uint32_t>::Err(Status::kNoMem);
+  }
+
+  mem::Zero(slot, sizeof(*slot));
+  slot->pid = NextPidLocked();
+  slot->parent_pid = parent->pid;
+  slot->uid = parent->uid;
+  slot->gid = parent->gid;
+  slot->state = ProcessState::kReady;
+  slot->used = 1;
+  slot->space = child_space;
+  slot->files = child_files;
+  slot->entry = parent->entry;
+  slot->stack_base = parent->stack_base;
+  slot->stack_low = parent->stack_low;
+  slot->stack_limit = parent->stack_limit;
+  slot->stack_top = parent->stack_top;
+  slot->argv = parent->argv;
+  slot->envp = parent->envp;
+  slot->argc = parent->argc;
+  mem::Copy(slot->name, parent->name, sizeof(slot->name));
+  mem::Copy(slot->cwd, parent->cwd, sizeof(slot->cwd));
+
+  mem::Copy(slot->fork.x, frame->x, sizeof(slot->fork.x));
+  slot->fork.x[0] = 0;
+  slot->fork.elr = frame->elr;
+  slot->fork.spsr = frame->spsr;
+  slot->fork.sp = arch::aarch64::ReadSpEl0();
+  slot->fork.active = true;
+
+  for (uint32_t index = 0; index < parent->mount_count; ++index) {
+    status = fs::FsMountRef(parent->mounts[index], nullptr);
+    if (IsErr(status)) {
+      break;
+    }
+    mem::Copy(slot->mounts[index], parent->mounts[index], fs::kMaxPath);
+    ++slot->mount_count;
+  }
+  if (IsErr(status)) {
+    ReleaseMounts(*slot);
+    mem::AddressSpace doomed = slot->space;
+    slot->used = 0;
+    g_lock.unlock();
+    close_child_files();
+    (void)mem::AddressSpaceDestroy(doomed);
+    return Result<uint32_t>::Err(status);
+  }
+
+  const Result<sched::Thread*> thread = sched::ThreadCreateIn(
+    "user", &ProcessThreadEntry, slot, &slot->space, slot);
+  if (thread.is_err()) {
+    ReleaseMounts(*slot);
+    mem::AddressSpace doomed = slot->space;
+    slot->used = 0;
+    g_lock.unlock();
+    close_child_files();
+    (void)mem::AddressSpaceDestroy(doomed);
+    return Result<uint32_t>::Err(thread.status());
+  }
+  slot->thread = thread.value();
+  const uint32_t pid = slot->pid;
+  g_lock.unlock();
+  trace::Record(trace::Tag::kSpawn, pid);
+  return Result<uint32_t>::Ok(pid);
+}
+
+Status Exec(const char* path, const char* const* argv, uint32_t argc,
+            arch::aarch64::TrapFrame* frame) noexcept {
+  if (!g_ready || path == nullptr || frame == nullptr) {
+    return Status::kInvalidArg;
+  }
+  Process* process = Current();
+  if (process == nullptr) {
+    return Status::kNotInit;
+  }
+
+  LoadedProgram program{};
+  Status status = LoadProgram(path, program);
+  if (IsErr(status)) {
+    return status;
+  }
+
+  const uint64_t stack_base =
+    kUserStackVa +
+    ((core::Random64() % kUserStackSlots) * arch::aarch64::kPageSize);
+  status = mem::VmmMapUser(program.space, stack_base, kUserStackSize, false);
+  InterpreterEnvironment environment{};
+  BuildInterpreterEnvironment(program.image, program.dynamic, program.base,
+                              environment);
+  UserStack user_stack{};
+  if (IsOk(status)) {
+    status = BuildUserStack(program.space, path, argv, argc,
+                            environment.values, environment.count,
+                            stack_base, user_stack);
+  }
+  if (IsErr(status)) {
+    (void)mem::AddressSpaceDestroy(program.space);
+    return status;
+  }
+
+  const uint64_t entry =
+    program.dynamic ? program.interpreter_image.entry
+                    : program.image.entry + program.base;
+  mem::AddressSpace old_space = process->space;
+  process->space = program.space;
+  process->entry = entry;
+  process->stack_base = stack_base;
+  process->stack_low = stack_base;
+  process->stack_limit = stack_base - kUserStackGrowth;
+  process->stack_top = user_stack.stack_pointer;
+  process->argv = user_stack.argv;
+  process->envp = user_stack.envp;
+  process->argc = user_stack.argc;
+  process->fork.active = false;
+  const std::size_t name_length = mem::Length(path);
+  const std::size_t name_copy =
+    name_length >= sizeof(process->name) ? (sizeof(process->name) - 1U)
+                                        : name_length;
+  mem::Copy(process->name, path, name_copy);
+  process->name[name_copy] = '\0';
+
+  mem::AddressSpaceActivate(&process->space);
+  (void)mem::AddressSpaceDestroy(old_space);
+
+  frame->elr = entry;
+  frame->spsr = 0;
+  frame->x[0] = user_stack.argc;
+  frame->x[1] = user_stack.argv;
+  frame->x[2] = user_stack.envp;
+  for (uint32_t index = 3; index < 31U; ++index) {
+    frame->x[index] = 0;
+  }
+  arch::aarch64::WriteSpEl0(user_stack.stack_pointer);
+  return Status::kOk;
 }
 
 Result<uint32_t> WaitFor(uint32_t pid, int32_t& status) noexcept {

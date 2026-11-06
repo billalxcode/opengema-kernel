@@ -116,6 +116,7 @@ constexpr gemapi::usize kFuzzMapSizes[] = {
 };
 
 gemapi::u64 g_fuzz_state = 0x9E3779B97F4A7C15ULL;
+volatile int g_fork_value = 0;
 
 gemapi::u64 fuzz_next() noexcept {
   g_fuzz_state ^= g_fuzz_state << 13U;
@@ -293,6 +294,84 @@ int main(int argc, char** argv, char** envp) {
     gemapi::io::write("\nerrno: big ");
     gemapi::io::print(gemapi::to_string(big.status()));
     gemapi::io::write("\n");
+    return 0;
+  }
+  if (argc > 1 && same(argv[1], "lazy")) {
+    constexpr gemapi::usize kLazySize = 8U * 1024U * 1024U;
+    const auto mapped = gemapi::memory::map_lazy(kLazySize);
+    if (!mapped) {
+      gemapi::io::write("lazy: map failed\n");
+      return 1;
+    }
+    volatile unsigned char* bytes =
+      static_cast<volatile unsigned char*>(mapped.value());
+    bytes[0] = 0x11U;
+    bytes[kLazySize - 1U] = 0x22U;
+    if (bytes[0] != 0x11U || bytes[kLazySize - 1U] != 0x22U) {
+      gemapi::io::write("lazy: readback failed\n");
+      return 1;
+    }
+    if (gemapi::memory::unmap(mapped.value(), kLazySize) !=
+        gemapi::Status::ok) {
+      gemapi::io::write("lazy: unmap failed\n");
+      return 1;
+    }
+    gemapi::io::write("lazy: ok\n");
+    return 0;
+  }
+  if (argc > 1 && same(argv[1], "exec")) {
+    const char* args[] = {"hello", "exec-child"};
+    (void)gemapi::process::exec("/applications/hello/hello", args, 2U);
+    gemapi::io::write("exec: failed\n");
+    return 1;
+  }
+  if (argc > 1 && same(argv[1], "exec-child")) {
+    gemapi::io::write("exec: child\n");
+    return 0;
+  }
+  if (argc > 1 && same(argv[1], "fork")) {
+    auto file = gemapi::fs::File::open("/system/config/version");
+    if (!file) {
+      gemapi::io::write("fork: open failed\n");
+      return 1;
+    }
+    g_fork_value = 111;
+    const auto child = gemapi::process::fork();
+    if (!child) {
+      gemapi::io::write("fork: failed\n");
+      return 1;
+    }
+    if (child.value() == 0U) {
+      g_fork_value = 222;
+      if (g_fork_value != 222) {
+        gemapi::io::write("fork: child cow failed\n");
+        return 1;
+      }
+      char buffer[4];
+      const auto read = file.value().read(buffer, sizeof(buffer));
+      if (!read || read.value() != sizeof(buffer)) {
+        gemapi::io::write("fork: child read failed\n");
+        return 1;
+      }
+      gemapi::io::write("fork: child\n");
+      return 0;
+    }
+    int status = 0;
+    if (gemapi::process::wait(child.value(), status) != gemapi::Status::ok) {
+      gemapi::io::write("fork: wait failed\n");
+      return 1;
+    }
+    if (g_fork_value != 111) {
+      gemapi::io::write("fork: parent cow failed\n");
+      return 1;
+    }
+    char buffer[4];
+    const auto read = file.value().read(buffer, sizeof(buffer));
+    if (!read || read.value() != sizeof(buffer)) {
+      gemapi::io::write("fork: parent read failed\n");
+      return 1;
+    }
+    gemapi::io::write("fork: parent\n");
     return 0;
   }
   if (argc > 1 && same(argv[1], "aslr")) {

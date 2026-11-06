@@ -292,6 +292,14 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   menghasilkan `out of memory`. Host test memeriksa `from_errno`.
 - Test thread join: self-test membuat worker, menunggu lewat `ThreadJoin`,
   lalu memastikan stack dan slot thread sudah diklaim kembali.
+- Test fork: `hello fork` membuka berkas, memanggil `fork`, lalu child
+  menulis global dan membaca FD; parent memastikan global lama dan offset
+  FD sendiri. Page user dibagi COW dengan refcount frame.
+- Test exec: `hello exec` mengganti image proses dengan hello baru dan argv
+  `exec-child`. Image lama tidak kembali; shell melanjutkan setelah proses
+  baru keluar.
+- Test lazy mmap: `hello lazy` memetakan 8 MiB tanpa frame, menyentuh dua
+  halaman, lalu `/proc/meminfo` menunjukkan `lazy_faults: 2`.
 - OOM killer minimal membunuh proses yang gagal `mmap` saat free frame di
   bawah reserve 4 MiB. Jalur ini belum dipicu oleh tes QEMU.
 - CI GitHub Actions menjalankan host test, sanitizer, clang-tidy, coverage,
@@ -300,7 +308,7 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 - Host test bisa dijalankan dengan ASan+UBSan lewat
   `scripts/test-sanitize.sh`. Seluruh probe lulus; `ramfs_probe` sekarang
   melepas root tree lewat `NodeOps::release` sehingga tidak ada leak.
-- Coverage source-based LLVM untuk host test inti menghasilkan 57,88 persen
+- Coverage source-based LLVM untuk host test inti menghasilkan 56,96 persen
   baris dengan ambang CI 55 persen. Laporan ada di
   `build/coverage/report.txt`.
 - Firmware UEFI dipin di `scripts/firmware.lock` ke paket Debian
@@ -356,7 +364,7 @@ Verifikasi branch `dev`:
   `arch-check` dan `gsl-check` OK.
 - `./scripts/test-tidy.sh`: 118 file C++ OK dengan clang-tidy.
 - Sanitizer host test dengan ASan+UBSan: seluruh probe OK.
-- `./scripts/test-coverage.sh`: host test inti 57,88 persen baris,
+- `./scripts/test-coverage.sh`: host test inti 56,96 persen baris,
   ambang 55 persen.
 - `hello mem`: map 8 MiB lalu unmap berhasil, map 40 MiB ditolak limit
   32 MiB, dan `/proc/processes` menampilkan `mem_kb` serta `limit_kb`.
@@ -373,6 +381,13 @@ Verifikasi branch `dev`:
 - Errno: `hello errno` mencetak `not found`, `invalid argument`, dan
   `out of memory`; host probe memetakan errno negatif ke `gemapi::Status`.
 - Thread join: `sched: join ok` muncul dan stack worker kembali ke PMM.
+- Fork: `fork: child` dan `fork: parent` muncul; child menulis global COW
+  tanpa mengubah nilai parent, dan kedua proses membaca FD hasil clone
+  dari offset masing-masing.
+- Exec: `exec: child` muncul dari image baru dan `EXEC-DONE` menyusul;
+  PID, FD, cwd, uid, dan gid dipertahankan.
+- Lazy mmap: `lazy: ok` dan `lazy_faults: 2` muncul setelah dua halaman
+  disentuh; frame baru dialokasikan saat fault.
 - `.github/workflows/ci.yml`: build native Linux, host test, sanitizer,
   clang-tidy, coverage, SDK, QEMU DTB/ACPI, dan persistensi. Semua langkah
   lulus lokal; workflow belum dijalankan di GitHub.

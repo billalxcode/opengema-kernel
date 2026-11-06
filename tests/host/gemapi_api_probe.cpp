@@ -92,6 +92,13 @@ i64 wait(i64 pid, int* status) noexcept {
   return 0;
 }
 
+i64 fork() noexcept { return 99; }
+
+i64 exec(const char* /*path*/, const char* const* /*argv*/,
+         usize /*argc*/) noexcept {
+  return 0;
+}
+
 void* mmap(usize size) noexcept {
   if (size == 0xDEADU) {
     return nullptr;
@@ -101,6 +108,10 @@ void* mmap(usize size) noexcept {
 
 void* mmap_executable(usize size) noexcept {
   return size == 0U ? nullptr : reinterpret_cast<void*>(0x2000);
+}
+
+void* mmap_lazy(usize size) noexcept {
+  return size == 0U ? nullptr : reinterpret_cast<void*>(0x3000);
 }
 
 bool munmap(void* address, usize size) noexcept {
@@ -222,6 +233,13 @@ int main() {
   }
   if (gemapi::memory::map(0xDEADU).status() != Status::no_memory) {
     return Fail("memory map failure");
+  }
+  const auto lazy = gemapi::memory::map_lazy(16U);
+  if (!lazy || lazy.value() != reinterpret_cast<void*>(0x3000)) {
+    return Fail("memory lazy map failure");
+  }
+  if (gemapi::memory::map_lazy(0U).status() != Status::invalid_argument) {
+    return Fail("memory lazy map zero");
   }
 
   if (gemapi::memory::unmap(mapped.value(), 16U) != Status::ok) {

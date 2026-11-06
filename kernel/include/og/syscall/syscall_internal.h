@@ -5,6 +5,7 @@
 
 #include <cstdint>
 
+#include "og/arch/trap.h"
 #include "og/core/status.h"
 #include "og/mem/vmm.h"
 #include "og/process/process.h"
@@ -17,6 +18,8 @@ constexpr uint64_t kTtyLine = 128;
 constexpr uint64_t kStdout = 1;
 constexpr uint64_t kPageSize = 4096;
 constexpr uint64_t kMmapFlagExecutable = 1;
+constexpr uint64_t kMmapFlagLazy = 2;
+constexpr uint64_t kMmapFlagMask = kMmapFlagExecutable | kMmapFlagLazy;
 constexpr uint64_t kProtectFlagExecutable = 1;
 constexpr uint64_t kProtectFlagWritable = 2;
 constexpr uint64_t kUserMmapLimit =
@@ -93,6 +96,13 @@ namespace og::syscall {
 
 [[nodiscard]] Status DoSpawn(uint64_t user_path, uint64_t user_argv,
                              uint64_t argc, uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoFork(arch::aarch64::TrapFrame* frame,
+                            uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoExec(uint64_t user_path, uint64_t user_argv,
+                            uint64_t argc, arch::aarch64::TrapFrame* frame,
+                            uint64_t& result) noexcept;
 
 [[nodiscard]] Status DoShutdown(uint64_t& result) noexcept;
 

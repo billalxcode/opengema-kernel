@@ -27,6 +27,18 @@ i64 wait(i64 pid, int* status) noexcept {
                           reinterpret_cast<i64>(status), 0);
 }
 
+i64 fork() noexcept {
+  return syscall::invoke3(syscall::kFork, 0, 0, 0);
+}
+
+i64 exec(const char* path, const char* const* argv, usize argc) noexcept {
+  if (path == nullptr) {
+    return syscall::kErrInvalid;
+  }
+  return syscall::invoke3(syscall::kExec, reinterpret_cast<i64>(path),
+                          reinterpret_cast<i64>(argv), static_cast<i64>(argc));
+}
+
 bool uid(u64& value) noexcept {
   const i64 result = syscall::invoke3(syscall::kGetUid, 0, 0, 0);
   if (result < 0) {

@@ -10,6 +10,7 @@ namespace {
 constexpr uint64_t kBitmapWords = kMaxFrames / 64U;
 
 uint64_t g_bitmap[kBitmapWords];
+uint16_t g_frame_refs[kMaxFrames];
 uint64_t g_ram_base = 0;
 uint64_t g_frame_count = 0;
 uint64_t g_free_count = 0;
@@ -27,10 +28,12 @@ arch::aarch64::IrqSpinlock g_lock;
 
 void MarkFrameFree(uint64_t index) noexcept {
   g_bitmap[index >> 6U] &= ~BitMask(index);
+  g_frame_refs[index] = 0;
 }
 
 void MarkFrameUsed(uint64_t index) noexcept {
   g_bitmap[index >> 6U] |= BitMask(index);
+  g_frame_refs[index] = 1;
 }
 
 // Releases every frame in [base, base + size) that falls inside RAM.
@@ -114,6 +117,7 @@ Status PmmInit(const BootInfo& info) noexcept {
   for (uint64_t word = 0; word < kBitmapWords; ++word) {
     g_bitmap[word] = ~0ULL;
   }
+  mem::Zero(g_frame_refs, sizeof(g_frame_refs));
 
   for (uint64_t index = 0; index < info.memory_count; ++index) {
     const MemoryRange& range = info.memory[index];
@@ -205,11 +209,18 @@ Status FreePagesLocked(uint64_t address, uint64_t count) noexcept {
       return Status::kInvalidArg;
     }
   }
+  uint64_t freed = 0;
   for (uint64_t step = 0; step < count; ++step) {
-    MarkFrameFree(offset + step);
+    const uint64_t index = offset + step;
+    if (g_frame_refs[index] > 1U) {
+      --g_frame_refs[index];
+      continue;
+    }
+    MarkFrameFree(index);
+    ++freed;
   }
-  g_free_count += count;
-  if (offset < g_hint) {
+  g_free_count += freed;
+  if (freed != 0U && offset < g_hint) {
     g_hint = offset;
   }
   return Status::kOk;
@@ -224,6 +235,30 @@ Status PmmFreePages(uint64_t address, uint64_t count) noexcept {
 
 Status PmmFreePage(uint64_t address) noexcept {
   return PmmFreePages(address, 1);
+}
+
+Status PmmRetainPage(uint64_t address) noexcept {
+  g_lock.lock();
+  if (!g_ready) {
+    g_lock.unlock();
+    return Status::kNotInit;
+  }
+  if ((address % kPageSize) != 0U || address < g_ram_base) {
+    g_lock.unlock();
+    return Status::kInvalidArg;
+  }
+  const uint64_t index = (address - g_ram_base) / kPageSize;
+  if (index >= g_frame_count || FrameIsFree(index)) {
+    g_lock.unlock();
+    return Status::kInvalidArg;
+  }
+  if (g_frame_refs[index] == 0xFFFFU) {
+    g_lock.unlock();
+    return Status::kNoMem;
+  }
+  ++g_frame_refs[index];
+  g_lock.unlock();
+  return Status::kOk;
 }
 
 uint64_t PmmFreeFrames() noexcept {

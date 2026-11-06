@@ -35,6 +35,9 @@ constexpr uint64_t kMairDevice = 0x00ULL;
 constexpr uint64_t kMairAttributeMask = 0xFFFFULL;
 
 constexpr uint64_t kDescriptorAddressMask = 0x0000FFFFFFFFF000ULL;
+// Software-only copy-on-write marker. Hardware ignores this bit; the
+// kernel reads it back from the page table entry.
+constexpr uint64_t kPteCow = 1ULL << 55U;
 
 enum class MemoryKind : uint32_t {
   kNormal = 0,

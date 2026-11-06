@@ -28,6 +28,36 @@ Status FileTableInit(FileTable& table) noexcept {
   return Status::kOk;
 }
 
+Status FsCloneTable(const FileTable& source,
+                    FileTable& destination) noexcept {
+  Status status = FileTableInit(destination);
+  if (IsErr(status)) {
+    return status;
+  }
+  destination.uid = source.uid;
+  destination.gid = source.gid;
+  for (uint32_t index = 0; index < kMaxFiles; ++index) {
+    const FileEntry& entry = source.entries[index];
+    if (!entry.in_use) {
+      continue;
+    }
+    if (index >= kFirstFileDescriptor) {
+      status = TrackOpen(entry.mount);
+      if (IsErr(status)) {
+        for (uint32_t undo = kFirstFileDescriptor; undo < index; ++undo) {
+          if (destination.entries[undo].in_use) {
+            UntrackOpen(destination.entries[undo].mount);
+            destination.entries[undo] = FileEntry{};
+          }
+        }
+        return status;
+      }
+    }
+    destination.entries[index] = entry;
+  }
+  return Status::kOk;
+}
+
 Result<uint32_t> FsOpen(FileTable& table, const char* path,
                         uint32_t flags) noexcept {
   OperationGuard guard;

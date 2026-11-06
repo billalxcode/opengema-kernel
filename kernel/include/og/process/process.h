@@ -6,6 +6,7 @@
 
 #include <cstdint>
 
+#include "og/arch/trap.h"
 #include "og/core/status.h"
 #include "og/fs/vfs.h"
 #include "og/mem/vmm.h"
@@ -33,6 +34,14 @@ enum class ProcessState : uint32_t {
   kReaping = 2,
 };
 
+struct ForkContext {
+  uint64_t x[31];
+  uint64_t elr;
+  uint64_t spsr;
+  uint64_t sp;
+  bool active;
+};
+
 struct Process {
   uint32_t pid;
   uint32_t parent_pid;
@@ -44,6 +53,7 @@ struct Process {
   mem::AddressSpace space;
   fs::FileTable files;
   sched::Thread* thread;
+  ForkContext fork;
   uint64_t entry;
   uint64_t stack_base;
   uint64_t stack_low;
@@ -81,6 +91,16 @@ struct ProcessInfo {
 [[nodiscard]] Result<uint32_t> SpawnWithArgs(const char* path, uint32_t parent_pid,
                                              const char* const* argv,
                                              uint32_t argc) noexcept;
+
+// Clones the current process and resumes both at the same EL0 instruction.
+// The child returns 0 from the fork syscall; the parent returns the child pid.
+[[nodiscard]] Result<uint32_t> Fork(arch::aarch64::TrapFrame* frame) noexcept;
+
+// Replaces the current process image. On success the trap frame is rewritten
+// to enter the new EL0 image and this does not return to the old program.
+[[nodiscard]] Status Exec(const char* path, const char* const* argv,
+                          uint32_t argc,
+                          arch::aarch64::TrapFrame* frame) noexcept;
 
 // Waits for any process with this pid and reaps it.
 [[nodiscard]] Result<uint32_t> WaitFor(uint32_t pid, int32_t& status) noexcept;

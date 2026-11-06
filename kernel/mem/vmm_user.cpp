@@ -31,9 +31,18 @@ namespace {
   uint64_t offset = 0;
   while (offset < size) {
     const uint64_t current = user_address + offset;
-    const Result<uint64_t> physical = VmmTranslateIn(space, current);
+    Result<uint64_t> physical = VmmTranslateIn(space, current);
     if (physical.is_err()) {
-      return physical.status();
+      // The copy may be the first access to a lazy mmap page.
+      const Status faulted =
+        VmmFaultUserPage(const_cast<AddressSpace&>(space), current);
+      if (IsErr(faulted)) {
+        return physical.status();
+      }
+      physical = VmmTranslateIn(space, current);
+      if (physical.is_err()) {
+        return physical.status();
+      }
     }
     const uint64_t page_remaining =
       arch::aarch64::kPageSize - (current % arch::aarch64::kPageSize);

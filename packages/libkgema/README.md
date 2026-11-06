@@ -15,7 +15,7 @@ masuk `_start` berada di `libgemapi`.
 | `kgema/syscall.h` | Nomor syscall, errno, `last_error`, dan `invoke3` |
 | `kgema/io.h` | `write` untuk buffer dan string literal |
 | `kgema/file.h` | `open`, `close`, `read`, `write`, `seek`, `stat`, `chdir`, `list`, `chmod`, `chown`, `mount`, dan `umount` |
-| `kgema/memory.h` | `mmap`, `mmap_executable`, `munmap`, dan `mprotect` |
+| `kgema/memory.h` | `mmap`, `mmap_executable`, `mmap_lazy`, `munmap`, dan `mprotect` |
 | `kgema/process.h` | `getpid`, `spawn`, `wait`, `exit`, `uid`, `gid`, `setuid`, dan `setgid` |
 
 `src/runtime.cpp` menyediakan `memset`, `memcpy`, dan `memmove` yang mungkin

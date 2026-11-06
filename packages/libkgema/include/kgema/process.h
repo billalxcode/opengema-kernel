@@ -11,6 +11,9 @@ namespace kgema {
 [[nodiscard]] i64 spawn(const char* path, const char* const* argv = nullptr,
                         usize argc = 0) noexcept;
 [[nodiscard]] i64 wait(i64 pid, int* status) noexcept;
+[[nodiscard]] i64 fork() noexcept;
+[[nodiscard]] i64 exec(const char* path, const char* const* argv = nullptr,
+                       usize argc = 0) noexcept;
 [[nodiscard]] bool uid(u64& value) noexcept;
 [[nodiscard]] bool setuid(u64 value) noexcept;
 [[nodiscard]] bool gid(u64& value) noexcept;

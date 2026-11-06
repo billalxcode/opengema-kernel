@@ -28,6 +28,22 @@ Status wait(u64 pid, int& status) noexcept {
   return Status::ok;
 }
 
+Result<u64> fork() noexcept {
+  const i64 result = kgema::fork();
+  if (result < 0) {
+    return detail::LastError(Status::not_supported);
+  }
+  return static_cast<u64>(result);
+}
+
+Status exec(const char* path, const char* const* argv, usize argc) noexcept {
+  const i64 result = kgema::exec(path, argv, argc);
+  if (result < 0) {
+    return detail::LastError(Status::not_supported);
+  }
+  return Status::ok;
+}
+
 Result<u64> user_id() noexcept {
   u64 value = 0;
   if (!kgema::uid(value)) {

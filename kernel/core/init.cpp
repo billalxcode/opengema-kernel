@@ -90,8 +90,12 @@ Status UserFault(arch::aarch64::TrapFrame* frame) noexcept {
   constexpr uint64_t kEsrIssMask = 0x1FFFFFFULL;
   constexpr uint64_t kDfscMask = 0x3FU;
   constexpr uint64_t kEcDataAbortLower = 0x24U;
+  constexpr uint64_t kEcInstructionAbortLower = 0x20U;
   constexpr uint64_t kDfscTranslationFirst = 0x04U;
   constexpr uint64_t kDfscTranslationLast = 0x07U;
+  constexpr uint64_t kDfscPermissionFirst = 0x0DU;
+  constexpr uint64_t kDfscPermissionLast = 0x0FU;
+  constexpr uint64_t kIssWrite = 1ULL << 6U;
 
   const uint64_t esr = arch::aarch64::ReadEsrEl1();
   const uint64_t ec = (esr >> kEsrEcShift) & kEsrEcMask;
@@ -99,8 +103,27 @@ Status UserFault(arch::aarch64::TrapFrame* frame) noexcept {
   const uint64_t dfsc = iss & kDfscMask;
   const uint64_t far = arch::aarch64::ReadFarEl1();
 
+  if (ec == kEcDataAbortLower && (iss & kIssWrite) != 0U &&
+      dfsc >= kDfscPermissionFirst && dfsc <= kDfscPermissionLast) {
+    const uint64_t page = far & ~(arch::aarch64::kPageSize - 1U);
+    if (IsOk(mem::VmmHandleCow(process->space, page))) {
+      return Status::kOk;
+    }
+  }
+
   if (ec == kEcDataAbortLower && dfsc >= kDfscTranslationFirst &&
-      dfsc <= kDfscTranslationLast && process::GrowStack(*process, far)) {
+      dfsc <= kDfscTranslationLast) {
+    if (IsOk(mem::VmmFaultUserPage(process->space, far))) {
+      return Status::kOk;
+    }
+    if (process::GrowStack(*process, far)) {
+      return Status::kOk;
+    }
+  }
+
+  if (ec == kEcInstructionAbortLower && dfsc >= kDfscTranslationFirst &&
+      dfsc <= kDfscTranslationLast &&
+      IsOk(mem::VmmFaultUserPage(process->space, far))) {
     return Status::kOk;
   }
 

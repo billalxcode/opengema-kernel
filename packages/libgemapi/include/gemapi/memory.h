@@ -10,6 +10,10 @@ namespace gemapi::memory {
 // Maps one anonymous, writable region. The result is page aligned.
 [[nodiscard]] Result<void*> map(usize size) noexcept;
 
+// Maps one anonymous, writable region without allocating pages until first
+// access.
+[[nodiscard]] Result<void*> map_lazy(usize size) noexcept;
+
 // Releases a region previously returned by map.
 [[nodiscard]] Status unmap(void* address, usize size) noexcept;
 

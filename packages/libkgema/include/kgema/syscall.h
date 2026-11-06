@@ -46,6 +46,8 @@ constexpr i64 kGetGid = 36;
 constexpr i64 kSetGid = 37;
 constexpr i64 kChown = 38;
 constexpr i64 kMprotect = 39;
+constexpr i64 kFork = 40;
+constexpr i64 kExec = 41;
 
 // Negative Linux errno values returned by the kernel in x0.
 constexpr i64 kErrPermission = -1;

@@ -113,6 +113,12 @@ def main(argv):
     mem_seen = False
     errno_sent = False
     errno_seen = False
+    fork_sent = False
+    fork_seen = False
+    exec_sent = False
+    exec_seen = False
+    lazy_sent = False
+    lazy_seen = False
     aslr_sent = False
     aslr_first = None
     aslr_seen = False
@@ -385,7 +391,31 @@ def main(argv):
             if errno_sent and not errno_seen and b"ERRNO-DONE" in buffer:
                 errno_seen = True
 
-            if errno_seen and not aslr_sent and b"ERRNO-DONE" in buffer:
+            if errno_seen and not fork_sent and b"ERRNO-DONE" in buffer:
+                send_line(client, b"hello fork\necho FORK-DONE\n")
+                fork_sent = True
+                buffer.clear()
+
+            if fork_sent and not fork_seen and b"FORK-DONE" in buffer:
+                fork_seen = True
+
+            if fork_seen and not exec_sent and b"FORK-DONE" in buffer:
+                send_line(client, b"hello exec\necho EXEC-DONE\n")
+                exec_sent = True
+                buffer.clear()
+
+            if exec_sent and not exec_seen and b"EXEC-DONE" in buffer:
+                exec_seen = True
+
+            if exec_seen and not lazy_sent and b"EXEC-DONE" in buffer:
+                send_line(client, b"hello lazy\necho LAZY-DONE\ncat /proc/meminfo\n")
+                lazy_sent = True
+                buffer.clear()
+
+            if lazy_sent and not lazy_seen and b"LAZY-DONE" in buffer:
+                lazy_seen = True
+
+            if lazy_seen and not aslr_sent and b"LAZY-DONE" in buffer:
                 send_line(client, b"hello aslr\necho ASLR-1\n")
                 aslr_sent = True
                 buffer.clear()

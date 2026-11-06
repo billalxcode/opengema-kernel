@@ -150,4 +150,59 @@ Status DoSpawn(uint64_t user_path, uint64_t user_argv, uint64_t argc,
   return Status::kOk;
 }
 
+Status DoFork(arch::aarch64::TrapFrame* frame, uint64_t& result) noexcept {
+  const Result<uint32_t> child = process::Fork(frame);
+  if (child.is_err()) {
+    return child.status();
+  }
+  result = child.value();
+  return Status::kOk;
+}
+
+Status DoExec(uint64_t user_path, uint64_t user_argv, uint64_t argc,
+              arch::aarch64::TrapFrame* frame, uint64_t& result) noexcept {
+  process::Process* process = CurrentProcess();
+  if (process == nullptr) {
+    return Status::kNotInit;
+  }
+  char path[fs::kMaxPath];
+  Status status = CopyUserPath(*process, user_path, path);
+  if (IsErr(status)) {
+    return status;
+  }
+  const char* values[process::kMaxArgs];
+  char storage[process::kMaxArgs][process::kMaxArgLength];
+  uint32_t count = static_cast<uint32_t>(argc);
+  if (count == 0U) {
+    values[0] = path;
+    count = 1;
+  } else {
+    if (argc > process::kMaxArgs || user_argv == 0U) {
+      return Status::kInvalidArg;
+    }
+    for (uint32_t index = 0; index < count; ++index) {
+      uint64_t user_string = 0;
+      status = mem::VmmCopyIn(process->space,
+                              user_argv + (index * sizeof(uint64_t)),
+                              &user_string, sizeof(user_string));
+      if (IsErr(status)) {
+        return status;
+      }
+      status = CopyUserString(process->space, user_string, storage[index],
+                              process::kMaxArgLength);
+      if (IsErr(status)) {
+        return status;
+      }
+      values[index] = storage[index];
+    }
+  }
+
+  status = process::Exec(path, values, count, frame);
+  if (IsErr(status)) {
+    return status;
+  }
+  result = count;
+  return Status::kOk;
+}
+
 }  // namespace og::syscall

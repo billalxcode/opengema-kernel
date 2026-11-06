@@ -10,13 +10,13 @@ Prioritas: P0 blocker, P1 penting, P2 menengah, P3 nanti.
 
 | Area | Kondisi sekarang | Yang kurang | Dampak | Prioritas |
 |---|---|---|---|---|
-| Model proses | Dua proses, PID, parent, wait, exit status, argv, cwd, dan reklamasi | env, exec, daftar anak, banyak thread per proses | Shell dan program berbeda belum bisa dijalankan | P0 |
+| Model proses | Banyak proses, PID, parent, wait, fork COW, exec, exit status, argv, cwd, reklamasi | env, daftar anak, banyak thread per proses | Model proses inti lengkap | P0 |
 | File descriptor | FD per proses, open, read, write, dan stdout | Open flags lengkap, append, create, truncate | Program belum bisa membuat berkas baru | P0 |
 | Syscall | open, close, read, write stdout, stat, seek, getpid, wait, spawn, exit, mmap | Write file, exec, error/errno konsisten, validasi lengkap | Userland belum bisa menjalankan program lain dengan argumen | P0 |
 | Reklamasi | Stack, address space, FD, dan slot proses dibebaskan; frame kembali | PID reuse, reklamasi saat gagal di tengah jalan | Aman untuk dua proses, belum untuk beban besar | P0 |
 | SDK dan shell | API berkas/proses/waktu/error, argv, konstruktor C++, shell multi perintah | Packaging SDK, contoh program, dan template package | Belum ada pengalaman userland yang nyata | P1 |
 | Filesystem | FAT32 read-only, ramfs statis, mount internal | Tulis berkas, mkdir, unlink, rename, mount/umount, permission, sync | Data tidak bisa disimpan atau diubah | P1 |
-| Memori user | W^X user, stack growth 64 KiB, guard page, limit 32 MiB, ASLR stack/mmap/executable, OOM kill requester | COW, file-backed mmap, OOM selektif | Isolasi membaik, demand paging dan COW belum | P1 |
+| Memori user | W^X user, stack growth 64 KiB, guard page, limit 32 MiB, ASLR stack/mmap/executable, fork COW, lazy mmap, OOM kill requester | File-backed mmap, ELF demand paging, OOM selektif | Demand paging baru untuk mmap anonymous | P1 |
 | Scheduler | Per-CPU, thread tidak migrasi, join dan reclaim, tanpa prioritas | Migrasi/work stealing, prioritas, futex, TLS | Beban tidak seimbang, primitif sinkronisasi kurang | P1 |
 | TLB dan SMP | ASID, flush lokal saat switch, IPI shootdown non-blocking | Ack sinkron, shootdown selektif per ASID, reuse ASID aman | Flush remote belum sinkron, tapi tidak deadlock | P1 |
 | Driver | UART, RTC, PCI, virtio-blk, virtio-gpu | virtio-net, input, MSI-X, virtio IRQ, multi device, DMA streaming | Belum ada jaringan atau input interaktif | P1 |
@@ -74,8 +74,8 @@ ketiga menguji cwd dan write ke FD.
       yang terisi belum.
 - [x] PRC-06 Lifecycle: zombie, wait, reklamasi stack, address space, FD,
       dan slot proses. PID tidak dipakai ulang.
-- [~] PRC-07 `spawn` dengan argv dan `wait` sudah dipakai userland. `exec`
-      dan `fork` belum.
+- [x] PRC-07 `spawn` dengan argv, `wait`, `fork`, dan `exec` sudah
+      dipakai userland.
 - [x] PRC-08 Uji: dua proses berjalan bersamaan, masing masing spawn child
       dengan argv, parent wait, writer menguji cwd dan write FD, exit status
       benar, dan jumlah frame bebas kembali ke angka sebelum spawn.
@@ -183,8 +183,11 @@ keyboard di jendela QEMU.
 
 ## 8. Fase 19 - Memori lanjutan dan isolasi
 
-- [ ] MEM-10 Demand paging dan page fault handler yang aman.
-- [ ] MEM-11 COW untuk fork atau clone.
+- [~] MEM-10 Demand paging: `mmap` anonymous lazy memetakan halaman saat
+      first touch. Stack growth dan copy helper ikut fault-in. ELF dan
+      file-backed demand paging belum.
+- [x] MEM-11 COW untuk fork. Frame punya refcount, halaman user dibagi
+      read-only dengan bit COW, dan write fault menyalin ke frame privat.
 - [x] MEM-12 Stack growth dan guard page user. Stack tumbuh per halaman
       sampai 64 KiB; fault di luar batas mematikan proses.
 - [ ] MEM-13 File-backed mmap dan shared memory.

@@ -107,6 +107,12 @@ constexpr uint64_t kSyscallNumberRegister = 8;
     case kSysSpawn:
       status = DoSpawn(frame->x[0], frame->x[1], frame->x[2], result);
       break;
+    case kSysFork:
+      status = DoFork(frame, result);
+      break;
+    case kSysExec:
+      status = DoExec(frame->x[0], frame->x[1], frame->x[2], frame, result);
+      break;
     case kSysChdir:
       status = DoChdir(frame->x[0], result);
       break;

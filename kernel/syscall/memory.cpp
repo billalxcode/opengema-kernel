@@ -8,7 +8,7 @@ namespace og::syscall {
 using namespace detail;
 
 Status DoMmap(uint64_t size, uint64_t flags, uint64_t& result) noexcept {
-  if (size == 0U || flags > kMmapFlagExecutable) {
+  if (size == 0U || (flags & ~kMmapFlagMask) != 0U) {
     return Status::kInvalidArg;
   }
   process::Process* process = CurrentProcess();
@@ -25,9 +25,12 @@ Status DoMmap(uint64_t size, uint64_t flags, uint64_t& result) noexcept {
   }
   const uint64_t address = process->space.mmap_next;
   const bool executable = (flags & kMmapFlagExecutable) != 0U;
+  const bool lazy = (flags & kMmapFlagLazy) != 0U;
   const Status status =
-    mem::VmmMapUser(process->space, address, aligned, executable,
-                    !executable);
+    lazy ? mem::VmmMapUserLazy(process->space, address, aligned, executable,
+                               !executable)
+         : mem::VmmMapUser(process->space, address, aligned, executable,
+                           !executable);
   if (IsErr(status)) {
     if (status == Status::kNoMem &&
         mem::PmmFreeFrames() <= mem::kOomReserveFrames) {

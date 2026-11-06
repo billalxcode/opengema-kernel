@@ -16,6 +16,17 @@ Result<void*> map(usize size) noexcept {
   return address;
 }
 
+Result<void*> map_lazy(usize size) noexcept {
+  if (size == 0U) {
+    return Status::invalid_argument;
+  }
+  void* address = kgema::mmap_lazy(size);
+  if (address == nullptr) {
+    return detail::LastError(Status::no_memory);
+  }
+  return address;
+}
+
 Status unmap(void* address, usize size) noexcept {
   if (address == nullptr || size == 0U) {
     return Status::invalid_argument;

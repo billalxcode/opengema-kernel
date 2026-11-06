@@ -13,6 +13,9 @@ namespace kgema {
 // dynamic linker to place shared objects.
 [[nodiscard]] void* mmap_executable(usize size) noexcept;
 
+// Reserves a lazily populated anonymous writable region.
+[[nodiscard]] void* mmap_lazy(usize size) noexcept;
+
 // Returns true when the kernel accepted the unmap.
 [[nodiscard]] bool munmap(void* address, usize size) noexcept;
 
