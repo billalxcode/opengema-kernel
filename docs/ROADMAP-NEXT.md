@@ -14,13 +14,13 @@ Prioritas: P0 blocker, P1 penting, P2 menengah, P3 nanti.
 | File descriptor | FD per proses, open, read, write, dan stdout | Open flags lengkap, append, create, truncate | Program belum bisa membuat berkas baru | P0 |
 | Syscall | open, close, read, write stdout, stat, seek, getpid, wait, spawn, exit, mmap | Write file, exec, error/errno konsisten, validasi lengkap | Userland belum bisa menjalankan program lain dengan argumen | P0 |
 | Reklamasi | Stack, address space, FD, dan slot proses dibebaskan; frame kembali | PID reuse, reklamasi saat gagal di tengah jalan | Aman untuk dua proses, belum untuk beban besar | P0 |
-| SDK dan shell | API berkas/proses/waktu, argv, konstruktor C++, shell multi perintah | Packaging SDK, contoh program, dan template package | Belum ada pengalaman userland yang nyata | P1 |
+| SDK dan shell | API berkas/proses/waktu/error, argv, konstruktor C++, shell multi perintah | Packaging SDK, contoh program, dan template package | Belum ada pengalaman userland yang nyata | P1 |
 | Filesystem | FAT32 read-only, ramfs statis, mount internal | Tulis berkas, mkdir, unlink, rename, mount/umount, permission, sync | Data tidak bisa disimpan atau diubah | P1 |
 | Memori user | W^X user, stack growth 64 KiB, guard page, limit 32 MiB, ASLR stack/mmap/executable, OOM kill requester | COW, file-backed mmap, OOM selektif | Isolasi membaik, demand paging dan COW belum | P1 |
-| Scheduler | Per-CPU, thread tidak migrasi, tanpa prioritas | Migrasi/work stealing, prioritas, join, condvar, rwlock, futex, TLS | Beban tidak seimbang, primitif sinkronisasi kurang | P1 |
+| Scheduler | Per-CPU, thread tidak migrasi, join dan reclaim, tanpa prioritas | Migrasi/work stealing, prioritas, futex, TLS | Beban tidak seimbang, primitif sinkronisasi kurang | P1 |
 | TLB dan SMP | ASID, flush lokal saat switch, IPI shootdown non-blocking | Ack sinkron, shootdown selektif per ASID, reuse ASID aman | Flush remote belum sinkron, tapi tidak deadlock | P1 |
 | Driver | UART, RTC, PCI, virtio-blk, virtio-gpu | virtio-net, input, MSI-X, virtio IRQ, multi device, DMA streaming | Belum ada jaringan atau input interaktif | P1 |
-| Platform | QEMU virt hardcoded, DTB dan ACPI discovery dasar | GTDT detail, ACPI memory map, discovery RAM/device, initrd, cmdline | Sulit pindah board atau boot ACPI penuh | P2 |
+| Platform | QEMU virt hardcoded, DTB/ACPI dasar, matriks 1/2/4 core 256M/512M | GTDT detail, ACPI memory map, discovery RAM/device, initrd, cmdline | Sulit pindah board atau boot ACPI penuh | P2 |
 | Daya dan waktu | RTC dibaca saat boot, shutdown/reboot ACPI dan PSCI | settime, timezone, shutdown dari service manager | Mesin bisa dimatikan dan di-reboot dari shell | P2 |
 | Observability | Log serial, panic, procfs uptime/threads | dmesg ring, tracing, counter, watchdog, statistik memori/CPU | Debug produksi dan regresi sulit | P1 |
 | Test dan CI | Smoke QEMU, host test, sanitizer, coverage 58%, clang-tidy, fuzz, workflow CI, artifact image, firmware terkunci | Fuzz coverage-guided, coverage seluruh probe, artifact SDK | CI dasar lengkap, workflow belum run di GitHub | P1 |
@@ -110,8 +110,9 @@ Tujuan: userland punya API yang layak dan gemabox menjadi shell nyata.
       dan chdir sudah.
 - [x] SDK-02 API proses: getpid, wait, exit, spawn, dan argv sudah.
 - [x] SDK-03a API waktu: `now_ms` dan `sleep_ms` di libkgema dan libgemapi.
-- [ ] SDK-03b Error/errno yang konsisten untuk semua syscall.
-- [ ] SDK-03 API waktu dan error yang konsisten, tanpa libc.
+- [x] SDK-03b Error/errno yang konsisten untuk semua syscall. Kernel
+      mengembalikan errno negatif dan libgemapi memetakannya ke `Status`.
+- [x] SDK-03 API waktu dan error yang konsisten, tanpa libc.
 - [x] SDK-04 Jalankan `.init_array` di `_start`, dukung konstruktor global
       sederhana tanpa exception dan tanpa RTTI.
 - [x] SDK-05 `_start` meneruskan argc/argv ke `main`.
@@ -211,7 +212,8 @@ demand paging lulus uji.
 
 - [ ] SCH-10 Migrasi thread dan work stealing antar core.
 - [ ] SCH-11 Prioritas dan nice, plus aging agar tidak starvation.
-- [ ] SCH-12 Thread join dan reklamasi stack.
+- [x] SCH-12 Thread join dan reklamasi stack. `ThreadJoin` menunggu thread
+      selesai lalu membebaskan stack dan slotnya.
 - [x] SCH-13 Condition variable dan read/write lock, diuji lewat self-test
       scheduler.
 - [ ] SCH-14 Futex untuk user space.
@@ -239,7 +241,9 @@ sinkronisasi lulus uji stres.
 - [ ] BOOT-02 Boot ACPI dan DTB pada QEMU, lalu satu board nyata.
 - [ ] BOOT-03 Framebuffer handoff dan konsol awal.
 - [x] PLT-13 Shutdown dan reboot terintegrasi dengan shell.
-- [ ] PLT-14 Matriks boot: 1/2/4 core, memori kecil, ACPI on/off.
+- [x] PLT-14 Matriks boot: 1/2/4 core, memori 256M/512M, ACPI on/off.
+      SMP=1 memakai jalur single-core tanpa IPI; QEMU 1/2/4 core dan
+      256M/512M lulus.
 
 **Selesai bila:** satu image bisa boot dengan ACPI dan DTB, dan shutdown
 bekerja dari shell.

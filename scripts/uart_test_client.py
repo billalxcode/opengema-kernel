@@ -111,6 +111,8 @@ def main(argv):
     fuzz_seen = False
     mem_sent = False
     mem_seen = False
+    errno_sent = False
+    errno_seen = False
     aslr_sent = False
     aslr_first = None
     aslr_seen = False
@@ -375,7 +377,15 @@ def main(argv):
             if mem_sent and not mem_seen and b"MEM-DONE" in buffer:
                 mem_seen = True
 
-            if mem_seen and not aslr_sent and b"MEM-DONE" in buffer:
+            if mem_seen and not errno_sent and b"MEM-DONE" in buffer:
+                send_line(client, b"hello errno\necho ERRNO-DONE\n")
+                errno_sent = True
+                buffer.clear()
+
+            if errno_sent and not errno_seen and b"ERRNO-DONE" in buffer:
+                errno_seen = True
+
+            if errno_seen and not aslr_sent and b"ERRNO-DONE" in buffer:
                 send_line(client, b"hello aslr\necho ASLR-1\n")
                 aslr_sent = True
                 buffer.clear()

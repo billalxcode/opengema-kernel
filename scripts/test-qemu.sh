@@ -33,6 +33,11 @@ esac
 SMP="${SMP:-2}"
 CPU="${CPU:-cortex-a72}"
 PAN_EXPECT="${PAN_EXPECT:-any}"
+MEM="${MEM:-512M}"
+if [[ ! "$MEM" =~ ^[0-9]+[MG]$ ]]; then
+  echo "qemu test: MEM must look like 256M or 1G"
+  exit 1
+fi
 if [[ ! "$SMP" =~ ^[1-4]$ ]]; then
   echo "qemu test: SMP must be 1, 2, 3, or 4"
   exit 1
@@ -73,7 +78,7 @@ qemu-system-aarch64 \
   -M virt,gic-version=3,acpi=$ACPI \
   -cpu "$CPU" \
   -smp "$SMP" \
-  -m 512M \
+  -m "$MEM" \
   -nic none \
   -drive if=pflash,format=raw,file="$CODE",readonly=on \
   -drive if=pflash,format=raw,file="$VARS_TMP" \
@@ -155,11 +160,16 @@ else
   check "hardening: pan"
 fi
 check "smp: cpus online: $SMP"
-check "smp: ipi count: 1"
+if [ "$SMP" -gt 1 ]; then
+  check "smp: ipi count: 1"
+else
+  check "smp: single core"
+fi
 check "smp: tlb shootdown ok"
 check "smp: worker cpus: $WORKER_MASK"
 check "mem: address space switch ok"
 check "sched: round robin ok"
+check "sched: join ok"
 check "sched: ping-pong ok"
 check "sched: sleep max overshoot"
 check "user: spawn pid"
@@ -223,6 +233,10 @@ check "fuzz: arguments done"
 check "FUZZ-DONE"
 check "mem: limit enforced"
 check "MEM-DONE"
+check "errno: missing not found"
+check "errno: bad invalid argument"
+check "errno: big out of memory"
+check "ERRNO-DONE"
 check "aslr: stack"
 check "stack: grew"
 check "STACK-DONE"

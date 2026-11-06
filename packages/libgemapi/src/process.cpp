@@ -1,5 +1,6 @@
 #include "gemapi/process.h"
 
+#include "error_internal.h"
 #include "kgema/process.h"
 
 namespace gemapi::process {
@@ -14,7 +15,7 @@ Result<u64> spawn(const char* path, const char* const* argv, usize argc) noexcep
   }
   const i64 pid = kgema::spawn(path, argv, argc);
   if (pid <= 0) {
-    return Status::not_found;
+    return detail::LastError(Status::not_found);
   }
   return static_cast<u64>(pid);
 }
@@ -22,7 +23,7 @@ Result<u64> spawn(const char* path, const char* const* argv, usize argc) noexcep
 Status wait(u64 pid, int& status) noexcept {
   const i64 result = kgema::wait(static_cast<i64>(pid), &status);
   if (result < 0) {
-    return Status::io;
+    return detail::LastError(Status::io);
   }
   return Status::ok;
 }
@@ -30,25 +31,27 @@ Status wait(u64 pid, int& status) noexcept {
 Result<u64> user_id() noexcept {
   u64 value = 0;
   if (!kgema::uid(value)) {
-    return Status::not_supported;
+    return detail::LastError(Status::not_supported);
   }
   return value;
 }
 
 Status set_user_id(u64 id) noexcept {
-  return kgema::setuid(id) ? Status::ok : Status::denied;
+  return kgema::setuid(id) ? Status::ok
+                           : detail::LastError(Status::denied);
 }
 
 Result<u64> group_id() noexcept {
   u64 value = 0;
   if (!kgema::gid(value)) {
-    return Status::not_supported;
+    return detail::LastError(Status::not_supported);
   }
   return value;
 }
 
 Status set_group_id(u64 id) noexcept {
-  return kgema::setgid(id) ? Status::ok : Status::denied;
+  return kgema::setgid(id) ? Status::ok
+                           : detail::LastError(Status::denied);
 }
 
 }  // namespace gemapi::process

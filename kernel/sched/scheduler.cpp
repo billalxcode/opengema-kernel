@@ -424,6 +424,22 @@ Status ThreadReclaim(Thread* thread) noexcept {
   return Status::kOk;
 }
 
+Status ThreadJoin(Thread* thread) noexcept {
+  if (thread == nullptr || thread == CurrentThread()) {
+    return Status::kInvalidArg;
+  }
+  for (;;) {
+    if (ThreadFinished(thread)) {
+      break;
+    }
+    const Status status = ThreadSleep(1);
+    if (IsErr(status)) {
+      return status;
+    }
+  }
+  return ThreadReclaim(thread);
+}
+
 uint64_t ContextSwitchCount() noexcept {
   return __atomic_load_n(&g_context_switches, __ATOMIC_ACQUIRE);
 }

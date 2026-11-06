@@ -36,5 +36,8 @@ Manifest ada di `packages/system-root/applications/hello/manifest.txt`.
   sebagai PIE/ET_DYN dan kernel memilih load bias acak.
 - `hello stack` merekursi dengan frame 4 KiB sampai melewati stack awal
   16 KiB, lalu harus tumbuh dan mencetak `stack: grew`.
+- `hello errno` memeriksa pemetaan errno: path hilang menjadi `not found`,
+  pointer invalid menjadi `invalid argument`, dan map 40 MiB menjadi
+  `out of memory`.
 - `hello stackguard` merekursi melewati batas growth 64 KiB. Proses harus
   mati pada guard page, bukan mencetak `stack: guard missing`.

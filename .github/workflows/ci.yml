@@ -108,6 +108,16 @@ jobs:
           done
           exit 1
 
+      - name: QEMU smoke DTB 1 core 256M
+        run: |
+          for attempt in 1 2; do
+            if SMP=1 MEM=256M ./scripts/test-qemu.sh; then
+              exit 0
+            fi
+            echo "QEMU 1-core attempt $attempt failed, retrying"
+          done
+          exit 1
+
       - name: QEMU smoke ACPI SMP=2
         run: |
           for attempt in 1 2; do
@@ -126,6 +136,17 @@ jobs:
               exit 0
             fi
             echo "QEMU PAN attempt $attempt failed, retrying"
+          done
+          exit 1
+
+      - name: QEMU smoke ACPI 4 core 256M
+        run: |
+          for attempt in 1 2; do
+            if SMP=4 MEM=256M ACPI=on RESOLUTION=1920x1080 \
+                ./scripts/test-qemu.sh; then
+              exit 0
+            fi
+            echo "QEMU 4-core 256M attempt $attempt failed, retrying"
           done
           exit 1
 

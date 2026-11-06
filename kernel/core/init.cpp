@@ -219,21 +219,26 @@ void InitSmp() noexcept {
     return;
   }
 
-  LogDec(LogLevel::kInfo, "smp: cpus online", smp::OnlineCount());
-  drivers::irq::Gicv3::SendSgi(smp::kIpiIrq, 1);
+  const uint32_t online = smp::OnlineCount();
+  LogDec(LogLevel::kInfo, "smp: cpus online", online);
+  if (online > 1U) {
+    drivers::irq::Gicv3::SendSgi(smp::kIpiIrq, 1);
 
-  const uint64_t ipi_start = arch::aarch64::ReadCntpctEl0();
-  const uint64_t ipi_timeout = arch::aarch64::ReadCntfrqEl0() * 2ULL;
-  while (__atomic_load_n(&g_ipi_count, __ATOMIC_ACQUIRE) == 0U) {
-    if ((arch::aarch64::ReadCntpctEl0() - ipi_start) > ipi_timeout) {
-      break;
+    const uint64_t ipi_start = arch::aarch64::ReadCntpctEl0();
+    const uint64_t ipi_timeout = arch::aarch64::ReadCntfrqEl0() * 2ULL;
+    while (__atomic_load_n(&g_ipi_count, __ATOMIC_ACQUIRE) == 0U) {
+      if ((arch::aarch64::ReadCntpctEl0() - ipi_start) > ipi_timeout) {
+        break;
+      }
     }
-  }
-  const uint64_t ipis = __atomic_load_n(&g_ipi_count, __ATOMIC_ACQUIRE);
-  LogDec(LogLevel::kInfo, "smp: ipi count", ipis);
-  if (ipis == 0U) {
-    Log(LogLevel::kError, "smp: ipi not received\n");
-    return;
+    const uint64_t ipis = __atomic_load_n(&g_ipi_count, __ATOMIC_ACQUIRE);
+    LogDec(LogLevel::kInfo, "smp: ipi count", ipis);
+    if (ipis == 0U) {
+      Log(LogLevel::kError, "smp: ipi not received\n");
+      return;
+    }
+  } else {
+    Log(LogLevel::kInfo, "smp: single core\n");
   }
 
   mem::SetTlbShootdownHook(&BroadcastTlbShootdown);

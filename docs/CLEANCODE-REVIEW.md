@@ -285,6 +285,13 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 - Test PAN: `-cpu max` menyalakan PAN (`hardening: pan enabled`) dan
   seluruh tes lulus; cortex-a72 melaporkan `pan unsupported`. Self-test
   address space memakai `VmmCopyIn`, bukan membaca VA user langsung.
+- Test boot matrix: QEMU SMP=1/2/4 dengan memori 256M/512M, ACPI on/off,
+  dan CPU `max` untuk PAN. Jalur SMP=1 melewati IPI cross-core.
+- Test errno: `hello errno` memastikan path hilang menghasilkan `not found`,
+  pointer invalid menghasilkan `invalid argument`, dan map 40 MiB
+  menghasilkan `out of memory`. Host test memeriksa `from_errno`.
+- Test thread join: self-test membuat worker, menunggu lewat `ThreadJoin`,
+  lalu memastikan stack dan slot thread sudah diklaim kembali.
 - OOM killer minimal membunuh proses yang gagal `mmap` saat free frame di
   bawah reserve 4 MiB. Jalur ini belum dipicu oleh tes QEMU.
 - CI GitHub Actions menjalankan host test, sanitizer, clang-tidy, coverage,
@@ -361,6 +368,11 @@ Verifikasi branch `dev`:
   QEMU SMP=4 lulus tanpa deadlock.
 - PAN: QEMU `-cpu max` mencetak `hardening: pan enabled` dan lulus
   ACPI/SMP=4; cortex-a72 mencetak `hardening: pan unsupported`.
+- Boot matrix: SMP=1/2/4 dengan 256M/512M, DTB/ACPI, dan CPU=max lulus.
+  SMP=1 mencetak `smp: single core` tanpa IPI.
+- Errno: `hello errno` mencetak `not found`, `invalid argument`, dan
+  `out of memory`; host probe memetakan errno negatif ke `gemapi::Status`.
+- Thread join: `sched: join ok` muncul dan stack worker kembali ke PMM.
 - `.github/workflows/ci.yml`: build native Linux, host test, sanitizer,
   clang-tidy, coverage, SDK, QEMU DTB/ACPI, dan persistensi. Semua langkah
   lulus lokal; workflow belum dijalankan di GitHub.

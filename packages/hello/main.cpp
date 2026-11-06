@@ -272,6 +272,29 @@ int main(int argc, char** argv, char** envp) {
     gemapi::io::write("mem: limit enforced\n");
     return 0;
   }
+  if (argc > 1 && same(argv[1], "errno")) {
+    const auto missing = gemapi::fs::File::open("/no-such-file");
+    const auto bad =
+      gemapi::fs::File::open(reinterpret_cast<const char*>(1));
+    const auto big = gemapi::memory::map(40U * 1024U * 1024U);
+    if (missing || bad) {
+      gemapi::io::write("errno: unexpected open success\n");
+      return 1;
+    }
+    if (big) {
+      (void)gemapi::memory::unmap(big.value(), 40U * 1024U * 1024U);
+      gemapi::io::write("errno: unexpected map success\n");
+      return 1;
+    }
+    gemapi::io::write("errno: missing ");
+    gemapi::io::print(gemapi::to_string(missing.status()));
+    gemapi::io::write("\nerrno: bad ");
+    gemapi::io::print(gemapi::to_string(bad.status()));
+    gemapi::io::write("\nerrno: big ");
+    gemapi::io::print(gemapi::to_string(big.status()));
+    gemapi::io::write("\n");
+    return 0;
+  }
   if (argc > 1 && same(argv[1], "aslr")) {
     volatile char stack_probe = 0;
     const auto mapped = gemapi::memory::map(4096U);

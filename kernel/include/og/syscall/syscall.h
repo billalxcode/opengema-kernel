@@ -47,6 +47,20 @@ constexpr uint64_t kSysSetGid = 37;
 constexpr uint64_t kSysChown = 38;
 constexpr uint64_t kSysMprotect = 39;
 
+// Negative Linux errno values returned in x0 on failure.
+constexpr int64_t kErrPermission = -1;
+constexpr int64_t kErrNotFound = -2;
+constexpr int64_t kErrIo = -5;
+constexpr int64_t kErrNoMem = -12;
+constexpr int64_t kErrDenied = -13;
+constexpr int64_t kErrBusy = -16;
+constexpr int64_t kErrExists = -17;
+constexpr int64_t kErrNoDevice = -19;
+constexpr int64_t kErrInvalid = -22;
+constexpr int64_t kErrNoSys = -38;
+constexpr int64_t kErrUnsupported = -95;
+constexpr int64_t kErrTimeout = -110;
+
 void SyscallInit() noexcept;
 
 }  // namespace og::syscall

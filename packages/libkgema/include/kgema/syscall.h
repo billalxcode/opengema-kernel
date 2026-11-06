@@ -47,7 +47,24 @@ constexpr i64 kSetGid = 37;
 constexpr i64 kChown = 38;
 constexpr i64 kMprotect = 39;
 
+// Negative Linux errno values returned by the kernel in x0.
+constexpr i64 kErrPermission = -1;
+constexpr i64 kErrNotFound = -2;
+constexpr i64 kErrIo = -5;
+constexpr i64 kErrNoMem = -12;
+constexpr i64 kErrDenied = -13;
+constexpr i64 kErrBusy = -16;
+constexpr i64 kErrExists = -17;
+constexpr i64 kErrNoDevice = -19;
+constexpr i64 kErrInvalid = -22;
+constexpr i64 kErrNoSys = -38;
+constexpr i64 kErrUnsupported = -95;
+constexpr i64 kErrTimeout = -110;
+
 // Number in x8, arguments in x0..x2, result in x0.
 [[nodiscard]] i64 invoke3(i64 number, i64 arg0, i64 arg1, i64 arg2) noexcept;
+
+// Last negative errno observed by invoke3, or zero after success.
+[[nodiscard]] i64 last_error() noexcept;
 
 }  // namespace kgema::syscall

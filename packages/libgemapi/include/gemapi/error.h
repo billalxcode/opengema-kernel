@@ -21,9 +21,17 @@ enum class Status : i64 {
   no_memory = 6,
   not_supported = 7,
   unknown = 8,
+  no_device = 9,
+  exists = 10,
+  timeout = 11,
+  not_implemented = 12,
+  not_initialized = 13,
 };
 
 [[nodiscard]] const char* to_string(Status status) noexcept;
+
+// Maps a negative kernel errno to the public status.
+[[nodiscard]] Status from_errno(i64 value) noexcept;
 
 template <typename T>
 class [[nodiscard]] Result {

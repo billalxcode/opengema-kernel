@@ -16,7 +16,38 @@ constexpr uint64_t kEsrEcShift = 26;
 constexpr uint64_t kEsrEcMask = 0x3F;
 constexpr uint64_t kExceptionClassSvc64 = 0x15;
 constexpr uint64_t kSyscallNumberRegister = 8;
-constexpr uint64_t kResultError = static_cast<uint64_t>(-1);
+
+[[nodiscard]] int64_t ErrnoFor(Status status) noexcept {
+  switch (status) {
+    case Status::kOk:
+      return 0;
+    case Status::kInvalidArg:
+    case Status::kUnaligned:
+      return kErrInvalid;
+    case Status::kNotInit:
+    case Status::kNoDevice:
+      return kErrNoDevice;
+    case Status::kNoMem:
+      return kErrNoMem;
+    case Status::kNotImpl:
+      return kErrNoSys;
+    case Status::kNotFound:
+      return kErrNotFound;
+    case Status::kExists:
+      return kErrExists;
+    case Status::kTimeout:
+      return kErrTimeout;
+    case Status::kIoError:
+      return kErrIo;
+    case Status::kUnsupported:
+      return kErrUnsupported;
+    case Status::kBusy:
+      return kErrBusy;
+    case Status::kDenied:
+      return kErrDenied;
+  }
+  return kErrInvalid;
+}
 
 [[nodiscard]] Status Dispatch(arch::aarch64::TrapFrame* frame) noexcept {
   if (frame == nullptr) {
@@ -157,7 +188,7 @@ constexpr uint64_t kResultError = static_cast<uint64_t>(-1);
   }
 
   if (IsErr(status)) {
-    result = kResultError;
+    result = static_cast<uint64_t>(ErrnoFor(status));
   }
   frame->x[0] = result;
   return Status::kOk;

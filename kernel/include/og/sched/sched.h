@@ -103,6 +103,9 @@ void ThreadYield() noexcept;
 
 // Frees the kernel stack of a finished thread and returns its slot.
 [[nodiscard]] Status ThreadReclaim(Thread* thread) noexcept;
+
+// Waits for a thread to finish, then reclaims its stack and slot.
+[[nodiscard]] Status ThreadJoin(Thread* thread) noexcept;
 [[nodiscard]] uint32_t ThreadCount() noexcept;
 [[nodiscard]] uint64_t ContextSwitchCount() noexcept;
 [[nodiscard]] uint64_t CpuHeartbeat(uint32_t cpu) noexcept;

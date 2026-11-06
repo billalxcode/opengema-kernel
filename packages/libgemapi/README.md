@@ -53,18 +53,25 @@ disalin agar descriptor tidak ditutup dua kali.
 
 ## Desain error
 
-Semua operasi fallible mengembalikan `Status` atau `Result<T>`. API tidak
-mengembalikan `-1` mentah. Saat ini kernel masih mengembalikan `-1` untuk
-semua kegagalan, jadi `libgemapi` memetakan error menurut operasi:
+Semua operasi fallible mengembalikan `Status` atau `Result<T>`. Kernel
+mengembalikan errno negatif di `x0`; `libkgema` menyimpan nilai terakhir dan
+`libgemapi` memetakannya lewat `from_errno`.
 
-| Operasi | Status awal |
+| Errno | Status |
 |---|---|
-| `open`, `stat`, `chdir`, `spawn` | `not_found` |
-| `read`, `write`, `seek`, `wait` | `io` |
-| `map` | `no_memory` |
-| argumen null atau ukuran tidak valid | `invalid_argument` |
+| `-EACCES`, `-EPERM` | `denied` |
+| `-ENOENT` | `not_found` |
+| `-EIO` | `io` |
+| `-ENOMEM` | `no_memory` |
+| `-EBUSY` | `busy` |
+| `-EEXIST` | `exists` |
+| `-ENODEV` | `no_device` |
+| `-EINVAL` | `invalid_argument` |
+| `-ENOSYS` | `not_implemented` |
+| `-EOPNOTSUPP` | `not_supported` |
+| `-ETIMEDOUT` | `timeout` |
 
-Kode error yang lebih tepat menyusul saat ABI kernel punya nilai error.
+Argumen null atau ukuran tidak valid tetap ditolak di API sebelum syscall.
 
 ## Build
 

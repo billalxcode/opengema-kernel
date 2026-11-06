@@ -77,7 +77,8 @@ build_probe fat32_probe -I libs/core -I kernel/include \
 
 build_probe gemapi_fs_probe \
   -I packages/libgemapi/include -I packages/libkgema/include \
-  tests/host/gemapi_fs_probe.cpp packages/libgemapi/src/fs.cpp
+  tests/host/gemapi_fs_probe.cpp packages/libgemapi/src/fs.cpp \
+  packages/libgemapi/src/error.cpp
 "$BUILD_DIR/gemapi_fs_probe"
 
 build_probe kgema_probe -I packages/libkgema/include \

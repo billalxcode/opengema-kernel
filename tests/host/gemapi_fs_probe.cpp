@@ -168,6 +168,12 @@ bool umount(const char* target) noexcept {
 
 }  // namespace kgema
 
+namespace kgema::syscall {
+
+i64 last_error() noexcept { return 0; }
+
+}  // namespace kgema::syscall
+
 namespace {
 
 int Fail(const char* message) {

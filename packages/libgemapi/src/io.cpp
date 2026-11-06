@@ -1,5 +1,6 @@
 #include "gemapi/io.h"
 
+#include "error_internal.h"
 #include "kgema/file.h"
 #include "kgema/io.h"
 
@@ -29,7 +30,7 @@ Result<usize> read_line(char* buffer, usize capacity) noexcept {
   }
   const kgema::i64 count = kgema::read(0, buffer, capacity - 1U);
   if (count < 0) {
-    return Status::io;
+    return detail::LastError(Status::io);
   }
   usize length = static_cast<usize>(count);
   if (length >= capacity) {

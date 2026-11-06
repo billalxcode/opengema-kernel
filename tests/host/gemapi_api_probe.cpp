@@ -12,6 +12,7 @@
 #include "kgema/io.h"
 #include "kgema/memory.h"
 #include "kgema/process.h"
+#include "kgema/syscall.h"
 
 namespace {
 
@@ -107,6 +108,12 @@ bool munmap(void* address, usize size) noexcept {
 }
 
 }  // namespace kgema
+
+namespace kgema::syscall {
+
+i64 last_error() noexcept { return 0; }
+
+}  // namespace kgema::syscall
 
 namespace {
 
@@ -227,6 +234,14 @@ int main() {
   if (gemapi::memory::unmap(reinterpret_cast<void*>(0x2000), 16U) !=
       Status::io) {
     return Fail("memory unmap error");
+  }
+
+  if (gemapi::from_errno(kgema::syscall::kErrNoMem) != Status::no_memory ||
+      gemapi::from_errno(kgema::syscall::kErrNotFound) != Status::not_found ||
+      gemapi::from_errno(kgema::syscall::kErrDenied) != Status::denied ||
+      gemapi::from_errno(kgema::syscall::kErrTimeout) != Status::timeout ||
+      gemapi::from_errno(-999) != Status::unknown) {
+    return Fail("errno mapping");
   }
 
   std::printf("gemapi api probe: OK\n");

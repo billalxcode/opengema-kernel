@@ -23,6 +23,7 @@ constexpr uint64_t kAddressSpaceTestVa = mem::kUserSpaceBase + 0x3000000ULL;
 
 uint64_t g_work_runs = 0;
 uint64_t g_workers_done = 0;
+uint64_t g_join_done = 0;
 uint64_t g_worker_cpu_mask = 0;
 uint64_t g_mutex_counter = 0;
 uint64_t g_mutex_done = 0;
@@ -57,6 +58,10 @@ AddressSpaceTestState g_as_state_b{};
 
 void CountWork(void* /*context*/) noexcept {
   ++g_work_runs;
+}
+
+void JoinWorker(void* /*context*/) noexcept {
+  (void)__atomic_add_fetch(&g_join_done, 1U, __ATOMIC_RELAXED);
 }
 
 void MutexWorker(void* /*argument*/) noexcept {
@@ -221,6 +226,17 @@ void RunSchedulerSelfTest() noexcept {
     }
   }
   Log(LogLevel::kInfo, "sched: round robin ok\n");
+
+  g_join_done = 0;
+  const Result<sched::Thread*> joiner =
+    sched::ThreadCreate("join", &JoinWorker, nullptr);
+  if (joiner.is_err() || IsErr(sched::ThreadJoin(joiner.value()))) {
+    Panic("sched: join failed");
+  }
+  if (__atomic_load_n(&g_join_done, __ATOMIC_ACQUIRE) != 1U) {
+    Panic("sched: join worker did not run");
+  }
+  Log(LogLevel::kInfo, "sched: join ok\n");
 
   g_test_mutex.set_name("self-test");
   g_test_semaphore.init(0);
