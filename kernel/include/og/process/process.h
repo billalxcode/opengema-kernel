@@ -61,6 +61,7 @@ struct Process {
   uint64_t stack_top;
   uint64_t argv;
   uint64_t envp;
+  uint64_t tls;
   uint32_t argc;
   char name[32];
   char cwd[fs::kMaxPath];

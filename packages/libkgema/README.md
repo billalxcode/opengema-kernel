@@ -17,7 +17,7 @@ masuk `_start` berada di `libgemapi`.
 | `kgema/file.h` | `open`, `close`, `read`, `write`, `seek`, `stat`, `chdir`, `list`, `chmod`, `chown`, `mount`, dan `umount` |
 | `kgema/memory.h` | `mmap`, `mmap_executable`, `mmap_lazy`, `mmap_shared`, `mmap_file`, `munmap`, dan `mprotect` |
 | `kgema/sync.h` | `futex_wait` dan `futex_wake` |
-| `kgema/process.h` | `getpid`, `spawn`, `wait`, `exit`, `uid`, `gid`, `setuid`, `setgid`, `priority`, dan `setpriority` |
+| `kgema/process.h` | `getpid`, `spawn`, `wait`, `exit`, `uid`, `gid`, `setuid`, `setgid`, `priority`, `setpriority`, `tls`, `set_tls`, dan `tls_register` |
 
 `src/runtime.cpp` menyediakan `memset`, `memcpy`, dan `memmove` yang mungkin
 dihasilkan compiler untuk inisialisasi agregat. Ini bukan syscall dan bukan

@@ -83,4 +83,21 @@ Status set_priority(u64 value) noexcept {
                                    : detail::LastError(Status::denied);
 }
 
+Result<u64> tls() noexcept {
+  u64 value = 0;
+  if (!kgema::tls(value)) {
+    return detail::LastError(Status::not_supported);
+  }
+  return value;
+}
+
+Status set_tls(u64 value) noexcept {
+  return kgema::set_tls(value) ? Status::ok
+                               : detail::LastError(Status::invalid_argument);
+}
+
+Result<u64> tls_register() noexcept {
+  return kgema::tls_register();
+}
+
 }  // namespace gemapi::process

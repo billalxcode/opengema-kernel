@@ -94,6 +94,9 @@ void Schedule() noexcept {
   cpu.current = next;
   next->state = ThreadState::kRunning;
   previous->user_sp = arch::aarch64::ReadSpEl0();
+  if (previous->address_space != nullptr) {
+    previous->tls = arch::aarch64::ReadTpidrEl0();
+  }
 
   if (previous != cpu.idle && previous->state == ThreadState::kRunning) {
     previous->state = ThreadState::kReady;
@@ -106,6 +109,9 @@ void Schedule() noexcept {
   (void)__atomic_add_fetch(&g_context_switches, 1U, __ATOMIC_RELAXED);
   trace::Record(trace::Tag::kContextSwitch, index);
   mem::AddressSpaceActivate(next->address_space);
+  if (next->address_space != nullptr) {
+    arch::aarch64::WriteTpidrEl0(next->tls);
+  }
   arch::aarch64::WriteSpEl0(next->user_sp);
   SwitchContext(&previous->saved_sp, next->saved_sp);
   arch::aarch64::IrqRestore(daif);
@@ -481,6 +487,32 @@ uint32_t ThreadCount() noexcept {
     if (g_threads[index].id != 0U) {
       ++count;
     }
+  }
+  g_lock.unlock();
+  return count;
+}
+
+uint32_t ThreadSnapshot(ThreadInfo* out, uint32_t capacity) noexcept {
+  if (out == nullptr || capacity == 0U) {
+    return 0;
+  }
+  g_lock.lock();
+  uint32_t count = 0;
+  for (uint32_t index = 0; index < kMaxThreads && count < capacity;
+       ++index) {
+    const Thread& thread = g_threads[index];
+    if (thread.id == 0U) {
+      continue;
+    }
+    out[count].id = thread.id;
+    out[count].home_cpu = thread.home_cpu;
+    out[count].state = thread.state;
+    out[count].priority = thread.base_priority;
+    out[count].cpu_ticks = thread.cpu_ticks;
+    out[count].tls = thread.tls;
+    mem::Copy(out[count].name, thread.name, sizeof(out[count].name));
+    out[count].name[sizeof(out[count].name) - 1U] = '\0';
+    ++count;
   }
   g_lock.unlock();
   return count;

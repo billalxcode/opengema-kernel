@@ -105,6 +105,17 @@ i64 futex_wake(i64 address, i64 count) noexcept {
   return count > 0 ? 1 : 0;
 }
 
+bool tls(u64& value) noexcept {
+  value = 0x7000U;
+  return true;
+}
+
+bool set_tls(u64 value) noexcept {
+  return value == 0x7000U || value == 0U;
+}
+
+u64 tls_register() noexcept { return 0x7000U; }
+
 i64 wait(i64 pid, int* status) noexcept {
   if (pid == 0 || status == nullptr) {
     return -1;
@@ -262,6 +273,15 @@ int main() {
       gemapi::sync::wait(nullptr, 0) != Status::invalid_argument ||
       gemapi::sync::wake(nullptr, 1U).status() != Status::invalid_argument) {
     return Fail("futex wake");
+  }
+
+  const auto tls = gemapi::process::tls();
+  const auto tls_register = gemapi::process::tls_register();
+  if (!tls || tls.value() != 0x7000U || !tls_register ||
+      tls_register.value() != 0x7000U ||
+      gemapi::process::set_tls(0x7000U) != Status::ok ||
+      gemapi::process::set_tls(0U) != Status::ok) {
+    return Fail("process tls");
   }
 
   int wait_status = 0;

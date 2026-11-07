@@ -43,6 +43,10 @@ namespace og {
 namespace {
 
 uint64_t g_ipi_count = 0;
+uint64_t g_tlb_generation = 0;
+uint64_t g_tlb_ack[smp::kMaxCpus]{};
+uint64_t g_tlb_sync_count = 0;
+uint64_t g_tlb_timeout_count = 0;
 
 void PanicInfo() noexcept {
   sched::Thread* thread = sched::CurrentThread();
@@ -198,6 +202,8 @@ void StartWatchdog() noexcept {
 
 void BroadcastTlbShootdown() noexcept {
   const uint32_t current = smp::CurrentIndex();
+  const uint64_t generation =
+    __atomic_add_fetch(&g_tlb_generation, 1U, __ATOMIC_ACQ_REL);
   for (uint32_t index = 0; index < smp::CpuCount(); ++index) {
     if (index == current) {
       continue;
@@ -208,11 +214,46 @@ void BroadcastTlbShootdown() noexcept {
       drivers::irq::Gicv3::SendSgi(smp::kIpiIrq, index);
     }
   }
+
+  // The generation wait is bounded so an IRQ-masked target or a concurrent
+  // shooter cannot stall the caller.
+  const uint64_t frequency = arch::aarch64::ReadCntfrqEl0();
+  const uint64_t deadline =
+    arch::aarch64::ReadCntpctEl0() + (frequency / 1000U);
+  bool synchronized = true;
+  for (uint32_t index = 0; index < smp::CpuCount(); ++index) {
+    if (index == current) {
+      continue;
+    }
+    smp::CpuInfo* cpu = smp::CpuAt(index);
+    if (cpu == nullptr ||
+        __atomic_load_n(&cpu->online, __ATOMIC_ACQUIRE) == 0U) {
+      continue;
+    }
+    while (__atomic_load_n(&g_tlb_ack[index], __ATOMIC_ACQUIRE) <
+           generation) {
+      if (arch::aarch64::ReadCntpctEl0() > deadline) {
+        synchronized = false;
+        break;
+      }
+    }
+  }
+  if (synchronized) {
+    (void)__atomic_add_fetch(&g_tlb_sync_count, 1U, __ATOMIC_RELAXED);
+  } else {
+    (void)__atomic_add_fetch(&g_tlb_timeout_count, 1U, __ATOMIC_RELAXED);
+  }
 }
 
 Status IpiHandler(void* /*context*/, uint32_t /*irq*/) noexcept {
   __atomic_add_fetch(&g_ipi_count, 1U, __ATOMIC_RELAXED);
   arch::aarch64::InvalidateTlbAllLocal();
+  const uint64_t generation =
+    __atomic_load_n(&g_tlb_generation, __ATOMIC_ACQUIRE);
+  const uint32_t current = smp::CurrentIndex();
+  if (current < smp::kMaxCpus) {
+    __atomic_store_n(&g_tlb_ack[current], generation, __ATOMIC_RELEASE);
+  }
   return Status::kOk;
 }
 
@@ -266,10 +307,23 @@ void InitSmp() noexcept {
 
   mem::SetTlbShootdownHook(&BroadcastTlbShootdown);
   mem::TlbShootdown();
+  LogDec(LogLevel::kInfo, "smp: tlb sync", boot::TlbSyncCount());
   Log(LogLevel::kInfo, "smp: tlb shootdown ok\n");
 }
 
 }  // namespace
+
+namespace boot {
+
+uint64_t TlbSyncCount() noexcept {
+  return __atomic_load_n(&g_tlb_sync_count, __ATOMIC_ACQUIRE);
+}
+
+uint64_t TlbTimeoutCount() noexcept {
+  return __atomic_load_n(&g_tlb_timeout_count, __ATOMIC_ACQUIRE);
+}
+
+}  // namespace boot
 
 // Single entry point after the firmware hands over control. Modules are
 // initialized in dependency order and the first failure stops the chain.

@@ -23,4 +23,9 @@ namespace kgema {
 [[nodiscard]] bool priority(u64& value) noexcept;
 [[nodiscard]] bool setpriority(u64 value) noexcept;
 
+// Thread-local storage pointer. A zero value clears it.
+[[nodiscard]] bool tls(u64& value) noexcept;
+[[nodiscard]] bool set_tls(u64 value) noexcept;
+[[nodiscard]] u64 tls_register() noexcept;
+
 }  // namespace kgema

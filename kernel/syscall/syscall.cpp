@@ -123,6 +123,12 @@ constexpr uint64_t kSyscallNumberRegister = 8;
     case kSysFutex:
       status = DoFutex(frame->x[0], frame->x[1], frame->x[2], result);
       break;
+    case kSysGetTls:
+      status = DoGetTls(result);
+      break;
+    case kSysSetTls:
+      status = DoSetTls(frame->x[0], result);
+      break;
     case kSysChdir:
       status = DoChdir(frame->x[0], result);
       break;

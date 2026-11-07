@@ -28,6 +28,7 @@ using TextFn = Status (*)(char* buffer, std::size_t capacity,
                                   TextFn trace_text = nullptr,
                                   TextFn devices_text = nullptr,
                                   TextFn interrupts_text = nullptr,
-                                  TextFn mounts_text = nullptr) noexcept;
+                                  TextFn mounts_text = nullptr,
+                                  TextFn threads_text = nullptr) noexcept;
 
 }  // namespace og::fs::procfs

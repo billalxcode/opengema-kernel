@@ -406,6 +406,69 @@ int main(int argc, char** argv, char** envp) {
     gemapi::io::write("futex: parent\n");
     return 0;
   }
+  if (argc > 1 && same(argv[1], "tls")) {
+    constexpr gemapi::u64 kTlsMagic = 0x1122334455667788ULL;
+    const auto mapped = gemapi::memory::map(4096U);
+    if (!mapped) {
+      gemapi::io::write("tls: map failed\n");
+      return 1;
+    }
+    volatile gemapi::u64* block =
+      static_cast<volatile gemapi::u64*>(mapped.value());
+    block[0] = kTlsMagic;
+    const gemapi::u64 address =
+      reinterpret_cast<gemapi::u64>(mapped.value());
+    if (gemapi::process::set_tls(address) != gemapi::Status::ok) {
+      gemapi::io::write("tls: set failed\n");
+      return 1;
+    }
+    const auto current = gemapi::process::tls();
+    const auto hardware = gemapi::process::tls_register();
+    if (!current || current.value() != address || !hardware ||
+        hardware.value() != address) {
+      gemapi::io::write("tls: readback failed\n");
+      return 1;
+    }
+    if (gemapi::process::set_tls(1U) != gemapi::Status::invalid_argument) {
+      gemapi::io::write("tls: invalid accepted\n");
+      return 1;
+    }
+    (void)gemapi::time::sleep_ms(20U);
+    const auto after = gemapi::process::tls_register();
+    if (!after || after.value() != address || block[0] != kTlsMagic) {
+      gemapi::io::write("tls: switch lost\n");
+      return 1;
+    }
+
+    const auto child = gemapi::process::fork();
+    if (!child) {
+      gemapi::io::write("tls: fork failed\n");
+      return 1;
+    }
+    if (child.value() == 0U) {
+      const auto inherited = gemapi::process::tls_register();
+      if (!inherited || inherited.value() != address ||
+          block[0] != kTlsMagic) {
+        gemapi::io::write("tls: child mismatch\n");
+        return 1;
+      }
+      gemapi::io::write("tls: child\n");
+      return 0;
+    }
+
+    int status = 0;
+    if (gemapi::process::wait(child.value(), status) != gemapi::Status::ok ||
+        status != 0) {
+      gemapi::io::write("tls: child failed\n");
+      return 1;
+    }
+    if (gemapi::memory::unmap(mapped.value(), 4096U) != gemapi::Status::ok) {
+      gemapi::io::write("tls: unmap failed\n");
+      return 1;
+    }
+    gemapi::io::write("tls: parent\n");
+    return 0;
+  }
   if (argc > 1 && same(argv[1], "filemap")) {
     constexpr gemapi::usize kMapSize = 4096U;
     auto file = gemapi::fs::File::open("/system/config/version");

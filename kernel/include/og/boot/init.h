@@ -16,4 +16,7 @@ void RunAsidSelfTest() noexcept;
 void RunAddressSpaceSelfTest() noexcept;
 void RunUserSelfTest() noexcept;
 
+[[nodiscard]] uint64_t TlbSyncCount() noexcept;
+[[nodiscard]] uint64_t TlbTimeoutCount() noexcept;
+
 }  // namespace og::boot

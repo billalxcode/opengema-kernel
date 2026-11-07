@@ -17,7 +17,7 @@ header `kgema/`, nomor syscall, atau instruksi `svc`.
 | `gemapi/memory.h` | `map`, `map_lazy`, `map_shared`, `map_file`, dan `unmap` |
 | `gemapi/sync.h` | `wait` dan `wake` untuk futex |
 | `gemapi/paths.h` | Path tetap GSL: `/system`, `/applications`, `/tmp`, dan lainnya |
-| `gemapi/process.h` | `id`, `spawn`, `fork`, `exec`, `wait`, `exit`, `user_id`, `group_id`, `set_user_id`, `set_group_id`, `priority`, dan `set_priority` |
+| `gemapi/process.h` | `id`, `spawn`, `fork`, `exec`, `wait`, `exit`, `user_id`, `group_id`, `set_user_id`, `set_group_id`, `priority`, `set_priority`, `tls`, `set_tls`, dan `tls_register` |
 | `gemapi/system.h` | Versi API |
 | `gemapi/gemapi.h` | Umbrella header |
 

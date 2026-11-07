@@ -37,4 +37,9 @@ namespace gemapi::process {
 [[nodiscard]] Result<u64> priority() noexcept;
 [[nodiscard]] Status set_priority(u64 value) noexcept;
 
+// Thread-local storage pointer and the raw TPIDR_EL0 value.
+[[nodiscard]] Result<u64> tls() noexcept;
+[[nodiscard]] Status set_tls(u64 value) noexcept;
+[[nodiscard]] Result<u64> tls_register() noexcept;
+
 }  // namespace gemapi::process

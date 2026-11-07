@@ -14,9 +14,9 @@ import os
 import re
 import sys
 
-# Only rewrite /work when it is a complete path component. A plain
-# str.replace also matches the "/work" inside names such as workqueue.cpp.
-WORK_PREFIX = re.compile(r"/work(?![A-Za-z0-9_.-])")
+# Only rewrite /work when it is a complete path component and not part of
+# another path such as /home/runner/work.
+WORK_PREFIX = re.compile(r"(?<![A-Za-z0-9_.-])/work(?![A-Za-z0-9_.-])")
 
 
 def fail(msg):

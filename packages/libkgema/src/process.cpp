@@ -81,4 +81,28 @@ bool setpriority(u64 value) noexcept {
                           0) == 0;
 }
 
+bool tls(u64& value) noexcept {
+  const i64 result = syscall::invoke3(syscall::kGetTls, 0, 0, 0);
+  if (result < 0) {
+    return false;
+  }
+  value = static_cast<u64>(result);
+  return true;
+}
+
+bool set_tls(u64 value) noexcept {
+  return syscall::invoke3(syscall::kSetTls, static_cast<i64>(value), 0, 0) ==
+         0;
+}
+
+u64 tls_register() noexcept {
+#if defined(__aarch64__)
+  u64 value = 0;
+  __asm__ volatile("mrs %0, tpidr_el0" : "=r"(value));
+  return value;
+#else
+  return 0;
+#endif
+}
+
 }  // namespace kgema

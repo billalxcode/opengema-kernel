@@ -193,6 +193,7 @@ void BuildInterpreterEnvironment(const elf::Image& image, bool dynamic,
 
 void ProcessThreadEntry(void* argument) noexcept {
   auto* process = static_cast<Process*>(argument);
+  arch::aarch64::WriteTpidrEl0(process->tls);
   if (process->fork.active) {
     arch::aarch64::EnterForkedUserMode(
       process->fork.x, process->fork.elr, process->fork.spsr,
@@ -618,6 +619,7 @@ Result<uint32_t> Fork(arch::aarch64::TrapFrame* frame) noexcept {
   slot->stack_top = parent->stack_top;
   slot->argv = parent->argv;
   slot->envp = parent->envp;
+  slot->tls = arch::aarch64::ReadTpidrEl0();
   slot->argc = parent->argc;
   mem::Copy(slot->name, parent->name, sizeof(slot->name));
   mem::Copy(slot->cwd, parent->cwd, sizeof(slot->cwd));
@@ -713,6 +715,11 @@ Status Exec(const char* path, const char* const* argv, uint32_t argc,
   process->envp = user_stack.envp;
   process->argc = user_stack.argc;
   process->fork.active = false;
+  process->tls = 0;
+  if (process->thread != nullptr) {
+    process->thread->tls = 0;
+  }
+  arch::aarch64::WriteTpidrEl0(0);
   const std::size_t name_length = mem::Length(path);
   const std::size_t name_copy =
     name_length >= sizeof(process->name) ? (sizeof(process->name) - 1U)

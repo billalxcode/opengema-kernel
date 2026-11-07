@@ -316,6 +316,41 @@ const char* ProcessStateName(process::ProcessState state) noexcept {
   }
 }
 
+const char* ThreadStateName(sched::ThreadState state) noexcept {
+  switch (state) {
+    case sched::ThreadState::kReady:
+      return "ready";
+    case sched::ThreadState::kRunning:
+      return "running";
+    case sched::ThreadState::kBlocked:
+      return "blocked";
+    case sched::ThreadState::kFinished:
+      return "finished";
+    default:
+      return "unknown";
+  }
+}
+
+Status FormatThreads(char* buffer, std::size_t capacity,
+                     std::size_t& length) noexcept {
+  og::fmt::LineBuilder line(buffer, capacity);
+  line.Text("id cpu state prio ticks tls name\n");
+  sched::ThreadInfo info[sched::kMaxThreads];
+  const uint32_t count =
+    sched::ThreadSnapshot(info, sched::kMaxThreads);
+  for (uint32_t index = 0; index < count; ++index) {
+    line.Dec(info[index].id).Char(' ')
+        .Dec(info[index].home_cpu).Char(' ')
+        .Text(ThreadStateName(info[index].state)).Char(' ')
+        .Dec(info[index].priority).Char(' ')
+        .Dec(info[index].cpu_ticks).Char(' ')
+        .Hex(info[index].tls).Char(' ')
+        .Text(info[index].name).Char('\n');
+  }
+  length = line.size();
+  return Status::kOk;
+}
+
 Status FormatProcesses(char* buffer, std::size_t capacity,
                        std::size_t& length) noexcept {
   og::fmt::LineBuilder line(buffer, capacity);
@@ -376,6 +411,8 @@ Status FormatMemInfo(char* buffer, std::size_t capacity,
   line.Text("dma_frees: ").Dec(dma_stats.frees).Char('\n');
   line.Text("dma_bytes: ").Dec(dma_stats.live_bytes).Char('\n');
   line.Text("lazy_faults: ").Dec(mem::VmmLazyFaultCount()).Char('\n');
+  line.Text("tlb_sync: ").Dec(TlbSyncCount()).Char('\n');
+  line.Text("tlb_timeouts: ").Dec(TlbTimeoutCount()).Char('\n');
   length = line.size();
   return Status::kOk;
 }
@@ -501,7 +538,7 @@ Status MountProcfs() noexcept {
     fs::procfs::Create(&sched::ThreadCount, &FormatProcesses,
                        &FormatBlockDevices, &FormatMemInfo, &FormatStat,
                        &FormatTrace, &FormatDevices, &FormatInterrupts,
-                       &FormatMounts);
+                       &FormatMounts, &FormatThreads);
   if (proc.is_err()) {
     return proc.status();
   }

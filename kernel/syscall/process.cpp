@@ -1,5 +1,6 @@
 #include "og/syscall/syscall_internal.h"
 
+#include "og/arch/registers.h"
 #include "og/fs/vfs.h"
 #include "og/mem/vmm.h"
 #include "og/sched/sched.h"
@@ -104,6 +105,31 @@ Status DoSetPriority(uint64_t priority, uint64_t& result) noexcept {
   if (IsErr(status)) {
     return status;
   }
+  result = 0;
+  return Status::kOk;
+}
+
+Status DoGetTls(uint64_t& result) noexcept {
+  if (CurrentProcess() == nullptr) {
+    return Status::kNotInit;
+  }
+  result = arch::aarch64::ReadTpidrEl0();
+  return Status::kOk;
+}
+
+Status DoSetTls(uint64_t address, uint64_t& result) noexcept {
+  process::Process* process = CurrentProcess();
+  if (process == nullptr) {
+    return Status::kNotInit;
+  }
+  if (address != 0U && !mem::VmmUserContains(process->space, address, 1U)) {
+    return Status::kInvalidArg;
+  }
+  process->tls = address;
+  if (process->thread != nullptr) {
+    process->thread->tls = address;
+  }
+  arch::aarch64::WriteTpidrEl0(address);
   result = 0;
   return Status::kOk;
 }

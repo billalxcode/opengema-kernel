@@ -51,6 +51,9 @@ Manifest ada di `packages/system-root/applications/hello/manifest.txt`.
 - `hello futex` memakai shared page, child menunggu `futex_wait` pada nilai
   0, lalu parent mengubah nilai menjadi 1 dan `futex_wake`. Parent harus
   membangunkan tepat satu waiter dan child mencetak `futex: child woke`.
+- `hello tls` mengatur TPIDR_EL0 ke blok TLS, memaksa context switch,
+  memastikan register dan isi blok tetap sama, lalu fork dan memastikan
+  child mewarisi nilai TLS parent.
 - `hello filemap` membuka `/system/config/version`, memetakan snapshot
   private 4 KiB, memeriksa isi dan zero tail, lalu memastikan tulisan ke
   mapping tidak mengubah berkas asli. Library ELF multi-page juga dipetakan

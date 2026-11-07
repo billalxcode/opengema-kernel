@@ -53,6 +53,7 @@ struct Thread {
   uint32_t in_ready_queue;
   uint64_t wake_ns;
   uint64_t cpu_ticks;
+  uint64_t tls;
   uint32_t base_priority;
   uint32_t wait_ticks;
   bool migratable;
@@ -70,6 +71,17 @@ struct Thread {
 // Sleep/wake queue. A thread waits on at most one queue at a time.
 struct WaitQueue {
   Thread* head;
+};
+
+// Copy of the fields a user visible thread listing needs.
+struct ThreadInfo {
+  uint32_t id;
+  uint32_t home_cpu;
+  ThreadState state;
+  uint32_t priority;
+  uint64_t cpu_ticks;
+  uint64_t tls;
+  char name[16];
 };
 
 // Global scheduler state. Runs on the boot CPU.
@@ -118,6 +130,8 @@ void ThreadYield() noexcept;
 // Waits for a thread to finish, then reclaims its stack and slot.
 [[nodiscard]] Status ThreadJoin(Thread* thread) noexcept;
 [[nodiscard]] uint32_t ThreadCount() noexcept;
+[[nodiscard]] uint32_t ThreadSnapshot(ThreadInfo* out,
+                                      uint32_t capacity) noexcept;
 [[nodiscard]] uint64_t ContextSwitchCount() noexcept;
 [[nodiscard]] uint64_t CpuHeartbeat(uint32_t cpu) noexcept;
 

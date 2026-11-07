@@ -83,6 +83,10 @@ i64 invoke3(i64 number, i64 arg0, i64 arg1, i64 arg2) noexcept {
         return arg2 > 0 ? 1 : 0;
       }
       return -1;
+    case kGetTls:
+      return 0x7000;
+    case kSetTls:
+      return arg0 == 0x7000 || arg0 == 0 ? 0 : -1;
     case kChmod:
       return Same(reinterpret_cast<const char*>(arg0), "file") &&
                  arg1 == 0600
@@ -212,6 +216,11 @@ int main() {
       kgema::futex_wake(0x1000, 1) != 1 ||
       kgema::futex_wake(0x1000, -1) != kgema::syscall::kErrInvalid) {
     return Fail("futex");
+  }
+  kgema::u64 tls = 0;
+  if (!kgema::tls(tls) || tls != 0x7000U || !kgema::set_tls(0x7000U) ||
+      !kgema::set_tls(0U)) {
+    return Fail("tls");
   }
 
   if (!kgema::chdir(path) || g_last_number != kgema::syscall::kChdir) {

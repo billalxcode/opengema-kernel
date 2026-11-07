@@ -90,7 +90,7 @@ def main(argv):
         b"mkdir /tmp/d\nmv /tmp/d /tmp/e\nls /tmp\nrm /tmp/e\nstat /system/config/version\n",
         b"mkdir \"/tmp/quoted dir\"\nrm \"/tmp/quoted dir\"\nchmod 600 /tmp/hello\nstat /tmp/hello\n",
         b"mkdir /tmp/mnt\nmount ramfs /tmp/mnt\nmount ramfs /tmp/mnt\n",
-        b"umount /tmp/mnt\numount /tmp/mnt\nrm /tmp/mnt\ncat /proc/meminfo\ncat /proc/stat\n",
+        b"umount /tmp/mnt\numount /tmp/mnt\nrm /tmp/mnt\ncat /proc/meminfo\ncat /proc/stat\ncat /proc/threads\n",
         b"cat /proc/block\nls /volumes/boot\n",
         b"cat /proc/trace\n",
         b"cat /proc/devices\ncat /proc/interrupts\n",
@@ -127,6 +127,8 @@ def main(argv):
     shm_seen = False
     futex_sent = False
     futex_seen = False
+    tls_sent = False
+    tls_seen = False
     filemap_sent = False
     filemap_seen = False
     prio_sent = False
@@ -462,7 +464,15 @@ def main(argv):
             if futex_sent and not futex_seen and b"FUTEX-DONE" in buffer:
                 futex_seen = True
 
-            if futex_seen and not filemap_sent and b"FUTEX-DONE" in buffer:
+            if futex_seen and not tls_sent and b"FUTEX-DONE" in buffer:
+                send_line(client, b"hello tls\necho TLS-DONE\n")
+                tls_sent = True
+                buffer.clear()
+
+            if tls_sent and not tls_seen and b"TLS-DONE" in buffer:
+                tls_seen = True
+
+            if tls_seen and not filemap_sent and b"TLS-DONE" in buffer:
                 send_line(client, b"hello filemap\necho FILEMAP-DONE\n")
                 filemap_sent = True
                 buffer.clear()

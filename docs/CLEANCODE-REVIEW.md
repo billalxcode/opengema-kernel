@@ -252,7 +252,8 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 - Test dmesg: `/proc/dmesg` dibaca lewat procfs dan command shell.
 - Test CPU accounting: `/proc/processes` menampilkan kolom `cpu_ms`, uid,
   gid, jumlah region user, dan prioritas thread lewat kolom `prio`;
-  `/proc/stat` menampilkan heartbeat per CPU.
+  `/proc/stat` menampilkan heartbeat per CPU; `/proc/threads` menampilkan
+  snapshot id, CPU, state, prioritas, ticks, TLS, dan nama thread.
 - Test prioritas user: `hello prio` membaca prioritas default 16,
   menurunkannya ke 20, menolak nilai di atas 31, dan memastikan proses
   non-root ditolak saat menaikkan prioritas. Shell `prio` menampilkan
@@ -288,9 +289,9 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   stack awal 16 KiB sampai batas 64 KiB. `hello stackguard` melewati batas
   tersebut dan harus mati pada guard page.
 - Test TLB shootdown: setiap perubahan permission atau unmap user mengirim
-  SGI `kIpiIrq` ke CPU online lain. Handler IPI mem-flush TLB lokal.
-  Shootdown bersifat non-blocking agar dua CPU dengan IRQ termask tidak
-  saling menunggu.
+  SGI `kIpiIrq` ke CPU online lain. Handler IPI mem-flush TLB lokal lalu
+  menyimpan ack generasi. Pengirim menunggu ack dengan timeout 1 ms agar
+  target yang sibuk atau IRQ-masked tidak membuat deadlock.
 - Test ASID: self-test mengalokasikan 255 address space, memastikan space
   ke-256 ditolak, menghancurkan semuanya, lalu mengalokasikan ulang. Bitmap
   ASID mengembalikan slot saat `AddressSpaceDestroy`, jadi tidak ada
@@ -318,6 +319,9 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 - Test futex: `hello futex` memakai shared page, child memblokir di
   `futex_wait` sampai parent menulis nilai baru dan memanggil `futex_wake`.
   Parent harus membangunkan tepat satu waiter.
+- Test TLS: `hello tls` mengatur TPIDR_EL0, memaksa context switch, lalu
+  memastikan register dan isi blok tetap sama. Child hasil `fork` harus
+  mewarisi nilai TLS parent.
 - Test file-backed mmap: `hello filemap` memetakan snapshot private
   `/system/config/version`, memeriksa isi dan zero tail, lalu memastikan
   tulisan ke mapping tidak bocor ke berkas.
@@ -397,8 +401,9 @@ Verifikasi branch `dev`:
   melewati 64 KiB dan mati pada guard page tanpa panic kernel.
 - NX user: `hello nx` memanggil halaman data RW NX; kernel mencatat user
   fault, proses mati, dan `NX-DONE` muncul tanpa `nx: data executed`.
-- TLB shootdown: `smp: ipi count: 1` dan `smp: tlb shootdown ok` muncul;
-  QEMU SMP=4 lulus tanpa deadlock.
+- TLB shootdown: `smp: ipi count: 1`, `smp: tlb sync`, dan
+  `smp: tlb shootdown ok` muncul; QEMU SMP=4 lulus tanpa deadlock.
+  `/proc/meminfo` menampilkan `tlb_sync` dan `tlb_timeouts`.
 - Reuse ASID: `mem: asid reuse ok` muncul setelah self-test mengisi dan
   mengosongkan seluruh 255 slot ASID.
 - PAN: QEMU `-cpu max` mencetak `hardening: pan enabled` dan lulus
@@ -427,6 +432,8 @@ Verifikasi branch `dev`:
   yang sama tetap writable dan dibagi setelah `fork`.
 - Futex: `futex: child woke` lalu `futex: parent` muncul; `futex_wake`
   mengembalikan satu waiter dan child melanjutkan setelah nilai berubah.
+- TLS: `tls: child` lalu `tls: parent` muncul; TPIDR_EL0 dan blok TLS tetap
+  valid setelah sleep, context switch, dan `fork`.
 - File-backed mmap: `filemap: ok` muncul setelah snapshot private berisi
   `0.1`, tail nol, dan tulisan ke mapping tidak mengubah berkas asli.
 - `.github/workflows/ci.yml`: build native Linux, host test, sanitizer,

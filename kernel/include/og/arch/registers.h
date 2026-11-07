@@ -236,4 +236,14 @@ inline void WriteSpEl0(uint64_t value) noexcept {
   __asm__ volatile("msr sp_el0, %0" ::"r"(value) : "memory");
 }
 
+[[nodiscard]] inline uint64_t ReadTpidrEl0() noexcept {
+  uint64_t value = 0;
+  __asm__ volatile("mrs %0, tpidr_el0" : "=r"(value));
+  return value;
+}
+
+inline void WriteTpidrEl0(uint64_t value) noexcept {
+  __asm__ volatile("msr tpidr_el0, %0" ::"r"(value) : "memory");
+}
+
 }  // namespace og::arch::aarch64

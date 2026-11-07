@@ -47,6 +47,7 @@ TextFn g_trace_text = nullptr;
 TextFn g_devices_text = nullptr;
 TextFn g_interrupts_text = nullptr;
 TextFn g_mounts_text = nullptr;
+TextFn g_threads_text = nullptr;
 
 void GenerateAcpi(og::fmt::LineBuilder& line) noexcept {
   const acpi::Info& info = acpi::GetInfo();
@@ -98,8 +99,12 @@ Status Generate(const ProcFile& file, char* buffer, std::size_t capacity,
       line.Text(" ms\n");
       break;
     case ProcKind::kThreads:
-      line.Dec(g_thread_count == nullptr ? 0U : g_thread_count());
-      line.Text("\n");
+      if (g_threads_text == nullptr) {
+        line.Dec(g_thread_count == nullptr ? 0U : g_thread_count());
+        line.Text("\n");
+      } else {
+        return g_threads_text(buffer, capacity, length);
+      }
       break;
     case ProcKind::kAcpi:
       GenerateAcpi(line);
@@ -274,7 +279,8 @@ Result<Node*> Create(ThreadCountFn thread_count,
                      TextFn trace_text,
                      TextFn devices_text,
                      TextFn interrupts_text,
-                     TextFn mounts_text) noexcept {
+                     TextFn mounts_text,
+                     TextFn threads_text) noexcept {
   g_thread_count = thread_count;
   g_process_text = process_text;
   g_block_text = block_text;
@@ -284,6 +290,7 @@ Result<Node*> Create(ThreadCountFn thread_count,
   g_devices_text = devices_text;
   g_interrupts_text = interrupts_text;
   g_mounts_text = mounts_text;
+  g_threads_text = threads_text;
   mem::Zero(&g_root, sizeof(g_root));
   g_root.node.name = "/";
   g_root.node.type = NodeType::kDirectory;

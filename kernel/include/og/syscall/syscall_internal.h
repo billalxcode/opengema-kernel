@@ -163,6 +163,9 @@ namespace og::syscall {
 [[nodiscard]] Status DoFutex(uint64_t address, uint64_t operation,
                              uint64_t value, uint64_t& result) noexcept;
 
+[[nodiscard]] Status DoGetTls(uint64_t& result) noexcept;
+[[nodiscard]] Status DoSetTls(uint64_t address, uint64_t& result) noexcept;
+
 [[nodiscard]] Status DoChown(uint64_t user_path, uint64_t uid, uint64_t gid,
                              uint64_t& result) noexcept;
 
