@@ -21,4 +21,6 @@ constexpr uint64_t kTableEntries = 512;
 
 [[nodiscard]] uint32_t AllocateAsid() noexcept;
 
+void ReleaseAsid(uint16_t asid) noexcept;
+
 }  // namespace og::mem::detail

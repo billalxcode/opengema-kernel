@@ -5,6 +5,7 @@
 #include "og/arch/cpu.h"
 #include "og/arch/descriptor.h"
 #include "og/arch/mmu.h"
+#include "og/arch/spinlock.h"
 #include "og/arch/tlb.h"
 #include "og/mem/pmm.h"
 #include "og/mem/vmm_internal.h"
@@ -30,6 +31,13 @@ using arch::aarch64::TableDescriptor;
 constexpr uint32_t kUserSpaceL0Index =
   static_cast<uint32_t>(kUserSpaceBase >> 39U);
 constexpr uint32_t kMaxCpus = 4;
+constexpr uint32_t kAsidCount = 256;
+constexpr uint32_t kAsidWords = kAsidCount / 64U;
+
+// ASID zero is reserved for the kernel. Bits 1..255 are assigned to user
+// address spaces and returned to the pool when the space is destroyed.
+uint64_t g_asid_bitmap[kAsidWords] = {1ULL, 0ULL, 0ULL, 0ULL};
+arch::aarch64::IrqSpinlock g_asid_lock;
 
 uint64_t* g_root = nullptr;
 TlbShootdownHook g_tlb_shootdown = nullptr;
@@ -42,10 +50,10 @@ struct ActiveSpace {
 };
 
 ActiveSpace g_active_spaces[kMaxCpus];
-uint32_t g_next_asid = 1;
 
 void TrackUserRegion(AddressSpace& space, uint64_t base, uint64_t size,
-                     bool lazy, bool executable, bool writable) noexcept {
+                     bool lazy, bool executable, bool writable,
+                     bool shared) noexcept {
   if (space.region_count >= kMaxUserRegions) {
     return;
   }
@@ -55,6 +63,7 @@ void TrackUserRegion(AddressSpace& space, uint64_t base, uint64_t size,
   region.lazy = lazy;
   region.executable = executable;
   region.writable = writable;
+  region.shared = shared;
   ++space.region_count;
 }
 
@@ -384,7 +393,26 @@ uint32_t UserSpaceL0Index() noexcept {
 }
 
 uint32_t AllocateAsid() noexcept {
-  return __atomic_fetch_add(&g_next_asid, 1U, __ATOMIC_RELAXED);
+  arch::aarch64::LockGuard<arch::aarch64::IrqSpinlock> guard(g_asid_lock);
+  for (uint32_t word = 0; word < kAsidWords; ++word) {
+    const uint64_t value = g_asid_bitmap[word];
+    if (value == ~0ULL) {
+      continue;
+    }
+    const uint32_t bit =
+      static_cast<uint32_t>(__builtin_ctzll(~value));
+    g_asid_bitmap[word] = value | (1ULL << bit);
+    return (word * 64U) + bit;
+  }
+  return 0U;
+}
+
+void ReleaseAsid(uint16_t asid) noexcept {
+  if (asid == 0U || asid >= kAsidCount) {
+    return;
+  }
+  arch::aarch64::LockGuard<arch::aarch64::IrqSpinlock> guard(g_asid_lock);
+  g_asid_bitmap[asid / 64U] &= ~(1ULL << (asid % 64U));
 }
 
 }  // namespace detail
@@ -684,7 +712,7 @@ Status VmmHandleCow(AddressSpace& space, uint64_t virtual_address) noexcept {
 }
 
 Status VmmMapUser(AddressSpace& space, uint64_t virtual_address, uint64_t size,
-                  bool executable, bool writable) noexcept {
+                  bool executable, bool writable, bool shared) noexcept {
   uint64_t aligned = 0;
   const Status valid =
     ValidateUserRange(space, virtual_address, size, aligned);
@@ -700,7 +728,7 @@ Status VmmMapUser(AddressSpace& space, uint64_t virtual_address, uint64_t size,
     return status;
   }
   TrackUserRegion(space, virtual_address, aligned, false, executable,
-                  writable);
+                  writable, shared);
   return Status::kOk;
 }
 
@@ -785,7 +813,8 @@ Status VmmMapUserLazy(AddressSpace& space, uint64_t virtual_address,
     }
   }
 
-  TrackUserRegion(space, virtual_address, aligned, true, executable, writable);
+  TrackUserRegion(space, virtual_address, aligned, true, executable, writable,
+                  false);
   return Status::kOk;
 }
 

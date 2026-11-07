@@ -30,6 +30,12 @@ constexpr uint32_t kMaxThreads = 16;
 constexpr uint32_t kStackPages = 4;
 constexpr uint64_t kNoWake = 0xFFFFFFFFFFFFFFFFULL;
 
+// Lower numeric values run first. Waiting threads age toward 0 so a busy
+// high-priority thread cannot starve the rest of the queue.
+constexpr uint32_t kPriorityHighest = 0;
+constexpr uint32_t kPriorityDefault = 16;
+constexpr uint32_t kPriorityLowest = 31;
+
 // Scheduler tick rate. ThreadSleep counts these ticks.
 constexpr uint64_t kTickHz = 1000;
 constexpr uint64_t kTickNanoseconds = 1000000000ULL / kTickHz;
@@ -47,6 +53,8 @@ struct Thread {
   uint32_t in_ready_queue;
   uint64_t wake_ns;
   uint64_t cpu_ticks;
+  uint32_t base_priority;
+  uint32_t wait_ticks;
   char name[16];
   ThreadEntry entry;
   void* argument;
@@ -109,6 +117,11 @@ void ThreadYield() noexcept;
 [[nodiscard]] uint32_t ThreadCount() noexcept;
 [[nodiscard]] uint64_t ContextSwitchCount() noexcept;
 [[nodiscard]] uint64_t CpuHeartbeat(uint32_t cpu) noexcept;
+
+// Sets the base priority, clamped to kPriorityHighest..kPriorityLowest.
+[[nodiscard]] Status ThreadSetPriority(Thread* thread,
+                                       uint32_t priority) noexcept;
+[[nodiscard]] uint32_t ThreadPriority(const Thread* thread) noexcept;
 
 void WaitQueueInit(WaitQueue& queue) noexcept;
 void WaitQueueWait(WaitQueue& queue) noexcept;

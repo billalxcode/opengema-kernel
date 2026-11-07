@@ -32,4 +32,9 @@ namespace gemapi::process {
 [[nodiscard]] Result<u64> group_id() noexcept;
 [[nodiscard]] Status set_group_id(u64 id) noexcept;
 
+// Scheduling priority, 0 highest and 31 lowest. Unprivileged processes may
+// only lower their priority.
+[[nodiscard]] Result<u64> priority() noexcept;
+[[nodiscard]] Status set_priority(u64 value) noexcept;
+
 }  // namespace gemapi::process

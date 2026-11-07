@@ -179,6 +179,8 @@ Status SchedulerInit() noexcept {
   boot->state = ThreadState::kRunning;
   boot->home_cpu = 0;
   boot->wake_ns = kNoWake;
+  boot->base_priority = kPriorityDefault;
+  boot->wait_ticks = 0;
   mem::Copy(boot->name, "boot", 5);
   g_next_id = 2;
   g_cpu[0].current = boot;
@@ -189,6 +191,7 @@ Status SchedulerInit() noexcept {
   if (idle.is_err()) {
     return idle.status();
   }
+  idle.value()->base_priority = kPriorityLowest;
   g_cpu[0].idle = idle.value();
 
   g_initialized = true;
@@ -222,6 +225,7 @@ Status SchedulerInitCpu() noexcept {
   g_cpu[index].need_reschedule = 0;
   g_cpu[index].initialized = 1;
   idle.value()->state = ThreadState::kRunning;
+  idle.value()->base_priority = kPriorityLowest;
   g_lock.unlock();
 
   events::SetIrqExitHook(&SchedulerIrqExit, nullptr);
@@ -284,6 +288,13 @@ void SchedulerTick(void* /*context*/) noexcept {
   Thread* current = g_cpu[index].current;
   if (current != nullptr) {
     (void)__atomic_add_fetch(&current->cpu_ticks, 1U, __ATOMIC_RELAXED);
+  }
+  Thread* ready = g_cpu[index].ready_head;
+  while (ready != nullptr) {
+    if (ready->wait_ticks < kPriorityLowest) {
+      ++ready->wait_ticks;
+    }
+    ready = ready->next_ready;
   }
   WakeSleepersLocked();
   g_cpu[index].need_reschedule = 1;
@@ -461,6 +472,25 @@ uint32_t ThreadCount() noexcept {
   }
   g_lock.unlock();
   return count;
+}
+
+Status ThreadSetPriority(Thread* thread, uint32_t priority) noexcept {
+  if (thread == nullptr) {
+    return Status::kInvalidArg;
+  }
+  if (priority > kPriorityLowest) {
+    priority = kPriorityLowest;
+  }
+  const uint64_t daif = arch::aarch64::IrqSave();
+  g_lock.lock();
+  thread->base_priority = priority;
+  g_lock.unlock();
+  arch::aarch64::IrqRestore(daif);
+  return Status::kOk;
+}
+
+uint32_t ThreadPriority(const Thread* thread) noexcept {
+  return thread == nullptr ? 0U : thread->base_priority;
 }
 
 }  // namespace og::sched

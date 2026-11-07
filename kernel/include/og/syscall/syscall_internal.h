@@ -19,7 +19,10 @@ constexpr uint64_t kStdout = 1;
 constexpr uint64_t kPageSize = 4096;
 constexpr uint64_t kMmapFlagExecutable = 1;
 constexpr uint64_t kMmapFlagLazy = 2;
-constexpr uint64_t kMmapFlagMask = kMmapFlagExecutable | kMmapFlagLazy;
+constexpr uint64_t kMmapFlagShared = 4;
+constexpr uint64_t kMmapFlagFile = 8;
+constexpr uint64_t kMmapFlagMask =
+  kMmapFlagExecutable | kMmapFlagLazy | kMmapFlagShared | kMmapFlagFile;
 constexpr uint64_t kProtectFlagExecutable = 1;
 constexpr uint64_t kProtectFlagWritable = 2;
 constexpr uint64_t kUserMmapLimit =
@@ -58,8 +61,8 @@ struct UserDirEntry {
 
 namespace og::syscall {
 
-[[nodiscard]] Status DoMmap(uint64_t size, uint64_t flags,
-                            uint64_t& result) noexcept;
+[[nodiscard]] Status DoMmap(uint64_t size, uint64_t flags, uint64_t descriptor,
+                            uint64_t offset, uint64_t& result) noexcept;
 
 [[nodiscard]] Status DoMunmap(uint64_t address, uint64_t size,
                               uint64_t& result) noexcept;
@@ -153,6 +156,9 @@ namespace og::syscall {
 [[nodiscard]] Status DoGetGid(uint64_t& result) noexcept;
 
 [[nodiscard]] Status DoSetGid(uint64_t gid, uint64_t& result) noexcept;
+
+[[nodiscard]] Status DoGetPriority(uint64_t& result) noexcept;
+[[nodiscard]] Status DoSetPriority(uint64_t priority, uint64_t& result) noexcept;
 
 [[nodiscard]] Status DoChown(uint64_t user_path, uint64_t uid, uint64_t gid,
                              uint64_t& result) noexcept;

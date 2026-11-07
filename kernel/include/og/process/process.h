@@ -75,6 +75,7 @@ struct ProcessInfo {
   uint32_t uid;
   uint32_t gid;
   ProcessState state;
+  uint32_t priority;
   uint64_t cpu_ms;
   uint64_t memory_bytes;
   uint64_t memory_limit;

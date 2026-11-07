@@ -81,7 +81,7 @@ def main(argv):
     identity_batch = 0
     identity_output = bytearray()
     identity_batches = [
-        b"chown 1 1 /tmp/hello\nstat /tmp/hello\nsetuid 1\nsetgid 1\nid\n",
+        b"chown 1 1 /tmp/hello\nstat /tmp/hello\nsetuid 1\nsetgid 1\nid\nprio\n",
         b"chmod 600 /tmp/writer\nsetuid 0\nsetgid 0\necho ID-DONE\n",
     ]
     fs_batches = [
@@ -119,6 +119,12 @@ def main(argv):
     exec_seen = False
     lazy_sent = False
     lazy_seen = False
+    shm_sent = False
+    shm_seen = False
+    filemap_sent = False
+    filemap_seen = False
+    prio_sent = False
+    prio_seen = False
     aslr_sent = False
     aslr_first = None
     aslr_seen = False
@@ -153,7 +159,7 @@ def main(argv):
                 buffer.clear()
 
             if (help_sent and not help_seen and
-                    b"commands: help, echo, cat, ls, stat, clear, acpi, uptime, date, tz, sleep, ps, id, setuid, setgid, dmesg, loglevel, mkdir, rm, mv, chmod, chown, mount, umount, halt, shutdown, reboot" in buffer):
+                    b"commands: help, echo, cat, ls, stat, clear, acpi, uptime, date, tz, sleep, ps, prio, id, setuid, setgid, dmesg, loglevel, mkdir, rm, mv, chmod, chown, mount, umount, halt, shutdown, reboot" in buffer):
                 help_seen = True
 
             if (help_seen and not acpi_sent and
@@ -415,7 +421,31 @@ def main(argv):
             if lazy_sent and not lazy_seen and b"LAZY-DONE" in buffer:
                 lazy_seen = True
 
-            if lazy_seen and not aslr_sent and b"LAZY-DONE" in buffer:
+            if lazy_seen and not shm_sent and b"LAZY-DONE" in buffer:
+                send_line(client, b"hello shm\necho SHM-DONE\n")
+                shm_sent = True
+                buffer.clear()
+
+            if shm_sent and not shm_seen and b"SHM-DONE" in buffer:
+                shm_seen = True
+
+            if shm_seen and not filemap_sent and b"SHM-DONE" in buffer:
+                send_line(client, b"hello filemap\necho FILEMAP-DONE\n")
+                filemap_sent = True
+                buffer.clear()
+
+            if filemap_sent and not filemap_seen and b"FILEMAP-DONE" in buffer:
+                filemap_seen = True
+
+            if filemap_seen and not prio_sent and b"FILEMAP-DONE" in buffer:
+                send_line(client, b"hello prio\necho PRIO-DONE\n")
+                prio_sent = True
+                buffer.clear()
+
+            if prio_sent and not prio_seen and b"PRIO-DONE" in buffer:
+                prio_seen = True
+
+            if prio_seen and not aslr_sent and b"PRIO-DONE" in buffer:
                 send_line(client, b"hello aslr\necho ASLR-1\n")
                 aslr_sent = True
                 buffer.clear()

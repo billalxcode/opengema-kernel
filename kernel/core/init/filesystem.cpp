@@ -319,7 +319,7 @@ const char* ProcessStateName(process::ProcessState state) noexcept {
 Status FormatProcesses(char* buffer, std::size_t capacity,
                        std::size_t& length) noexcept {
   og::fmt::LineBuilder line(buffer, capacity);
-  line.Text("pid ppid uid gid state cpu_ms mem_kb limit_kb regions name\n");
+  line.Text("pid ppid uid gid state prio cpu_ms mem_kb limit_kb regions name\n");
   process::ProcessInfo info[process::kMaxProcesses];
   const uint32_t count =
     process::Snapshot(info, process::kMaxProcesses);
@@ -329,6 +329,7 @@ Status FormatProcesses(char* buffer, std::size_t capacity,
         .Dec(info[index].uid).Char(' ')
         .Dec(info[index].gid).Char(' ')
         .Text(ProcessStateName(info[index].state)).Char(' ')
+        .Dec(info[index].priority).Char(' ')
         .Dec(info[index].cpu_ms).Char(' ')
         .Dec(info[index].memory_bytes / 1024U).Char(' ')
         .Dec(info[index].memory_limit / 1024U).Char(' ')

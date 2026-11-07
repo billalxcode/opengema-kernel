@@ -2,6 +2,7 @@
 
 #include "og/fs/vfs.h"
 #include "og/mem/vmm.h"
+#include "og/sched/sched.h"
 
 namespace og::syscall {
 
@@ -67,6 +68,39 @@ Status DoSetGid(uint64_t gid, uint64_t& result) noexcept {
     return Status::kDenied;
   }
   const Status status = process::SetGid(*process, value);
+  if (IsErr(status)) {
+    return status;
+  }
+  result = 0;
+  return Status::kOk;
+}
+
+Status DoGetPriority(uint64_t& result) noexcept {
+  process::Process* process = CurrentProcess();
+  if (process == nullptr) {
+    return Status::kNotInit;
+  }
+  if (process->thread == nullptr) {
+    return Status::kNotInit;
+  }
+  result = sched::ThreadPriority(process->thread);
+  return Status::kOk;
+}
+
+Status DoSetPriority(uint64_t priority, uint64_t& result) noexcept {
+  process::Process* process = CurrentProcess();
+  if (process == nullptr) {
+    return Status::kNotInit;
+  }
+  if (priority > sched::kPriorityLowest || process->thread == nullptr) {
+    return Status::kInvalidArg;
+  }
+  const uint32_t value = static_cast<uint32_t>(priority);
+  const uint32_t current = sched::ThreadPriority(process->thread);
+  if (process->uid != 0U && value < current) {
+    return Status::kDenied;
+  }
+  const Status status = sched::ThreadSetPriority(process->thread, value);
   if (IsErr(status)) {
     return status;
   }

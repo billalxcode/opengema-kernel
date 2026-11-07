@@ -78,7 +78,8 @@ constexpr uint64_t kSyscallNumberRegister = 8;
       result = 0;
       break;
     case kSysMmap:
-      status = DoMmap(frame->x[0], frame->x[1], result);
+      status = DoMmap(frame->x[0], frame->x[1], frame->x[2], frame->x[3],
+                      result);
       break;
     case kSysMunmap:
       status = DoMunmap(frame->x[0], frame->x[1], result);
@@ -112,6 +113,12 @@ constexpr uint64_t kSyscallNumberRegister = 8;
       break;
     case kSysExec:
       status = DoExec(frame->x[0], frame->x[1], frame->x[2], frame, result);
+      break;
+    case kSysGetPriority:
+      status = DoGetPriority(result);
+      break;
+    case kSysSetPriority:
+      status = DoSetPriority(frame->x[0], result);
       break;
     case kSysChdir:
       status = DoChdir(frame->x[0], result);

@@ -98,6 +98,8 @@ Result<Thread*> CreateThread(const char* name, ThreadEntry entry, void* argument
   slot->stack_top = top;
   slot->state = ThreadState::kReady;
   slot->wake_ns = kNoWake;
+  slot->base_priority = kPriorityDefault;
+  slot->wait_ticks = 0;
   slot->entry = entry;
   slot->argument = argument;
   slot->next_ready = nullptr;

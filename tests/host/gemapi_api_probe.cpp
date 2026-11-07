@@ -84,6 +84,15 @@ bool setgid(u64 value) noexcept {
   return value == 6U;
 }
 
+bool priority(u64& value) noexcept {
+  value = 16U;
+  return true;
+}
+
+bool setpriority(u64 value) noexcept {
+  return value == 20U;
+}
+
 i64 wait(i64 pid, int* status) noexcept {
   if (pid == 0 || status == nullptr) {
     return -1;
@@ -112,6 +121,17 @@ void* mmap_executable(usize size) noexcept {
 
 void* mmap_lazy(usize size) noexcept {
   return size == 0U ? nullptr : reinterpret_cast<void*>(0x3000);
+}
+
+void* mmap_shared(usize size) noexcept {
+  return size == 0U ? nullptr : reinterpret_cast<void*>(0x4000);
+}
+
+void* mmap_file(i64 descriptor, u64 offset, usize size) noexcept {
+  if (descriptor < 0 || size == 0U || (offset % 4096U) != 0U) {
+    return nullptr;
+  }
+  return reinterpret_cast<void*>(0x5000);
 }
 
 bool munmap(void* address, usize size) noexcept {
@@ -214,6 +234,12 @@ int main() {
       gemapi::process::set_group_id(9U) != Status::denied) {
     return Fail("identity");
   }
+  const auto current_priority = gemapi::process::priority();
+  if (!current_priority || current_priority.value() != 16U ||
+      gemapi::process::set_priority(20U) != Status::ok ||
+      gemapi::process::set_priority(0U) != Status::denied) {
+    return Fail("process priority");
+  }
 
   int wait_status = 0;
   if (gemapi::process::wait(88U, wait_status) != Status::ok ||
@@ -240,6 +266,21 @@ int main() {
   }
   if (gemapi::memory::map_lazy(0U).status() != Status::invalid_argument) {
     return Fail("memory lazy map zero");
+  }
+  const auto shared = gemapi::memory::map_shared(16U);
+  if (!shared || shared.value() != reinterpret_cast<void*>(0x4000)) {
+    return Fail("memory shared map failure");
+  }
+  const auto filemap = gemapi::memory::map_file(3, 0U, 16U);
+  if (!filemap || filemap.value() != reinterpret_cast<void*>(0x5000)) {
+    return Fail("memory file map failure");
+  }
+  if (gemapi::memory::map_file(-1, 0U, 16U).status() !=
+        Status::invalid_argument ||
+      gemapi::memory::map_file(3, 0U, 0U).status() !=
+        Status::invalid_argument ||
+      gemapi::memory::map_file(3, 1U, 16U).status() != Status::no_memory) {
+    return Fail("memory file map invalid args");
   }
 
   if (gemapi::memory::unmap(mapped.value(), 16U) != Status::ok) {

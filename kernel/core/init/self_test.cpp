@@ -43,6 +43,8 @@ uint32_t g_ping_count = 0;
 uint32_t g_pong_count = 0;
 uint32_t g_ping_done = 0;
 uint32_t g_pong_done = 0;
+uint32_t g_priority_order[2]{};
+uint32_t g_priority_count = 0;
 
 struct AddressSpaceTestState {
   mem::AddressSpace* space;
@@ -53,6 +55,8 @@ struct AddressSpaceTestState {
 
 mem::AddressSpace g_as_a;
 mem::AddressSpace g_as_b;
+constexpr uint32_t kAsidStressCount = 255;
+mem::AddressSpace g_asid_spaces[kAsidStressCount];
 AddressSpaceTestState g_as_state_a{};
 AddressSpaceTestState g_as_state_b{};
 
@@ -109,6 +113,16 @@ void PongWorker(void* /*argument*/) noexcept {
     g_ping_sem.signal();
   }
   (void)__atomic_add_fetch(&g_pong_done, 1U, __ATOMIC_RELEASE);
+}
+
+void PriorityWorker(void* argument) noexcept {
+  const uint32_t id =
+    static_cast<uint32_t>(reinterpret_cast<uint64_t>(argument));
+  const uint32_t slot =
+    __atomic_fetch_add(&g_priority_count, 1U, __ATOMIC_ACQ_REL);
+  if (slot < 2U) {
+    g_priority_order[slot] = id;
+  }
 }
 
 void OnceHandler(void* /*argument*/) noexcept {
@@ -226,6 +240,40 @@ void RunSchedulerSelfTest() noexcept {
     }
   }
   Log(LogLevel::kInfo, "sched: round robin ok\n");
+
+  g_priority_count = 0;
+  g_priority_order[0] = 0;
+  g_priority_order[1] = 0;
+  const uint64_t priority_daif = arch::aarch64::IrqSave();
+  const Result<sched::Thread*> priority_low = sched::ThreadCreateOn(
+    "prio-low", &PriorityWorker,
+    reinterpret_cast<void*>(static_cast<uint64_t>(1U)), 0U);
+  const Result<sched::Thread*> priority_high = sched::ThreadCreateOn(
+    "prio-high", &PriorityWorker,
+    reinterpret_cast<void*>(static_cast<uint64_t>(2U)), 0U);
+  if (priority_low.is_err() || priority_high.is_err()) {
+    Panic("sched: priority create failed");
+  }
+  (void)sched::ThreadSetPriority(priority_low.value(), 10U);
+  (void)sched::ThreadSetPriority(priority_high.value(),
+                                 sched::kPriorityHighest);
+  arch::aarch64::IrqRestore(priority_daif);
+
+  waits = 0;
+  while (__atomic_load_n(&g_priority_count, __ATOMIC_ACQUIRE) < 2U &&
+         waits < 1000U) {
+    (void)sched::ThreadSleep(1);
+    ++waits;
+  }
+  if (__atomic_load_n(&g_priority_count, __ATOMIC_ACQUIRE) != 2U ||
+      g_priority_order[0] != 2U || g_priority_order[1] != 1U) {
+    Panic("sched: priority order failed");
+  }
+  if (!ReclaimThread(priority_low.value()) ||
+      !ReclaimThread(priority_high.value())) {
+    Panic("sched: priority reclaim failed");
+  }
+  Log(LogLevel::kInfo, "sched: priority ok\n");
 
   g_join_done = 0;
   const Result<sched::Thread*> joiner =
@@ -384,6 +432,33 @@ void RunSchedulerSelfTest() noexcept {
     Panic("sync: ping-pong reclaim failed");
   }
   Log(LogLevel::kInfo, "sched: ping-pong ok\n");
+}
+
+void RunAsidSelfTest() noexcept {
+  uint32_t allocated = 0;
+  for (; allocated < kAsidStressCount; ++allocated) {
+    const Status status = mem::AddressSpaceInit(g_asid_spaces[allocated]);
+    if (IsErr(status)) {
+      Panic("mem: asid allocation failed");
+    }
+  }
+
+  mem::AddressSpace overflow{};
+  if (mem::AddressSpaceInit(overflow) != Status::kNoMem) {
+    Panic("mem: asid exhaustion not detected");
+  }
+
+  for (uint32_t index = 0; index < allocated; ++index) {
+    (void)mem::AddressSpaceDestroy(g_asid_spaces[index]);
+  }
+
+  mem::AddressSpace reused{};
+  const Status status = mem::AddressSpaceInit(reused);
+  if (IsErr(status)) {
+    Panic("mem: asid reuse failed");
+  }
+  (void)mem::AddressSpaceDestroy(reused);
+  Log(LogLevel::kInfo, "mem: asid reuse ok\n");
 }
 
 void RunAddressSpaceSelfTest() noexcept {

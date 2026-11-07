@@ -12,6 +12,7 @@ void InitFilesystem() noexcept;
 
 void RunTimerSelfTest() noexcept;
 void RunSchedulerSelfTest() noexcept;
+void RunAsidSelfTest() noexcept;
 void RunAddressSpaceSelfTest() noexcept;
 void RunUserSelfTest() noexcept;
 

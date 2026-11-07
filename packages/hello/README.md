@@ -44,8 +44,14 @@ Manifest ada di `packages/system-root/applications/hello/manifest.txt`.
   melanjutkan setelah proses lama diganti.
 - `hello lazy` memetakan 8 MiB secara lazy, menulis halaman pertama dan
   terakhir, lalu memastikan `/proc/meminfo` mencatat `lazy_faults: 2`.
-- `hello errno` memeriksa pemetaan errno: path hilang menjadi `not found`,
-  pointer invalid menjadi `invalid argument`, dan map 40 MiB menjadi
-  `out of memory`.
+- `hello shm` memetakan satu halaman shared, lalu `fork`. Child menulis
+  `0x22` dan parent harus melihat nilai yang sama setelah `wait`.
+- `hello filemap` membuka `/system/config/version`, memetakan snapshot
+  private 4 KiB, memeriksa isi dan zero tail, lalu memastikan tulisan ke
+  mapping tidak mengubah berkas asli. Library ELF multi-page juga dipetakan
+  untuk memeriksa magic ELF dan unmap.
+- `hello prio` membaca prioritas awal 16, menurunkannya ke 20, menolak
+  nilai 40, lalu memastikan proses root bisa menaikkan prioritas dan proses
+  uid 1 tidak bisa.
 - `hello stackguard` merekursi melewati batas growth 64 KiB. Proses harus
   mati pada guard page, bukan mencetak `stack: guard missing`.

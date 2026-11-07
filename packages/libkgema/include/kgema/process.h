@@ -19,4 +19,8 @@ namespace kgema {
 [[nodiscard]] bool gid(u64& value) noexcept;
 [[nodiscard]] bool setgid(u64 value) noexcept;
 
+// Scheduling priority, 0 highest and 31 lowest.
+[[nodiscard]] bool priority(u64& value) noexcept;
+[[nodiscard]] bool setpriority(u64 value) noexcept;
+
 }  // namespace kgema

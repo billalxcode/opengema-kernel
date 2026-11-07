@@ -27,6 +27,7 @@ struct UserRegion {
   bool lazy;
   bool executable;
   bool writable;
+  bool shared;
 };
 
 struct AddressSpace {
@@ -87,7 +88,8 @@ struct PageAttributes {
 // Allocates and zeroes user accessible pages in the given address space.
 [[nodiscard]] Status VmmMapUser(AddressSpace& space, uint64_t virtual_address,
                                 uint64_t size, bool executable,
-                                bool writable = true) noexcept;
+                                bool writable = true,
+                                bool shared = false) noexcept;
 
 // Maps pages adjacent to an existing user region and extends that region.
 // Used by stack growth so growth does not consume another region slot.

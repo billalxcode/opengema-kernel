@@ -48,6 +48,8 @@ constexpr uint64_t kSysChown = 38;
 constexpr uint64_t kSysMprotect = 39;
 constexpr uint64_t kSysFork = 40;
 constexpr uint64_t kSysExec = 41;
+constexpr uint64_t kSysGetPriority = 42;
+constexpr uint64_t kSysSetPriority = 43;
 
 // Negative Linux errno values returned in x0 on failure.
 constexpr int64_t kErrPermission = -1;

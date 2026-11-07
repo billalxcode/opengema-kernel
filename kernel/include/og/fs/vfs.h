@@ -157,6 +157,14 @@ struct FileTable {
                                       uint32_t flags = 0) noexcept;
 [[nodiscard]] Status FsRead(FileTable& table, uint32_t descriptor,
                             std::span<uint8_t> buffer, uint64_t& out_read) noexcept;
+// Reads at an explicit offset without changing the descriptor offset. Used by
+// file-backed mmap to fill pages independently of the file position.
+[[nodiscard]] Status FsReadAt(FileTable& table, uint32_t descriptor,
+                              uint64_t offset, std::span<uint8_t> buffer,
+                              uint64_t& out_read) noexcept;
+// Validates a descriptor for file-backed mmap and reports the file size.
+[[nodiscard]] Status FsMmapSize(FileTable& table, uint32_t descriptor,
+                                uint64_t& size) noexcept;
 [[nodiscard]] Status FsWrite(FileTable& table, uint32_t descriptor,
                              std::span<const uint8_t> buffer,
                              uint64_t& out_written) noexcept;

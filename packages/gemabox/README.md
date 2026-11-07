@@ -37,13 +37,15 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
    seek, read, lalu cetak `write ok`.
 8. Mode `shell`: prompt `gemabox>`, baca input UART dan keyboard,
    jalankan `help`, `echo`, `cat`, `ls`, `clear`, `acpi`, `uptime`,
-   `sleep`, `ps`, `dmesg`, `loglevel`, `mkdir`, `rm`, `mv`, `mount`,
+   `sleep`, `ps`, `prio`, `dmesg`, `loglevel`, `mkdir`, `rm`, `mv`, `mount`,
    `umount`, `halt`, `shutdown`, dan `reboot`.
 9. Command di luar applet dicari di `/commands/<name>`, lalu
    `/applications/<name>/<name>`.
 10. `acpi` membaca ringkasan tabel dari `/proc/acpi`. `uptime` mencetak
     waktu sejak boot, `sleep` menunggu dalam milidetik, `ps`
-    menampilkan daftar proses dari `/proc/processes`, `dmesg`
+    menampilkan daftar proses dari `/proc/processes`, `prio`
+    menampilkan prioritas thread dan `prio <0..31>` mengubahnya
+    (non-root hanya boleh menurunkan prioritas), `dmesg`
     membaca ring log kernel dari `/proc/dmesg`, dan `loglevel`
     menampilkan atau mengubah filter level log. `date` mencetak waktu
     lokal dari RTC, dan `date <unix-seconds>` menyetel RTC. `tz`
@@ -84,14 +86,14 @@ child ok
 spawn ok
 write ok
 gemabox> help
-commands: help, echo, cat, ls, stat, clear, acpi, uptime, date, tz, sleep, ps, id, setuid, setgid, dmesg, loglevel, mkdir, rm, mv, chmod, chown, mount, umount, halt, shutdown, reboot
+commands: help, echo, cat, ls, stat, clear, acpi, uptime, date, tz, sleep, ps, prio, id, setuid, setgid, dmesg, loglevel, mkdir, rm, mv, chmod, chown, mount, umount, halt, shutdown, reboot
 gemabox> acpi
 ACPI revision 2
 gemabox> uptime
 uptime: 12345 ms
 gemabox> sleep 50
 gemabox> ps
-pid ppid uid gid state cpu_ms mem_kb limit_kb regions name
+pid ppid uid gid state prio cpu_ms mem_kb limit_kb regions name
 1 0 0 0 ready 0 12 32768 5 /system/boot/init
 ...
 gemabox> dmesg

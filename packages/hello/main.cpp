@@ -296,6 +296,154 @@ int main(int argc, char** argv, char** envp) {
     gemapi::io::write("\n");
     return 0;
   }
+  if (argc > 1 && same(argv[1], "shm")) {
+    const auto mapped = gemapi::memory::map_shared(4096U);
+    if (!mapped) {
+      gemapi::io::write("shm: map failed\n");
+      return 1;
+    }
+    volatile unsigned char* page =
+      static_cast<volatile unsigned char*>(mapped.value());
+    page[0] = 0x11U;
+    const auto child = gemapi::process::fork();
+    if (!child) {
+      gemapi::io::write("shm: fork failed\n");
+      return 1;
+    }
+    if (child.value() == 0U) {
+      page[0] = 0x22U;
+      gemapi::io::write("shm: child\n");
+      return 0;
+    }
+    int status = 0;
+    if (gemapi::process::wait(child.value(), status) != gemapi::Status::ok) {
+      gemapi::io::write("shm: wait failed\n");
+      return 1;
+    }
+    if (page[0] != 0x22U) {
+      gemapi::io::write("shm: parent mismatch\n");
+      return 1;
+    }
+    if (gemapi::memory::unmap(mapped.value(), 4096U) != gemapi::Status::ok) {
+      gemapi::io::write("shm: unmap failed\n");
+      return 1;
+    }
+    gemapi::io::write("shm: parent\n");
+    return 0;
+  }
+  if (argc > 1 && same(argv[1], "filemap")) {
+    constexpr gemapi::usize kMapSize = 4096U;
+    auto file = gemapi::fs::File::open("/system/config/version");
+    if (!file) {
+      gemapi::io::write("filemap: open failed\n");
+      return 1;
+    }
+    const auto mapped = gemapi::memory::map_file(
+      file.value().descriptor(), 0U, kMapSize);
+    if (!mapped) {
+      gemapi::io::write("filemap: map failed\n");
+      return 1;
+    }
+    char* bytes = static_cast<char*>(mapped.value());
+    if (bytes[0] != '0' || bytes[1] != '.' || bytes[2] != '1' ||
+        bytes[3] != '\n') {
+      gemapi::io::write("filemap: content mismatch\n");
+      return 1;
+    }
+    if (bytes[4] != '\0' || bytes[kMapSize - 1U] != '\0') {
+      gemapi::io::write("filemap: tail not zero\n");
+      return 1;
+    }
+    bytes[0] = '9';
+    if (gemapi::memory::unmap(mapped.value(), kMapSize) != gemapi::Status::ok) {
+      gemapi::io::write("filemap: unmap failed\n");
+      return 1;
+    }
+    auto again = gemapi::fs::File::open("/system/config/version");
+    if (!again) {
+      gemapi::io::write("filemap: reopen failed\n");
+      return 1;
+    }
+    char check = '\0';
+    const auto count = again.value().read(&check, 1U);
+    if (!count || count.value() != 1U || check != '0') {
+      gemapi::io::write("filemap: write leaked\n");
+      return 1;
+    }
+    auto library = gemapi::fs::File::open("/system/libraries/libgemapi.so.1");
+    if (!library) {
+      gemapi::io::write("filemap: library open failed\n");
+      return 1;
+    }
+    const auto info = gemapi::fs::stat("/system/libraries/libgemapi.so.1");
+    if (!info || info.value().size < 4096U) {
+      gemapi::io::write("filemap: library stat failed\n");
+      return 1;
+    }
+    const gemapi::usize library_size =
+      static_cast<gemapi::usize>(info.value().size);
+    const auto library_map =
+      gemapi::memory::map_file(library.value().descriptor(), 0U, library_size);
+    if (!library_map) {
+      gemapi::io::write("filemap: library map failed\n");
+      return 1;
+    }
+    const unsigned char* header =
+      static_cast<const unsigned char*>(library_map.value());
+    if (header[0] != 0x7FU || header[1] != 'E' || header[2] != 'L' ||
+        header[3] != 'F') {
+      gemapi::io::write("filemap: library header mismatch\n");
+      return 1;
+    }
+    if (gemapi::memory::unmap(library_map.value(), library_size) !=
+        gemapi::Status::ok) {
+      gemapi::io::write("filemap: library unmap failed\n");
+      return 1;
+    }
+    gemapi::io::write("filemap: ok\n");
+    return 0;
+  }
+  if (argc > 1 && same(argv[1], "prio")) {
+    const auto initial = gemapi::process::priority();
+    if (!initial || initial.value() != 16U) {
+      gemapi::io::write("prio: initial failed\n");
+      return 1;
+    }
+    if (gemapi::process::set_priority(20U) != gemapi::Status::ok) {
+      gemapi::io::write("prio: lower failed\n");
+      return 1;
+    }
+    const auto lowered = gemapi::process::priority();
+    if (!lowered || lowered.value() != 20U) {
+      gemapi::io::write("prio: readback failed\n");
+      return 1;
+    }
+    if (gemapi::process::set_priority(40U) !=
+        gemapi::Status::invalid_argument) {
+      gemapi::io::write("prio: limit failed\n");
+      return 1;
+    }
+    const auto user = gemapi::process::user_id();
+    if (!user) {
+      gemapi::io::write("prio: uid failed\n");
+      return 1;
+    }
+    const gemapi::Status raised = gemapi::process::set_priority(0U);
+    if (user.value() == 0U) {
+      if (raised != gemapi::Status::ok ||
+          gemapi::process::set_user_id(1U) != gemapi::Status::ok ||
+          gemapi::process::set_priority(20U) != gemapi::Status::ok ||
+          gemapi::process::set_priority(0U) != gemapi::Status::denied) {
+        gemapi::io::write("prio: privileged path failed\n");
+        return 1;
+      }
+    } else if (raised != gemapi::Status::denied) {
+      gemapi::io::write("prio: unprivileged raise accepted\n");
+      return 1;
+    }
+    gemapi::io::write("prio: ok\n");
+    return 0;
+  }
   if (argc > 1 && same(argv[1], "lazy")) {
     constexpr gemapi::usize kLazySize = 8U * 1024U * 1024U;
     const auto mapped = gemapi::memory::map_lazy(kLazySize);

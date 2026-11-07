@@ -48,6 +48,8 @@ constexpr i64 kChown = 38;
 constexpr i64 kMprotect = 39;
 constexpr i64 kFork = 40;
 constexpr i64 kExec = 41;
+constexpr i64 kGetPriority = 42;
+constexpr i64 kSetPriority = 43;
 
 // Negative Linux errno values returned by the kernel in x0.
 constexpr i64 kErrPermission = -1;
@@ -65,6 +67,10 @@ constexpr i64 kErrTimeout = -110;
 
 // Number in x8, arguments in x0..x2, result in x0.
 [[nodiscard]] i64 invoke3(i64 number, i64 arg0, i64 arg1, i64 arg2) noexcept;
+
+// Number in x8, arguments in x0..x3, result in x0.
+[[nodiscard]] i64 invoke4(i64 number, i64 arg0, i64 arg1, i64 arg2,
+                          i64 arg3) noexcept;
 
 // Last negative errno observed by invoke3, or zero after success.
 [[nodiscard]] i64 last_error() noexcept;

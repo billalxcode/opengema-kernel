@@ -906,6 +906,9 @@ uint32_t Snapshot(ProcessInfo* out, uint32_t capacity) noexcept {
     out[count].uid = process.uid;
     out[count].gid = process.gid;
     out[count].state = process.state;
+    out[count].priority =
+      process.thread == nullptr ? 0U
+                               : sched::ThreadPriority(process.thread);
     out[count].cpu_ms =
       process.thread == nullptr ? 0U : process.thread->cpu_ticks;
     out[count].memory_bytes = process.space.user_bytes;

@@ -2,12 +2,24 @@
 
 namespace og::sched::detail {
 
+namespace {
+
+[[nodiscard]] uint32_t EffectivePriority(const Thread& thread) noexcept {
+  if (thread.wait_ticks >= thread.base_priority) {
+    return kPriorityHighest;
+  }
+  return thread.base_priority - thread.wait_ticks;
+}
+
+}  // namespace
+
 void EnqueueLocked(CpuScheduler& cpu, Thread* thread) noexcept {
   if (thread == nullptr || thread->in_ready_queue != 0U) {
     return;
   }
   thread->next_ready = nullptr;
   thread->in_ready_queue = 1;
+  thread->wait_ticks = 0;
   if (cpu.ready_tail == nullptr) {
     cpu.ready_head = thread;
     cpu.ready_tail = thread;
@@ -19,20 +31,39 @@ void EnqueueLocked(CpuScheduler& cpu, Thread* thread) noexcept {
 }
 
 Thread* DequeueLocked(CpuScheduler& cpu) noexcept {
-  Thread* thread = cpu.ready_head;
-  if (thread == nullptr) {
+  Thread* best = nullptr;
+  Thread* best_previous = nullptr;
+  Thread* previous = nullptr;
+  Thread* current = cpu.ready_head;
+  uint32_t best_priority = kPriorityLowest + 1U;
+  while (current != nullptr) {
+    const uint32_t priority = EffectivePriority(*current);
+    if (best == nullptr || priority < best_priority) {
+      best = current;
+      best_previous = previous;
+      best_priority = priority;
+    }
+    previous = current;
+    current = current->next_ready;
+  }
+  if (best == nullptr) {
     return nullptr;
   }
-  cpu.ready_head = thread->next_ready;
-  if (cpu.ready_head == nullptr) {
-    cpu.ready_tail = nullptr;
+
+  if (best_previous == nullptr) {
+    cpu.ready_head = best->next_ready;
+  } else {
+    best_previous->next_ready = best->next_ready;
   }
-  thread->next_ready = nullptr;
-  thread->in_ready_queue = 0;
+  if (cpu.ready_tail == best) {
+    cpu.ready_tail = best_previous;
+  }
+  best->next_ready = nullptr;
+  best->in_ready_queue = 0;
   if (cpu.ready_count > 0U) {
     --cpu.ready_count;
   }
-  return thread;
+  return best;
 }
 
 bool RemoveLocked(CpuScheduler& cpu, Thread* thread) noexcept {

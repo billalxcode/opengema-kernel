@@ -448,6 +448,7 @@ void kmain(BootInfo* info) noexcept {
   power::SetHandlers(&platform::Shutdown, &platform::Reboot);
   boot::RunSchedulerSelfTest();
   StartWatchdog();
+  boot::RunAsidSelfTest();
   boot::RunAddressSpaceSelfTest();
   boot::RunUserSelfTest();
 

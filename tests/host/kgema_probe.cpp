@@ -19,6 +19,7 @@ i64 g_last_number = 0;
 i64 g_last_arg0 = 0;
 i64 g_last_arg1 = 0;
 i64 g_last_arg2 = 0;
+i64 g_last_arg3 = 0;
 
 bool Same(const char* lhs, const char* rhs) {
   return lhs != nullptr && rhs != nullptr && std::strcmp(lhs, rhs) == 0;
@@ -69,6 +70,10 @@ i64 invoke3(i64 number, i64 arg0, i64 arg1, i64 arg2) noexcept {
       return 6;
     case kSetGid:
       return arg0 == 6 ? 0 : -1;
+    case kGetPriority:
+      return 16;
+    case kSetPriority:
+      return arg0 == 20 ? 0 : -1;
     case kChmod:
       return Same(reinterpret_cast<const char*>(arg0), "file") &&
                  arg1 == 0600
@@ -106,6 +111,19 @@ i64 invoke3(i64 number, i64 arg0, i64 arg1, i64 arg2) noexcept {
     default:
       return -1;
   }
+}
+
+i64 invoke4(i64 number, i64 arg0, i64 arg1, i64 arg2,
+            i64 arg3) noexcept {
+  g_last_number = number;
+  g_last_arg0 = arg0;
+  g_last_arg1 = arg1;
+  g_last_arg2 = arg2;
+  g_last_arg3 = arg3;
+  if (number == kMmap && arg1 == 8) {
+    return 0x3000;
+  }
+  return -1;
 }
 
 }  // namespace kgema::syscall
@@ -176,6 +194,11 @@ int main() {
       !kgema::setgid(6U) || kgema::setgid(9U)) {
     return Fail("identity");
   }
+  kgema::u64 priority = 0;
+  if (!kgema::priority(priority) || priority != 16U ||
+      !kgema::setpriority(20U) || kgema::setpriority(0U)) {
+    return Fail("priority");
+  }
 
   if (!kgema::chdir(path) || g_last_number != kgema::syscall::kChdir) {
     return Fail("chdir failed");
@@ -218,6 +241,16 @@ int main() {
   void* executable = kgema::mmap_executable(16U);
   if (executable != reinterpret_cast<void*>(0x2000)) {
     return Fail("mmap executable failed");
+  }
+  void* file_mapped = kgema::mmap_file(42, 0U, 16U);
+  if (file_mapped != reinterpret_cast<void*>(0x3000) ||
+      g_last_number != kgema::syscall::kMmap || g_last_arg1 != 8 ||
+      g_last_arg2 != 42 || g_last_arg3 != 0) {
+    return Fail("mmap file failed");
+  }
+  if (kgema::mmap_file(-1, 0U, 16U) != nullptr ||
+      kgema::mmap_file(42, 0U, 0U) != nullptr) {
+    return Fail("mmap file invalid args");
   }
   if (!kgema::mprotect(mapped, 16U, true, false)) {
     return Fail("mprotect failed");

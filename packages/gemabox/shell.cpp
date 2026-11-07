@@ -661,6 +661,31 @@ CommandResult RunTz(const char* args, gemapi::usize args_length) {
   return CommandResult::kContinue;
 }
 
+CommandResult RunPriority(const char* args, gemapi::usize args_length) {
+  if (args_length > 0U) {
+    gemapi::u64 value = 0;
+    if (!parse_u64(args, args_length, value)) {
+      gemapi::io::write("prio: invalid argument\n");
+      return CommandResult::kContinue;
+    }
+    if (gemapi::process::set_priority(value) != gemapi::Status::ok) {
+      gemapi::io::write("prio: failed\n");
+      return CommandResult::kContinue;
+    }
+  }
+  const auto current = gemapi::process::priority();
+  if (!current) {
+    gemapi::io::write("prio: unavailable\n");
+    return CommandResult::kContinue;
+  }
+  char text[32];
+  gemapi::usize cursor = append_text(text, sizeof(text), 0, "priority: ");
+  cursor = append_dec(text, sizeof(text), cursor, current.value());
+  cursor = append_text(text, sizeof(text), cursor, "\n");
+  gemapi::io::write(text, cursor);
+  return CommandResult::kContinue;
+}
+
 CommandResult RunPs(const char* /*args*/, gemapi::usize /*args_length*/) {
   cat_file("/proc/processes", "ps");
   return CommandResult::kContinue;
@@ -970,6 +995,7 @@ constexpr Command kCommands[] = {
   {"tz", &RunTz},
   {"sleep", &RunSleep},
   {"ps", &RunPs},
+  {"prio", &RunPriority},
   {"id", &RunId},
   {"setuid", &RunSetUid},
   {"setgid", &RunSetGid},

@@ -251,7 +251,12 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   root sampai ditutup, lalu node dibebaskan.
 - Test dmesg: `/proc/dmesg` dibaca lewat procfs dan command shell.
 - Test CPU accounting: `/proc/processes` menampilkan kolom `cpu_ms`, uid,
-  gid, dan jumlah region user; `/proc/stat` menampilkan heartbeat per CPU.
+  gid, jumlah region user, dan prioritas thread lewat kolom `prio`;
+  `/proc/stat` menampilkan heartbeat per CPU.
+- Test prioritas user: `hello prio` membaca prioritas default 16,
+  menurunkannya ke 20, menolak nilai di atas 31, dan memastikan proses
+  non-root ditolak saat menaikkan prioritas. Shell `prio` menampilkan
+  prioritas thread yang sama.
 - Test sync: condition variable wait/signal dan read/write lock dijalankan
   di self-test scheduler.
 - Test observability: `/proc/meminfo` menampilkan frame dan heap,
@@ -282,6 +287,10 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   SGI `kIpiIrq` ke CPU online lain. Handler IPI mem-flush TLB lokal.
   Shootdown bersifat non-blocking agar dua CPU dengan IRQ termask tidak
   saling menunggu.
+- Test ASID: self-test mengalokasikan 255 address space, memastikan space
+  ke-256 ditolak, menghancurkan semuanya, lalu mengalokasikan ulang. Bitmap
+  ASID mengembalikan slot saat `AddressSpaceDestroy`, jadi tidak ada
+  ekshausti permanen setelah 255 proses.
 - Test PAN: `-cpu max` menyalakan PAN (`hardening: pan enabled`) dan
   seluruh tes lulus; cortex-a72 melaporkan `pan unsupported`. Self-test
   address space memakai `VmmCopyIn`, bukan membaca VA user langsung.
@@ -300,6 +309,11 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   baru keluar.
 - Test lazy mmap: `hello lazy` memetakan 8 MiB tanpa frame, menyentuh dua
   halaman, lalu `/proc/meminfo` menunjukkan `lazy_faults: 2`.
+- Test shared mmap: `hello shm` berbagi satu halaman anonim dengan child
+  melewati `fork`; tulisan child terlihat oleh parent.
+- Test file-backed mmap: `hello filemap` memetakan snapshot private
+  `/system/config/version`, memeriksa isi dan zero tail, lalu memastikan
+  tulisan ke mapping tidak bocor ke berkas.
 - OOM killer minimal membunuh proses yang gagal `mmap` saat free frame di
   bawah reserve 4 MiB. Jalur ini belum dipicu oleh tes QEMU.
 - CI GitHub Actions menjalankan host test, sanitizer, clang-tidy, coverage,
@@ -364,7 +378,7 @@ Verifikasi branch `dev`:
   `arch-check` dan `gsl-check` OK.
 - `./scripts/test-tidy.sh`: 118 file C++ OK dengan clang-tidy.
 - Sanitizer host test dengan ASan+UBSan: seluruh probe OK.
-- `./scripts/test-coverage.sh`: host test inti 56,96 persen baris,
+- `./scripts/test-coverage.sh`: host test inti 55,41 persen baris,
   ambang 55 persen.
 - `hello mem`: map 8 MiB lalu unmap berhasil, map 40 MiB ditolak limit
   32 MiB, dan `/proc/processes` menampilkan `mem_kb` serta `limit_kb`.
@@ -374,6 +388,8 @@ Verifikasi branch `dev`:
   melewati 64 KiB dan mati pada guard page tanpa panic kernel.
 - TLB shootdown: `smp: ipi count: 1` dan `smp: tlb shootdown ok` muncul;
   QEMU SMP=4 lulus tanpa deadlock.
+- Reuse ASID: `mem: asid reuse ok` muncul setelah self-test mengisi dan
+  mengosongkan seluruh 255 slot ASID.
 - PAN: QEMU `-cpu max` mencetak `hardening: pan enabled` dan lulus
   ACPI/SMP=4; cortex-a72 mencetak `hardening: pan unsupported`.
 - Boot matrix: SMP=1/2/4 dengan 256M/512M, DTB/ACPI, dan CPU=max lulus.
@@ -381,6 +397,12 @@ Verifikasi branch `dev`:
 - Errno: `hello errno` mencetak `not found`, `invalid argument`, dan
   `out of memory`; host probe memetakan errno negatif ke `gemapi::Status`.
 - Thread join: `sched: join ok` muncul dan stack worker kembali ke PMM.
+- Prioritas scheduler: `sched: priority ok` muncul setelah worker prioritas
+  0 berjalan sebelum worker prioritas 10 meskipun dibuat belakangan.
+  `/proc/processes` menampilkan kolom `prio`.
+- Prioritas user: `prio: ok` dan `PRIO-DONE` muncul; `hello prio` menurunkan
+  prioritas ke 20, menolak 40, dan menolak kenaikan oleh uid 1. Shell
+  mencetak `priority: 16` sebelum perubahan.
 - Fork: `fork: child` dan `fork: parent` muncul; child menulis global COW
   tanpa mengubah nilai parent, dan kedua proses membaca FD hasil clone
   dari offset masing-masing.
@@ -388,6 +410,10 @@ Verifikasi branch `dev`:
   PID, FD, cwd, uid, dan gid dipertahankan.
 - Lazy mmap: `lazy: ok` dan `lazy_faults: 2` muncul setelah dua halaman
   disentuh; frame baru dialokasikan saat fault.
+- Shared mmap: `shm: child` lalu `shm: parent` membuktikan halaman anonim
+  yang sama tetap writable dan dibagi setelah `fork`.
+- File-backed mmap: `filemap: ok` muncul setelah snapshot private berisi
+  `0.1`, tail nol, dan tulisan ke mapping tidak mengubah berkas asli.
 - `.github/workflows/ci.yml`: build native Linux, host test, sanitizer,
   clang-tidy, coverage, SDK, QEMU DTB/ACPI, dan persistensi. Semua langkah
   lulus lokal; workflow belum dijalankan di GitHub.

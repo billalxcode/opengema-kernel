@@ -67,4 +67,18 @@ bool setgid(u64 value) noexcept {
          0;
 }
 
+bool priority(u64& value) noexcept {
+  const i64 result = syscall::invoke3(syscall::kGetPriority, 0, 0, 0);
+  if (result < 0) {
+    return false;
+  }
+  value = static_cast<u64>(result);
+  return true;
+}
+
+bool setpriority(u64 value) noexcept {
+  return syscall::invoke3(syscall::kSetPriority, static_cast<i64>(value), 0,
+                          0) == 0;
+}
+
 }  // namespace kgema

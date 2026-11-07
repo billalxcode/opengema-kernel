@@ -70,4 +70,17 @@ Status set_group_id(u64 id) noexcept {
                            : detail::LastError(Status::denied);
 }
 
+Result<u64> priority() noexcept {
+  u64 value = 0;
+  if (!kgema::priority(value)) {
+    return detail::LastError(Status::not_supported);
+  }
+  return value;
+}
+
+Status set_priority(u64 value) noexcept {
+  return kgema::setpriority(value) ? Status::ok
+                                   : detail::LastError(Status::denied);
+}
+
 }  // namespace gemapi::process

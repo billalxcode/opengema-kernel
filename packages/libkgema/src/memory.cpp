@@ -39,6 +39,30 @@ void* mmap_lazy(usize size) noexcept {
   return reinterpret_cast<void*>(result);
 }
 
+void* mmap_shared(usize size) noexcept {
+  if (size == 0) {
+    return nullptr;
+  }
+  const i64 result =
+    syscall::invoke3(syscall::kMmap, static_cast<i64>(size), 4, 0);
+  if (result <= 0) {
+    return nullptr;
+  }
+  return reinterpret_cast<void*>(result);
+}
+
+void* mmap_file(i64 descriptor, u64 offset, usize size) noexcept {
+  if (size == 0 || descriptor < 0) {
+    return nullptr;
+  }
+  const i64 result = syscall::invoke4(syscall::kMmap, static_cast<i64>(size), 8,
+                                      descriptor, static_cast<i64>(offset));
+  if (result <= 0) {
+    return nullptr;
+  }
+  return reinterpret_cast<void*>(result);
+}
+
 bool munmap(void* address, usize size) noexcept {
   if (address == nullptr || size == 0) {
     return false;

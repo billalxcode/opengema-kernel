@@ -167,6 +167,60 @@ Status FsRead(FileTable& table, uint32_t descriptor, std::span<uint8_t> buffer,
   return Status::kOk;
 }
 
+Status FsReadAt(FileTable& table, uint32_t descriptor, uint64_t offset,
+                std::span<uint8_t> buffer, uint64_t& out_read) noexcept {
+  OperationGuard guard;
+  out_read = 0;
+  if (!IsReady()) {
+    return Status::kNotInit;
+  }
+  if (descriptor >= kMaxFiles) {
+    return Status::kInvalidArg;
+  }
+  if (descriptor < kFirstFileDescriptor) {
+    return Status::kUnsupported;
+  }
+  if (!table.entries[descriptor].in_use) {
+    return Status::kNotFound;
+  }
+  if (buffer.empty()) {
+    return Status::kInvalidArg;
+  }
+  Node* node = table.entries[descriptor].node;
+  if (node == nullptr || node->ops == nullptr || node->ops->read == nullptr) {
+    return Status::kUnsupported;
+  }
+
+  return node->ops->read(node, offset, buffer, out_read);
+}
+
+Status FsMmapSize(FileTable& table, uint32_t descriptor,
+                  uint64_t& size) noexcept {
+  OperationGuard guard;
+  size = 0;
+  if (!IsReady()) {
+    return Status::kNotInit;
+  }
+  if (descriptor >= kMaxFiles) {
+    return Status::kInvalidArg;
+  }
+  if (descriptor < kFirstFileDescriptor) {
+    return Status::kUnsupported;
+  }
+  if (!table.entries[descriptor].in_use) {
+    return Status::kNotFound;
+  }
+  const Node* node = table.entries[descriptor].node;
+  if (node == nullptr) {
+    return Status::kNotFound;
+  }
+  if (node->type != NodeType::kFile) {
+    return Status::kUnsupported;
+  }
+  size = node->size;
+  return Status::kOk;
+}
+
 Status FsWrite(FileTable& table, uint32_t descriptor,
                std::span<const uint8_t> buffer, uint64_t& out_written) noexcept {
   OperationGuard guard;

@@ -16,13 +16,31 @@ constexpr uint64_t kMmapBase = kUserSpaceBase + 0x1000000ULL;
 constexpr uint64_t kMmapRandomRange = 16ULL * 1024U * 1024U;
 constexpr uint64_t kMmapRandomSlots = kMmapRandomRange / kPageSize;
 
-[[nodiscard]] Status CloneTable(uint64_t* source, uint64_t* destination,
-                               unsigned level) noexcept {
+[[nodiscard]] bool RegionIsShared(const AddressSpace& parent,
+                                  uint64_t address) noexcept {
+  for (uint32_t index = 0; index < parent.region_count; ++index) {
+    const UserRegion& region = parent.regions[index];
+    if (region.shared && address >= region.base &&
+        address < (region.base + region.size)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+[[nodiscard]] Status CloneTable(const AddressSpace& parent, uint64_t base,
+                                uint64_t* source, uint64_t* destination,
+                                unsigned level) noexcept {
+  const uint64_t span = level == 1U
+                          ? arch::aarch64::kBlockSize1G
+                          : (level == 2U ? arch::aarch64::kBlockSize2M
+                                         : arch::aarch64::kPageSize);
   for (uint64_t index = 0; index < detail::kTableEntries; ++index) {
     const uint64_t descriptor = source[index];
     if (!arch::aarch64::DescriptorValid(descriptor)) {
       continue;
     }
+    const uint64_t entry_base = base + (index * span);
     if (level < 3U) {
       if (!arch::aarch64::DescriptorIsTable(descriptor)) {
         return Status::kUnsupported;
@@ -37,6 +55,7 @@ constexpr uint64_t kMmapRandomSlots = kMmapRandomRange / kPageSize;
       arch::aarch64::CleanInvalidateDcacheRange(
         frame.value(), frame.value() + kPageSize);
       const Status status = CloneTable(
+        parent, entry_base,
         reinterpret_cast<uint64_t*>(
           arch::aarch64::DescriptorAddress(descriptor)),
         table, level + 1U);
@@ -52,12 +71,21 @@ constexpr uint64_t kMmapRandomSlots = kMmapRandomRange / kPageSize;
         ? arch::aarch64::MemoryKind::kDevice
         : arch::aarch64::MemoryKind::kNormal;
     const bool executable = (descriptor & arch::aarch64::kUxn) == 0U;
-    // Share every user page COW: even a read-only code page can become
-    // writable through mprotect later.
+    const bool writable =
+      (descriptor & (3ULL << arch::aarch64::kApShift)) ==
+      arch::aarch64::kApUserRw;
     const Status retained = PmmRetainPage(physical);
     if (IsErr(retained)) {
       return retained;
     }
+    if (RegionIsShared(parent, entry_base)) {
+      destination[index] = arch::aarch64::PageDescriptor(
+        physical, kind, executable, true, writable);
+      continue;
+    }
+
+    // Private pages stay COW, including read-only code that mprotect can
+    // make writable later.
     destination[index] = arch::aarch64::PageDescriptor(
       physical, kind, executable, true, false);
     destination[index] |= arch::aarch64::kPteCow;
@@ -88,6 +116,7 @@ Status AddressSpaceInit(AddressSpace& space) noexcept {
 
   const Result<uint64_t> root = PmmAllocPage();
   if (root.is_err()) {
+    detail::ReleaseAsid(static_cast<uint16_t>(asid));
     return root.status();
   }
   mem::Copy(reinterpret_cast<void*>(root.value()), kernel_root,
@@ -111,6 +140,7 @@ Status AddressSpaceDestroy(AddressSpace& space) noexcept {
   if (space.root == 0) {
     return Status::kNotInit;
   }
+  const uint16_t asid = space.asid;
 
   auto* level0 = reinterpret_cast<uint64_t*>(space.root);
   const uint64_t level1_descriptor =
@@ -150,6 +180,7 @@ Status AddressSpaceDestroy(AddressSpace& space) noexcept {
   }
 
   (void)PmmFreePage(space.root);
+  detail::ReleaseAsid(asid);
   mem::Zero(&space, sizeof(space));
   arch::aarch64::InvalidateTlbAllLocal();
   return Status::kOk;
@@ -191,6 +222,7 @@ Status VmmCloneAddressSpace(const AddressSpace& parent,
                                             frame.value() + kPageSize);
 
   status = CloneTable(
+    parent, kUserSpaceBase,
     reinterpret_cast<uint64_t*>(
       arch::aarch64::DescriptorAddress(parent_descriptor)),
     child_level1, 1U);

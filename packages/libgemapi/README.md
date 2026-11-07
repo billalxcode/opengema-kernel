@@ -14,9 +14,9 @@ header `kgema/`, nomor syscall, atau instruksi `svc`.
 | `gemapi/error.h` | `Status` dan `Result<T>` untuk semua operasi fallible |
 | `gemapi/io.h` | Console, `print`, dan `read_line` |
 | `gemapi/fs.h` | `File`, `open`, `read`, `write`, `seek`, `stat`, `chdir`, `list`, `chmod`, `mount`, `umount` |
-| `gemapi/memory.h` | `map`, `map_lazy`, dan `unmap` |
+| `gemapi/memory.h` | `map`, `map_lazy`, `map_shared`, `map_file`, dan `unmap` |
 | `gemapi/paths.h` | Path tetap GSL: `/system`, `/applications`, `/tmp`, dan lainnya |
-| `gemapi/process.h` | `id`, `spawn`, `fork`, `exec`, `wait`, `exit`, `user_id`, `group_id`, `set_user_id`, dan `set_group_id` |
+| `gemapi/process.h` | `id`, `spawn`, `fork`, `exec`, `wait`, `exit`, `user_id`, `group_id`, `set_user_id`, `set_group_id`, `priority`, dan `set_priority` |
 | `gemapi/system.h` | Versi API |
 | `gemapi/gemapi.h` | Umbrella header |
 

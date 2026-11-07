@@ -27,6 +27,28 @@ Result<void*> map_lazy(usize size) noexcept {
   return address;
 }
 
+Result<void*> map_shared(usize size) noexcept {
+  if (size == 0U) {
+    return Status::invalid_argument;
+  }
+  void* address = kgema::mmap_shared(size);
+  if (address == nullptr) {
+    return detail::LastError(Status::no_memory);
+  }
+  return address;
+}
+
+Result<void*> map_file(i64 descriptor, u64 offset, usize size) noexcept {
+  if (descriptor < 0 || size == 0U) {
+    return Status::invalid_argument;
+  }
+  void* address = kgema::mmap_file(descriptor, offset, size);
+  if (address == nullptr) {
+    return detail::LastError(Status::no_memory);
+  }
+  return address;
+}
+
 Status unmap(void* address, usize size) noexcept {
   if (address == nullptr || size == 0U) {
     return Status::invalid_argument;

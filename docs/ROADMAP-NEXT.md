@@ -16,9 +16,9 @@ Prioritas: P0 blocker, P1 penting, P2 menengah, P3 nanti.
 | Reklamasi | Stack, address space, FD, dan slot proses dibebaskan; frame kembali | PID reuse, reklamasi saat gagal di tengah jalan | Aman untuk dua proses, belum untuk beban besar | P0 |
 | SDK dan shell | API berkas/proses/waktu/error, argv, konstruktor C++, shell multi perintah | Packaging SDK, contoh program, dan template package | Belum ada pengalaman userland yang nyata | P1 |
 | Filesystem | FAT32 read-only, ramfs statis, mount internal | Tulis berkas, mkdir, unlink, rename, mount/umount, permission, sync | Data tidak bisa disimpan atau diubah | P1 |
-| Memori user | W^X user, stack growth 64 KiB, guard page, limit 32 MiB, ASLR stack/mmap/executable, fork COW, lazy mmap, OOM kill requester | File-backed mmap, ELF demand paging, OOM selektif | Demand paging baru untuk mmap anonymous | P1 |
-| Scheduler | Per-CPU, thread tidak migrasi, join dan reclaim, tanpa prioritas | Migrasi/work stealing, prioritas, futex, TLS | Beban tidak seimbang, primitif sinkronisasi kurang | P1 |
-| TLB dan SMP | ASID, flush lokal saat switch, IPI shootdown non-blocking | Ack sinkron, shootdown selektif per ASID, reuse ASID aman | Flush remote belum sinkron, tapi tidak deadlock | P1 |
+| Memori user | W^X user, stack growth 64 KiB, guard page, limit 32 MiB, ASLR stack/mmap/executable, fork COW, lazy mmap, shared mmap, file-backed private mmap, OOM kill requester | File-backed shared mmap, ELF demand paging, OOM selektif | Demand paging baru untuk mmap anonymous; file-backed mmap masih eager | P1 |
+| Scheduler | Per-CPU, prioritas dan aging, join dan reclaim, tanpa migrasi | Migrasi/work stealing, nice dari user, futex, TLS | Beban tidak seimbang, primitif sinkronisasi kurang | P1 |
+| TLB dan SMP | ASID bitmap dengan reuse, flush lokal saat switch, IPI shootdown non-blocking | Ack sinkron, shootdown selektif per ASID | Flush remote belum sinkron, tapi ASID tidak lagi habis | P1 |
 | Driver | UART, RTC, PCI, virtio-blk, virtio-gpu | virtio-net, input, MSI-X, virtio IRQ, multi device, DMA streaming | Belum ada jaringan atau input interaktif | P1 |
 | Platform | QEMU virt hardcoded, DTB/ACPI dasar, matriks 1/2/4 core 256M/512M | GTDT detail, ACPI memory map, discovery RAM/device, initrd, cmdline | Sulit pindah board atau boot ACPI penuh | P2 |
 | Daya dan waktu | RTC dibaca saat boot, shutdown/reboot ACPI dan PSCI | settime, timezone, shutdown dari service manager | Mesin bisa dimatikan dan di-reboot dari shell | P2 |
@@ -190,17 +190,22 @@ keyboard di jendela QEMU.
       read-only dengan bit COW, dan write fault menyalin ke frame privat.
 - [x] MEM-12 Stack growth dan guard page user. Stack tumbuh per halaman
       sampai 64 KiB; fault di luar batas mematikan proses.
-- [ ] MEM-13 File-backed mmap dan shared memory.
+- [~] MEM-13 Shared memory dan file-backed mmap. `mmap` anonim dengan flag
+      shared tetap writable dan berbagi frame setelah `fork`. File-backed
+      private memetakan snapshot eagerly pada offset page-aligned;
+      MAP_SHARED file dan demand paging file belum.
 - [x] MEM-14 W^X user: segmen executable dipetakan RX, data/stack dan
       mmap non-executable RW NX, mmap executable RX, serta syscall
       `mprotect` untuk mengubah permission tanpa W+X.
 - [~] MEM-15 Accounting per proses, limit 32 MiB, dan OOM kill requester
       saat free frame di bawah reserve. Accounting dan limit diuji lewat
       `hello mem`; jalur OOM kill belum diuji QEMU.
-- [~] MEM-16 TLB shootdown lintas core dan ASID reuse yang aman.
+- [~] MEM-16 TLB shootdown lintas core dan ASID reuse.
       Semua CPU mem-flush TLB lokal saat address space berganti. Perubahan
       permission dan unmap mengirim SGI flush ke CPU online secara
-      non-blocking. Ack sinkron dan reuse ASID belum.
+      non-blocking. ASID 1..255 dialokasikan lewat bitmap dan dikembalikan
+      saat address space dihancurkan; self-test 255 space lulus. Ack
+      sinkron belum.
 - [x] MEM-17 ASLR untuk stack, mmap, dan executable. Aplikasi dynamic
       dibangun sebagai PIE/ET_DYN, kernel memilih load bias acak, dan
       library dimuat di mmap acak. Build statis SDK tetap memakai image
@@ -214,7 +219,12 @@ demand paging lulus uji.
 ## 9. Fase 20 - Scheduler dan sinkronisasi lanjutan
 
 - [ ] SCH-10 Migrasi thread dan work stealing antar core.
-- [ ] SCH-11 Prioritas dan nice, plus aging agar tidak starvation.
+- [x] SCH-11 Prioritas dan aging. Prioritas numerik 0..31 dengan default
+      16, `ThreadSetPriority`, aging berbasis `wait_ticks`, dan pemilihan
+      run queue berdasarkan prioritas efektif. Syscall `getpriority` dan
+      `setpriority` tersedia lewat `gemapi::process`, dengan aturan proses
+      non-root hanya boleh menurunkan prioritas. Command shell `prio`
+      menampilkan atau mengubah prioritas.
 - [x] SCH-12 Thread join dan reklamasi stack. `ThreadJoin` menunggu thread
       selesai lalu membebaskan stack dan slotnya.
 - [x] SCH-13 Condition variable dan read/write lock, diuji lewat self-test
