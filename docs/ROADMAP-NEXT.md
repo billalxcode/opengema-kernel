@@ -23,7 +23,7 @@ Prioritas: P0 blocker, P1 penting, P2 menengah, P3 nanti.
 | Platform | QEMU virt hardcoded, DTB/ACPI dasar, matriks 1/2/4 core 256M/512M | GTDT detail, ACPI memory map, discovery RAM/device, initrd, cmdline | Sulit pindah board atau boot ACPI penuh | P2 |
 | Daya dan waktu | RTC dibaca saat boot, shutdown/reboot ACPI dan PSCI | settime, timezone, shutdown dari service manager | Mesin bisa dimatikan dan di-reboot dari shell | P2 |
 | Observability | Log serial, panic, procfs uptime/threads | dmesg ring, tracing, counter, watchdog, statistik memori/CPU | Debug produksi dan regresi sulit | P1 |
-| Test dan CI | Smoke QEMU, host test, sanitizer, coverage 58%, clang-tidy, fuzz, workflow CI, artifact image, firmware terkunci | Fuzz coverage-guided, coverage seluruh probe, artifact SDK | CI dasar lengkap, workflow belum run di GitHub | P1 |
+| Test dan CI | Smoke QEMU, host test, sanitizer, coverage 58%, clang-tidy, fuzz, workflow CI hijau, artifact image, firmware terkunci | Fuzz coverage-guided, coverage seluruh probe, artifact SDK | CI dasar lengkap dan hijau di GitHub | P1 |
 | Keamanan | W^X kernel/user, stack canary, PAN bila didukung, fuzz argumen | KASLR, PAC/BTI, fuzz coverage-guided | PAN default target belum ada, validasi user terpusat | P1 |
 | Dev experience | compile_commands sudah mencakup packages | SDK install/export, contoh program, template package | Program baru masih menyalin konfigurasi | P2 |
 | Jaringan | Tidak ada | Ethernet, ARP, IPv4, ICMP, UDP, socket | Tidak ada konektivitas | P2 |
@@ -296,16 +296,16 @@ bekerja dari shell.
       pointer invalid, dan `hello fuzz` menjalankan 512 panggilan dengan
       pointer/ukuran acak deterministik tanpa panic. Fuzz coverage-guided
       belum.
-- [~] CI-01 GitHub Actions: workflow untuk build native Linux, host test,
-      clang-tidy, SDK probe, QEMU smoke DTB/ACPI, dan persistensi. Semua
-      langkah lulus lokal; workflow belum dijalankan di GitHub.
-- [~] CI-02 Sanitizer host test dan coverage. ASan+UBSan lulus untuk
+- [x] CI-01 GitHub Actions: workflow untuk build native Linux, host test,
+      clang-tidy, SDK probe, QEMU smoke DTB/ACPI, dan persistensi. Hijau
+      pada run `42389553053` di branch `dev`.
+- [x] CI-02 Sanitizer host test dan coverage. ASan+UBSan lulus untuk
       seluruh host probe; coverage baris host test inti 58 persen dengan
-      ambang 55 persen. Workflow belum dijalankan di GitHub.
-- [~] CI-03 Artifact image dan firmware versi terkunci. Workflow mengunggah
+      ambang 55 persen. Hijau di CI.
+- [x] CI-03 Artifact image dan firmware versi terkunci. Workflow mengunggah
       `esp.img`, `BOOTAA64.EFI`, dan `gema-system.img`. Firmware dipin ke
       Debian `qemu-efi-aarch64` 2022.11-6+deb12u2 dengan verifikasi SHA256.
-      Workflow belum dijalankan di GitHub.
+      Hijau di CI.
 
 **Selesai bila:** CI hijau pada setiap push, fuzz syscall tidak memicu
 panic, dan hardening user aktif.

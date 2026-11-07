@@ -437,8 +437,8 @@ Verifikasi branch `dev`:
 - File-backed mmap: `filemap: ok` muncul setelah snapshot private berisi
   `0.1`, tail nol, dan tulisan ke mapping tidak mengubah berkas asli.
 - `.github/workflows/ci.yml`: build native Linux, host test, sanitizer,
-  clang-tidy, coverage, SDK, QEMU DTB/ACPI, dan persistensi. Semua langkah
-  lulus lokal; workflow belum dijalankan di GitHub.
+  clang-tidy, coverage, SDK, QEMU DTB/ACPI, dan persistensi. Hijau pada run
+  `42389553053` di branch `dev`.
 - `./scripts/get-firmware.sh`: firmware 2022.11-6+deb12u2 terverifikasi
   SHA256; artifact `boot-image` berisi loader dan image sistem.
 - `./scripts/test-host.sh`: host tests, ramfs, procfs, devfs, HID, ACPI, FAT32,
