@@ -45,6 +45,8 @@ uint32_t g_ping_done = 0;
 uint32_t g_pong_done = 0;
 uint32_t g_priority_order[2]{};
 uint32_t g_priority_count = 0;
+uint32_t g_steal_done = 0;
+uint64_t g_steal_cpu_mask = 0;
 
 struct AddressSpaceTestState {
   mem::AddressSpace* space;
@@ -123,6 +125,17 @@ void PriorityWorker(void* argument) noexcept {
   if (slot < 2U) {
     g_priority_order[slot] = id;
   }
+}
+
+void StealWorker(void* /*argument*/) noexcept {
+  (void)__atomic_or_fetch(&g_steal_cpu_mask,
+                          1ULL << smp::CurrentIndex(), __ATOMIC_RELAXED);
+  const uint64_t frequency = arch::aarch64::ReadCntfrqEl0();
+  const uint64_t start = arch::aarch64::ReadCntpctEl0();
+  const uint64_t slice = frequency / 200U;  // 5 ms keeps the queue populated.
+  while ((arch::aarch64::ReadCntpctEl0() - start) < slice) {
+  }
+  (void)__atomic_add_fetch(&g_steal_done, 1U, __ATOMIC_RELEASE);
 }
 
 void OnceHandler(void* /*argument*/) noexcept {
@@ -267,6 +280,10 @@ void RunSchedulerSelfTest() noexcept {
   }
   if (__atomic_load_n(&g_priority_count, __ATOMIC_ACQUIRE) != 2U ||
       g_priority_order[0] != 2U || g_priority_order[1] != 1U) {
+    LogDec(LogLevel::kError, "sched: priority count",
+           __atomic_load_n(&g_priority_count, __ATOMIC_ACQUIRE));
+    LogDec(LogLevel::kError, "sched: priority first", g_priority_order[0]);
+    LogDec(LogLevel::kError, "sched: priority second", g_priority_order[1]);
     Panic("sched: priority order failed");
   }
   if (!ReclaimThread(priority_low.value()) ||
@@ -274,6 +291,45 @@ void RunSchedulerSelfTest() noexcept {
     Panic("sched: priority reclaim failed");
   }
   Log(LogLevel::kInfo, "sched: priority ok\n");
+
+  if (online > 1U) {
+    constexpr uint32_t kStealWorkers = 4;
+    sched::Thread* steal_workers[kStealWorkers]{};
+    g_steal_done = 0;
+    g_steal_cpu_mask = 0;
+    const uint64_t steal_daif = arch::aarch64::IrqSave();
+    for (uint32_t index = 0; index < kStealWorkers; ++index) {
+      const Result<sched::Thread*> worker =
+        sched::ThreadCreateOn("steal", &StealWorker, nullptr, 0U, true);
+      if (worker.is_err()) {
+        Panic("sched: steal create failed");
+      }
+      steal_workers[index] = worker.value();
+    }
+    arch::aarch64::IrqRestore(steal_daif);
+
+    waits = 0;
+    while (__atomic_load_n(&g_steal_done, __ATOMIC_ACQUIRE) < kStealWorkers &&
+           waits < 2000U) {
+      (void)sched::ThreadSleep(1);
+      ++waits;
+    }
+    if (__atomic_load_n(&g_steal_done, __ATOMIC_ACQUIRE) != kStealWorkers) {
+      Panic("sched: steal workers did not finish");
+    }
+    const uint64_t steal_mask =
+      __atomic_load_n(&g_steal_cpu_mask, __ATOMIC_ACQUIRE);
+    if ((steal_mask & ~1ULL) == 0U) {
+      LogDec(LogLevel::kError, "sched: steal mask", steal_mask);
+      Panic("sched: steal did not migrate");
+    }
+    for (uint32_t index = 0; index < kStealWorkers; ++index) {
+      if (!ReclaimThread(steal_workers[index])) {
+        Panic("sched: steal reclaim failed");
+      }
+    }
+    Log(LogLevel::kInfo, "sched: steal ok\n");
+  }
 
   g_join_done = 0;
   const Result<sched::Thread*> joiner =

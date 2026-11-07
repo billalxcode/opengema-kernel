@@ -26,6 +26,8 @@ Manifest ada di `packages/system-root/applications/hello/manifest.txt`.
 - `hello badptr` membuka path dengan pointer `1` untuk menguji penolakan
   pointer invalid.
 - `hello wx` menulis ke halaman code untuk memastikan W^X menolak.
+- `hello nx` menyalin instruksi `ret` ke halaman data RW NX lalu
+  memanggilnya; proses harus mati dan shell tetap berjalan.
 - `hello fuzz` menjalankan 512 panggilan filesystem, proses, I/O, dan memori
   dengan pointer serta ukuran acak deterministik. Program harus hidup sampai
   mencetak `FUZZ-DONE`.
@@ -46,6 +48,9 @@ Manifest ada di `packages/system-root/applications/hello/manifest.txt`.
   terakhir, lalu memastikan `/proc/meminfo` mencatat `lazy_faults: 2`.
 - `hello shm` memetakan satu halaman shared, lalu `fork`. Child menulis
   `0x22` dan parent harus melihat nilai yang sama setelah `wait`.
+- `hello futex` memakai shared page, child menunggu `futex_wait` pada nilai
+  0, lalu parent mengubah nilai menjadi 1 dan `futex_wake`. Parent harus
+  membangunkan tepat satu waiter dan child mencetak `futex: child woke`.
 - `hello filemap` membuka `/system/config/version`, memetakan snapshot
   private 4 KiB, memeriksa isi dan zero tail, lalu memastikan tulisan ke
   mapping tidak mengubah berkas asli. Library ELF multi-page juga dipetakan

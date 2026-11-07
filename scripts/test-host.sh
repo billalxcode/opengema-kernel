@@ -84,14 +84,16 @@ build_probe gemapi_fs_probe \
 build_probe kgema_probe -I packages/libkgema/include \
   tests/host/kgema_probe.cpp \
   packages/libkgema/src/file.cpp packages/libkgema/src/io.cpp \
-  packages/libkgema/src/process.cpp packages/libkgema/src/memory.cpp
+  packages/libkgema/src/process.cpp packages/libkgema/src/memory.cpp \
+  packages/libkgema/src/sync.cpp
 "$BUILD_DIR/kgema_probe"
 
 build_probe gemapi_api_probe \
   -I packages/libgemapi/include -I packages/libkgema/include \
   tests/host/gemapi_api_probe.cpp \
   packages/libgemapi/src/io.cpp packages/libgemapi/src/process.cpp \
-  packages/libgemapi/src/memory.cpp packages/libgemapi/src/error.cpp
+  packages/libgemapi/src/memory.cpp packages/libgemapi/src/error.cpp \
+  packages/libgemapi/src/sync.cpp
 "$BUILD_DIR/gemapi_api_probe"
 
 echo "== gslfs image test =="

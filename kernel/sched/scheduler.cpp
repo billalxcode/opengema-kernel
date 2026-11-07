@@ -23,6 +23,7 @@ using detail::EnqueueLocked;
 using detail::kMaxCpus;
 using detail::PickHomeLocked;
 using detail::RemoveLocked;
+using detail::StealLocked;
 
 constexpr uint64_t kPageSize = 4096;
 constexpr uint32_t kAnyCpu = 0xFFFFFFFFU;
@@ -65,6 +66,14 @@ void Schedule() noexcept {
   Thread* next = DequeueLocked(cpu);
   while (next != nullptr && next->state != ThreadState::kReady) {
     next = DequeueLocked(cpu);
+  }
+
+  if (next == nullptr && previous == cpu.idle) {
+    (void)StealLocked(index);
+    next = DequeueLocked(cpu);
+    while (next != nullptr && next->state != ThreadState::kReady) {
+      next = DequeueLocked(cpu);
+    }
   }
 
   if (next == nullptr) {
@@ -187,7 +196,8 @@ Status SchedulerInit() noexcept {
   g_cpu[0].initialized = 1;
 
   const Result<Thread*> idle =
-    CreateThread("idle", &IdleEntry, nullptr, false, 0, true, nullptr, nullptr);
+    CreateThread("idle", &IdleEntry, nullptr, false, 0, true, nullptr, nullptr,
+                 false);
   if (idle.is_err()) {
     return idle.status();
   }
@@ -214,7 +224,8 @@ Status SchedulerInitCpu() noexcept {
   g_lock.unlock();
 
   const Result<Thread*> idle =
-    CreateThread("idle", &IdleEntry, nullptr, false, index, false, nullptr, nullptr);
+    CreateThread("idle", &IdleEntry, nullptr, false, index, false, nullptr,
+                 nullptr, false);
   if (idle.is_err()) {
     return idle.status();
   }
@@ -238,7 +249,7 @@ Result<Thread*> ThreadCreate(const char* name, ThreadEntry entry,
     return Result<Thread*>::Err(Status::kNotInit);
   }
   return detail::CreateThread(name, entry, argument, true, kAnyCpu, true,
-                              nullptr, nullptr);
+                              nullptr, nullptr, true);
 }
 
 Result<Thread*> ThreadCreateIn(const char* name, ThreadEntry entry, void* argument,
@@ -247,11 +258,12 @@ Result<Thread*> ThreadCreateIn(const char* name, ThreadEntry entry, void* argume
     return Result<Thread*>::Err(Status::kNotInit);
   }
   return detail::CreateThread(name, entry, argument, true, kAnyCpu, true, space,
-                              process);
+                              process, true);
 }
 
 Result<Thread*> ThreadCreateOn(const char* name, ThreadEntry entry,
-                               void* argument, uint32_t cpu) noexcept {
+                               void* argument, uint32_t cpu,
+                               bool migratable) noexcept {
   if (!g_initialized) {
     return Result<Thread*>::Err(Status::kNotInit);
   }
@@ -259,7 +271,7 @@ Result<Thread*> ThreadCreateOn(const char* name, ThreadEntry entry,
     return Result<Thread*>::Err(Status::kInvalidArg);
   }
   return detail::CreateThread(name, entry, argument, true, cpu, true, nullptr,
-                              nullptr);
+                              nullptr, migratable);
 }
 
 void SchedulerStart() noexcept {

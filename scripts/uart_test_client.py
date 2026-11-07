@@ -78,10 +78,12 @@ def main(argv):
     fs_output = bytearray()
     identity_sent = False
     identity_seen = False
+    prio_cmd_sent = False
+    prio_cmd_seen = False
     identity_batch = 0
     identity_output = bytearray()
     identity_batches = [
-        b"chown 1 1 /tmp/hello\nstat /tmp/hello\nsetuid 1\nsetgid 1\nid\nprio\n",
+        b"chown 1 1 /tmp/hello\nstat /tmp/hello\nsetuid 1\nsetgid 1\nid\n",
         b"chmod 600 /tmp/writer\nsetuid 0\nsetgid 0\necho ID-DONE\n",
     ]
     fs_batches = [
@@ -105,6 +107,8 @@ def main(argv):
     fault_seen = False
     wx_sent = False
     wx_seen = False
+    nx_sent = False
+    nx_seen = False
     badptr_sent = False
     badptr_seen = False
     fuzz_sent = False
@@ -121,6 +125,8 @@ def main(argv):
     lazy_seen = False
     shm_sent = False
     shm_seen = False
+    futex_sent = False
+    futex_seen = False
     filemap_sent = False
     filemap_seen = False
     prio_sent = False
@@ -230,12 +236,12 @@ def main(argv):
             if (date_seen and not tzsave_sent and
                     time.time() - last_data > 0.5 and
                     b"gemabox> " in buffer):
-                send_line(client, b"tz 420\ntz save\ncat /volumes/boot/gsl.tz\ntz 0\n")
+                send_line(client, b"tz 420\ntz save\ncat /volumes/boot/gsl.tz\ntz 0\necho TZSAVE-DONE\n")
                 tzsave_sent = True
                 buffer.clear()
 
             if (tzsave_sent and not tzsave_seen and
-                    b"tz: saved" in buffer):
+                    b"tz: saved" in buffer and b"TZSAVE-DONE" in buffer):
                 tzsave_seen = True
 
             if (tzsave_seen and not sysrq_sent and
@@ -314,7 +320,18 @@ def main(argv):
                     return 1
                 identity_seen = True
 
-            if (identity_seen and not clear_sent and
+            if (identity_seen and not prio_cmd_sent and
+                    time.time() - last_data > 0.5 and
+                    b"gemabox> " in buffer):
+                send_line(client, b"prio\necho PRIO-CMD-DONE\n")
+                prio_cmd_sent = True
+                buffer.clear()
+
+            if prio_cmd_sent and not prio_cmd_seen and \
+                    b"PRIO-CMD-DONE" in buffer:
+                prio_cmd_seen = True
+
+            if (prio_cmd_seen and not clear_sent and
                     time.time() - last_data > 0.5 and
                     b"gemabox> " in buffer):
                 send_line(client, b"clear\necho CLEAR-DONE\n")
@@ -365,7 +382,15 @@ def main(argv):
             if wx_sent and not wx_seen and b"WX-DONE" in buffer:
                 wx_seen = True
 
-            if wx_seen and not badptr_sent and b"WX-DONE" in buffer:
+            if wx_seen and not nx_sent and b"WX-DONE" in buffer:
+                send_line(client, b"hello nx\necho NX-DONE\n")
+                nx_sent = True
+                buffer.clear()
+
+            if nx_sent and not nx_seen and b"NX-DONE" in buffer:
+                nx_seen = True
+
+            if nx_seen and not badptr_sent and b"NX-DONE" in buffer:
                 send_line(client, b"hello badptr\necho BADPTR-DONE\n")
                 badptr_sent = True
                 buffer.clear()
@@ -429,7 +454,15 @@ def main(argv):
             if shm_sent and not shm_seen and b"SHM-DONE" in buffer:
                 shm_seen = True
 
-            if shm_seen and not filemap_sent and b"SHM-DONE" in buffer:
+            if shm_seen and not futex_sent and b"SHM-DONE" in buffer:
+                send_line(client, b"hello futex\necho FUTEX-DONE\n")
+                futex_sent = True
+                buffer.clear()
+
+            if futex_sent and not futex_seen and b"FUTEX-DONE" in buffer:
+                futex_seen = True
+
+            if futex_seen and not filemap_sent and b"FUTEX-DONE" in buffer:
                 send_line(client, b"hello filemap\necho FILEMAP-DONE\n")
                 filemap_sent = True
                 buffer.clear()

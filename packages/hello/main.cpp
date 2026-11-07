@@ -2,6 +2,8 @@
 #include "gemapi/io.h"
 #include "gemapi/memory.h"
 #include "gemapi/process.h"
+#include "gemapi/sync.h"
+#include "gemapi/time.h"
 
 namespace {
 
@@ -237,6 +239,23 @@ int main(int argc, char** argv, char** envp) {
     gemapi::io::write("code write allowed\n");
     return 0;
   }
+  if (argc > 1 && same(argv[1], "nx")) {
+    const auto mapped = gemapi::memory::map(4096U);
+    if (!mapped) {
+      gemapi::io::write("nx: map failed\n");
+      return 1;
+    }
+    unsigned char* page = static_cast<unsigned char*>(mapped.value());
+    page[0] = 0xC0U;
+    page[1] = 0x03U;
+    page[2] = 0x5FU;
+    page[3] = 0xD6U;
+    using Entry = void (*)();
+    const Entry entry = reinterpret_cast<Entry>(page);
+    entry();
+    gemapi::io::write("nx: data executed\n");
+    return 1;
+  }
   if (argc > 1 && same(argv[1], "badptr")) {
     const auto file =
       gemapi::fs::File::open(reinterpret_cast<const char*>(1));
@@ -329,6 +348,62 @@ int main(int argc, char** argv, char** envp) {
       return 1;
     }
     gemapi::io::write("shm: parent\n");
+    return 0;
+  }
+  if (argc > 1 && same(argv[1], "futex")) {
+    const auto mapped = gemapi::memory::map_shared(4096U);
+    if (!mapped) {
+      gemapi::io::write("futex: map failed\n");
+      return 1;
+    }
+    int* value = static_cast<int*>(mapped.value());
+    int* ready = value + 1;
+    *value = 0;
+    *ready = 0;
+    const auto child = gemapi::process::fork();
+    if (!child) {
+      gemapi::io::write("futex: fork failed\n");
+      return 1;
+    }
+    if (child.value() == 0U) {
+      *ready = 1;
+      while (*value == 0) {
+        if (gemapi::sync::wait(value, 0) != gemapi::Status::ok) {
+          gemapi::io::write("futex: child wait failed\n");
+          return 1;
+        }
+      }
+      gemapi::io::write("futex: child woke\n");
+      return 0;
+    }
+
+    gemapi::u64 waits = 0;
+    while (*ready == 0 && waits < 1000U) {
+      (void)gemapi::time::sleep_ms(1U);
+      ++waits;
+    }
+    if (*ready == 0) {
+      gemapi::io::write("futex: child not ready\n");
+      return 1;
+    }
+    (void)gemapi::time::sleep_ms(50U);
+    *value = 1;
+    const auto woken = gemapi::sync::wake(value, 1U);
+    if (!woken || woken.value() != 1U) {
+      gemapi::io::write("futex: wake failed\n");
+      return 1;
+    }
+    int status = 0;
+    if (gemapi::process::wait(child.value(), status) != gemapi::Status::ok ||
+        status != 0) {
+      gemapi::io::write("futex: child failed\n");
+      return 1;
+    }
+    if (gemapi::memory::unmap(mapped.value(), 4096U) != gemapi::Status::ok) {
+      gemapi::io::write("futex: unmap failed\n");
+      return 1;
+    }
+    gemapi::io::write("futex: parent\n");
     return 0;
   }
   if (argc > 1 && same(argv[1], "filemap")) {

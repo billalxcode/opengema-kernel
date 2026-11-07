@@ -257,6 +257,10 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   menurunkannya ke 20, menolak nilai di atas 31, dan memastikan proses
   non-root ditolak saat menaikkan prioritas. Shell `prio` menampilkan
   prioritas thread yang sama.
+- Test work stealing: empat worker migratable dibuat di CPU 0; CPU idle
+  lain mencuri minimal satu worker, dan self-test memastikan bit CPU selain
+  0 muncul di mask eksekusi. Worker `ThreadCreateOn` tanpa migratable tetap
+  pinned.
 - Test sync: condition variable wait/signal dan read/write lock dijalankan
   di self-test scheduler.
 - Test observability: `/proc/meminfo` menampilkan frame dan heap,
@@ -311,6 +315,9 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   halaman, lalu `/proc/meminfo` menunjukkan `lazy_faults: 2`.
 - Test shared mmap: `hello shm` berbagi satu halaman anonim dengan child
   melewati `fork`; tulisan child terlihat oleh parent.
+- Test futex: `hello futex` memakai shared page, child memblokir di
+  `futex_wait` sampai parent menulis nilai baru dan memanggil `futex_wake`.
+  Parent harus membangunkan tepat satu waiter.
 - Test file-backed mmap: `hello filemap` memetakan snapshot private
   `/system/config/version`, memeriksa isi dan zero tail, lalu memastikan
   tulisan ke mapping tidak bocor ke berkas.
@@ -336,6 +343,8 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   `kernel/events/workqueue.cpp` menjadi path ganda.
 - Test W^X user: `hello wx` mencoba menulis ke halaman code; proses fault,
   shell tetap berjalan, dan tidak ada `code write allowed`.
+- Test NX: `hello nx` memanggil instruksi dari halaman data RW NX; proses
+  fault, shell tetap berjalan, dan tidak ada `nx: data executed`.
 - Test mprotect dynamic linker: ld-gem memetakan shared object writable,
   menyalin segmen, lalu memanggil `mprotect` agar teks RX dan data RW NX;
   seluruh program dynamic tetap berjalan.
@@ -373,10 +382,10 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 
 Verifikasi branch `dev`:
 
-- `python3 scripts/compile-check.py`: 136 file OK, 0 dilewati.
+- `python3 scripts/compile-check.py`: 141 file OK, 0 dilewati.
 - `./scripts/build.sh` lewat podman: kernel build dan link OK,
   `arch-check` dan `gsl-check` OK.
-- `./scripts/test-tidy.sh`: 118 file C++ OK dengan clang-tidy.
+- `./scripts/test-tidy.sh`: 121 file C++ OK dengan clang-tidy.
 - Sanitizer host test dengan ASan+UBSan: seluruh probe OK.
 - `./scripts/test-coverage.sh`: host test inti 55,41 persen baris,
   ambang 55 persen.
@@ -386,6 +395,8 @@ Verifikasi branch `dev`:
   dynamic adalah ET_DYN dan kernel memilih load bias acak.
 - `hello stack`: growth melewati 16 KiB awal berhasil. `hello stackguard`
   melewati 64 KiB dan mati pada guard page tanpa panic kernel.
+- NX user: `hello nx` memanggil halaman data RW NX; kernel mencatat user
+  fault, proses mati, dan `NX-DONE` muncul tanpa `nx: data executed`.
 - TLB shootdown: `smp: ipi count: 1` dan `smp: tlb shootdown ok` muncul;
   QEMU SMP=4 lulus tanpa deadlock.
 - Reuse ASID: `mem: asid reuse ok` muncul setelah self-test mengisi dan
@@ -403,6 +414,8 @@ Verifikasi branch `dev`:
 - Prioritas user: `prio: ok` dan `PRIO-DONE` muncul; `hello prio` menurunkan
   prioritas ke 20, menolak 40, dan menolak kenaikan oleh uid 1. Shell
   mencetak `priority: 16` sebelum perubahan.
+- Work stealing: `sched: steal ok` muncul pada SMP=2/4 setelah worker dari
+  CPU 0 berjalan juga di CPU lain; SMP=1 melewati tes ini.
 - Fork: `fork: child` dan `fork: parent` muncul; child menulis global COW
   tanpa mengubah nilai parent, dan kedua proses membaca FD hasil clone
   dari offset masing-masing.
@@ -412,6 +425,8 @@ Verifikasi branch `dev`:
   disentuh; frame baru dialokasikan saat fault.
 - Shared mmap: `shm: child` lalu `shm: parent` membuktikan halaman anonim
   yang sama tetap writable dan dibagi setelah `fork`.
+- Futex: `futex: child woke` lalu `futex: parent` muncul; `futex_wake`
+  mengembalikan satu waiter dan child melanjutkan setelah nilai berubah.
 - File-backed mmap: `filemap: ok` muncul setelah snapshot private berisi
   `0.1`, tail nol, dan tulisan ke mapping tidak mengubah berkas asli.
 - `.github/workflows/ci.yml`: build native Linux, host test, sanitizer,

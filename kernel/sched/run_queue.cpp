@@ -94,6 +94,42 @@ bool RemoveLocked(CpuScheduler& cpu, Thread* thread) noexcept {
   return false;
 }
 
+Thread* StealLocked(uint32_t thief) noexcept {
+  if (thief >= kMaxCpus) {
+    return nullptr;
+  }
+  CpuScheduler* best_cpu = nullptr;
+  Thread* best_thread = nullptr;
+  uint32_t best_load = 1U;
+  for (uint32_t index = 0; index < kMaxCpus; ++index) {
+    if (index == thief) {
+      continue;
+    }
+    CpuScheduler& candidate = Cpu(index);
+    if (candidate.initialized == 0U || candidate.ready_count <= best_load) {
+      continue;
+    }
+    for (Thread* thread = candidate.ready_head; thread != nullptr;
+         thread = thread->next_ready) {
+      if (!thread->migratable || candidate.current == thread ||
+          thread->wait_ticks == 0U) {
+        continue;
+      }
+      best_cpu = &candidate;
+      best_thread = thread;
+      best_load = candidate.ready_count;
+      break;
+    }
+  }
+  if (best_cpu == nullptr || best_thread == nullptr) {
+    return nullptr;
+  }
+  (void)RemoveLocked(*best_cpu, best_thread);
+  best_thread->home_cpu = thief;
+  EnqueueLocked(Cpu(thief), best_thread);
+  return best_thread;
+}
+
 uint32_t PickHomeLocked() noexcept {
   uint32_t best = 0;
   uint64_t best_load = 0xFFFFFFFFFFFFFFFFULL;

@@ -39,7 +39,7 @@ Result<Thread*> CreateThread(const char* name, ThreadEntry entry, void* argument
                              bool enqueue, uint32_t requested_cpu,
                              bool allocate_stack,
                              mem::AddressSpace* address_space,
-                             void* process) noexcept {
+                             void* process, bool migratable) noexcept {
   if (name == nullptr || entry == nullptr) {
     return Result<Thread*>::Err(Status::kInvalidArg);
   }
@@ -100,6 +100,7 @@ Result<Thread*> CreateThread(const char* name, ThreadEntry entry, void* argument
   slot->wake_ns = kNoWake;
   slot->base_priority = kPriorityDefault;
   slot->wait_ticks = 0;
+  slot->migratable = migratable;
   slot->entry = entry;
   slot->argument = argument;
   slot->next_ready = nullptr;

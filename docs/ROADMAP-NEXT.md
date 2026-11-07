@@ -17,7 +17,7 @@ Prioritas: P0 blocker, P1 penting, P2 menengah, P3 nanti.
 | SDK dan shell | API berkas/proses/waktu/error, argv, konstruktor C++, shell multi perintah | Packaging SDK, contoh program, dan template package | Belum ada pengalaman userland yang nyata | P1 |
 | Filesystem | FAT32 read-only, ramfs statis, mount internal | Tulis berkas, mkdir, unlink, rename, mount/umount, permission, sync | Data tidak bisa disimpan atau diubah | P1 |
 | Memori user | W^X user, stack growth 64 KiB, guard page, limit 32 MiB, ASLR stack/mmap/executable, fork COW, lazy mmap, shared mmap, file-backed private mmap, OOM kill requester | File-backed shared mmap, ELF demand paging, OOM selektif | Demand paging baru untuk mmap anonymous; file-backed mmap masih eager | P1 |
-| Scheduler | Per-CPU, prioritas dan aging, join dan reclaim, tanpa migrasi | Migrasi/work stealing, nice dari user, futex, TLS | Beban tidak seimbang, primitif sinkronisasi kurang | P1 |
+| Scheduler | Per-CPU, prioritas dan aging, work stealing, futex, join dan reclaim | TLS | Beban lebih merata dan primitif sinkronisasi user tersedia | P1 |
 | TLB dan SMP | ASID bitmap dengan reuse, flush lokal saat switch, IPI shootdown non-blocking | Ack sinkron, shootdown selektif per ASID | Flush remote belum sinkron, tapi ASID tidak lagi habis | P1 |
 | Driver | UART, RTC, PCI, virtio-blk, virtio-gpu | virtio-net, input, MSI-X, virtio IRQ, multi device, DMA streaming | Belum ada jaringan atau input interaktif | P1 |
 | Platform | QEMU virt hardcoded, DTB/ACPI dasar, matriks 1/2/4 core 256M/512M | GTDT detail, ACPI memory map, discovery RAM/device, initrd, cmdline | Sulit pindah board atau boot ACPI penuh | P2 |
@@ -210,15 +210,22 @@ keyboard di jendela QEMU.
       dibangun sebagai PIE/ET_DYN, kernel memilih load bias acak, dan
       library dimuat di mmap acak. Build statis SDK tetap memakai image
       fixed-base.
-- [~] MEM-18 User fault dari EL0 mematikan proses atau ditangani sebagai
-      stack growth, bukan panic. COW dan uji fault lain belum.
+- [x] MEM-18 User fault dari EL0 mematikan proses atau ditangani sebagai
+      stack growth, bukan panic. Data abort translation menangani lazy
+      mmap dan stack growth, data abort permission menangani COW, dan
+      instruction abort permission mematikan proses saat mengeksekusi
+      halaman NX.
 
 **Selesai bila:** user tidak bisa mengeksekusi data, dan fork/COW serta
 demand paging lulus uji.
 
 ## 9. Fase 20 - Scheduler dan sinkronisasi lanjutan
 
-- [ ] SCH-10 Migrasi thread dan work stealing antar core.
+- [x] SCH-10 Migrasi thread dan work stealing. Thread migratable yang
+      menunggu di ready queue dapat dicuri CPU idle, `home_cpu` diperbarui,
+      dan thread tetap berjalan dengan address space yang benar.
+      `ThreadCreateOn` dengan `migratable=false` tetap pinned untuk worker
+      per-CPU dan ping-pong.
 - [x] SCH-11 Prioritas dan aging. Prioritas numerik 0..31 dengan default
       16, `ThreadSetPriority`, aging berbasis `wait_ticks`, dan pemilihan
       run queue berdasarkan prioritas efektif. Syscall `getpriority` dan
@@ -229,7 +236,11 @@ demand paging lulus uji.
       selesai lalu membebaskan stack dan slotnya.
 - [x] SCH-13 Condition variable dan read/write lock, diuji lewat self-test
       scheduler.
-- [ ] SCH-14 Futex untuk user space.
+- [x] SCH-14 Futex untuk user space. `futex_wait` memblokir selama word
+      32-bit masih bernilai expected, `futex_wake` membangunkan waiter
+      dengan key physical address yang sama. Shared mmap lintas `fork`
+      memakai frame fisik yang sama sehingga wait/wake bekerja antar
+      proses. Timeout dan signal belum.
 - [ ] SCH-15 TLS dan dukungan thread-local storage.
 - [x] SCH-16 Accounting CPU per proses: tick scheduler menambah `cpu_ticks`
       thread dan `/proc/processes` menampilkan `cpu_ms`.

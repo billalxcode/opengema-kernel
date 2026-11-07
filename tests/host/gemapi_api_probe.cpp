@@ -8,6 +8,7 @@
 #include "gemapi/io.h"
 #include "gemapi/memory.h"
 #include "gemapi/process.h"
+#include "gemapi/sync.h"
 #include "kgema/file.h"
 #include "kgema/io.h"
 #include "kgema/memory.h"
@@ -91,6 +92,17 @@ bool priority(u64& value) noexcept {
 
 bool setpriority(u64 value) noexcept {
   return value == 20U;
+}
+
+i64 futex_wait(i64 address, i64 expected) noexcept {
+  return address != 0 && expected == 0 ? 0 : -22;
+}
+
+i64 futex_wake(i64 address, i64 count) noexcept {
+  if (address == 0 || count < 0) {
+    return -22;
+  }
+  return count > 0 ? 1 : 0;
 }
 
 i64 wait(i64 pid, int* status) noexcept {
@@ -239,6 +251,17 @@ int main() {
       gemapi::process::set_priority(20U) != Status::ok ||
       gemapi::process::set_priority(0U) != Status::denied) {
     return Fail("process priority");
+  }
+
+  int futex_word = 0;
+  if (gemapi::sync::wait(&futex_word, 0) != Status::ok) {
+    return Fail("futex wait");
+  }
+  const auto woken = gemapi::sync::wake(&futex_word, 1U);
+  if (!woken || woken.value() != 1U ||
+      gemapi::sync::wait(nullptr, 0) != Status::invalid_argument ||
+      gemapi::sync::wake(nullptr, 1U).status() != Status::invalid_argument) {
+    return Fail("futex wake");
   }
 
   int wait_status = 0;

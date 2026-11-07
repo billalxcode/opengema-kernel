@@ -7,6 +7,7 @@
 #include "kgema/io.h"
 #include "kgema/memory.h"
 #include "kgema/process.h"
+#include "kgema/sync.h"
 #include "kgema/syscall.h"
 
 using kgema::i64;
@@ -74,6 +75,14 @@ i64 invoke3(i64 number, i64 arg0, i64 arg1, i64 arg2) noexcept {
       return 16;
     case kSetPriority:
       return arg0 == 20 ? 0 : -1;
+    case kFutex:
+      if (arg1 == kgema::kFutexWait) {
+        return 0;
+      }
+      if (arg1 == kgema::kFutexWake) {
+        return arg2 > 0 ? 1 : 0;
+      }
+      return -1;
     case kChmod:
       return Same(reinterpret_cast<const char*>(arg0), "file") &&
                  arg1 == 0600
@@ -198,6 +207,11 @@ int main() {
   if (!kgema::priority(priority) || priority != 16U ||
       !kgema::setpriority(20U) || kgema::setpriority(0U)) {
     return Fail("priority");
+  }
+  if (kgema::futex_wait(0x1000, 0) != 0 ||
+      kgema::futex_wake(0x1000, 1) != 1 ||
+      kgema::futex_wake(0x1000, -1) != kgema::syscall::kErrInvalid) {
+    return Fail("futex");
   }
 
   if (!kgema::chdir(path) || g_last_number != kgema::syscall::kChdir) {

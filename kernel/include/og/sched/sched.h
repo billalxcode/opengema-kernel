@@ -55,12 +55,14 @@ struct Thread {
   uint64_t cpu_ticks;
   uint32_t base_priority;
   uint32_t wait_ticks;
+  bool migratable;
   char name[16];
   ThreadEntry entry;
   void* argument;
   Thread* next_ready;
   Thread* next_wait;
   WaitQueue* wait_owner;
+  uint64_t wait_key;
   mem::AddressSpace* address_space;
   void* process;
 };
@@ -86,10 +88,11 @@ struct WaitQueue {
                                              mem::AddressSpace* space,
                                              void* process = nullptr) noexcept;
 
-// Creates a kernel thread with a fixed home CPU.
+// Creates a kernel thread with a fixed home CPU. When migratable is true,
+// an idle CPU may steal it; otherwise it stays on the requested CPU.
 [[nodiscard]] Result<Thread*> ThreadCreateOn(const char* name, ThreadEntry entry,
-                                             void* argument,
-                                             uint32_t cpu) noexcept;
+                                             void* argument, uint32_t cpu,
+                                             bool migratable = false) noexcept;
 
 // Becomes a thread and switches to the first ready thread. Returns when
 // this thread is scheduled again.
@@ -130,6 +133,12 @@ void WaitQueueWakeAll(WaitQueue& queue) noexcept;
 
 // Blocking helpers for sleeping locks. The caller must have IRQ masked.
 void WaitQueueEnqueueCurrent(WaitQueue& queue) noexcept;
+// Enqueues the current thread with a key and without scheduling. Used by
+// futex so the value check and enqueue are atomic under the futex lock.
+void WaitQueueEnqueueCurrentWithKey(WaitQueue& queue, uint64_t key) noexcept;
+// Wakes up to count threads whose key matches. Returns the number woken.
+[[nodiscard]] uint32_t WaitQueueWakeKey(WaitQueue& queue, uint64_t key,
+                                        uint32_t count) noexcept;
 void WakeThread(Thread* thread) noexcept;
 void ScheduleCurrent() noexcept;
 

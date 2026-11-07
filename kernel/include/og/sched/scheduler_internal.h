@@ -37,6 +37,7 @@ struct CpuScheduler {
 void EnqueueLocked(CpuScheduler& cpu, Thread* thread) noexcept;
 [[nodiscard]] Thread* DequeueLocked(CpuScheduler& cpu) noexcept;
 [[nodiscard]] bool RemoveLocked(CpuScheduler& cpu, Thread* thread) noexcept;
+[[nodiscard]] Thread* StealLocked(uint32_t thief) noexcept;
 [[nodiscard]] uint32_t PickHomeLocked() noexcept;
 
 // Caller must hold Lock().
@@ -51,6 +52,7 @@ void ScheduleNow() noexcept;
 [[nodiscard]] Result<Thread*> CreateThread(
   const char* name, ThreadEntry entry, void* argument, bool enqueue,
   uint32_t requested_cpu, bool allocate_stack,
-  mem::AddressSpace* address_space, void* process) noexcept;
+  mem::AddressSpace* address_space, void* process,
+  bool migratable) noexcept;
 
 }  // namespace og::sched::detail

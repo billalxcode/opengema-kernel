@@ -75,6 +75,7 @@ set(OG_KGEMA_SOURCES
   packages/libkgema/src/file.cpp
   packages/libkgema/src/memory.cpp
   packages/libkgema/src/process.cpp
+  packages/libkgema/src/sync.cpp
   packages/libkgema/src/system.cpp
   packages/libkgema/src/time.cpp
   packages/libkgema/src/runtime.cpp)
@@ -85,6 +86,7 @@ set(OG_GEMAPI_SOURCES
   packages/libgemapi/src/fs.cpp
   packages/libgemapi/src/memory.cpp
   packages/libgemapi/src/process.cpp
+  packages/libgemapi/src/sync.cpp
   packages/libgemapi/src/system.cpp
   packages/libgemapi/src/time.cpp)
 
@@ -557,7 +559,7 @@ og_add_module(og_syscall
           kernel/syscall/fs.cpp kernel/syscall/process.cpp
           kernel/syscall/memory.cpp kernel/syscall/helpers.cpp
           kernel/syscall/system.cpp kernel/syscall/time.cpp
-          kernel/syscall/log.cpp
+          kernel/syscall/log.cpp kernel/syscall/sync.cpp
   DEPS og_process og_sched og_events og_mem og_time og_core og_inc_kernel)
 
 og_add_module(og_sync

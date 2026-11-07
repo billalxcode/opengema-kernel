@@ -160,6 +160,9 @@ namespace og::syscall {
 [[nodiscard]] Status DoGetPriority(uint64_t& result) noexcept;
 [[nodiscard]] Status DoSetPriority(uint64_t priority, uint64_t& result) noexcept;
 
+[[nodiscard]] Status DoFutex(uint64_t address, uint64_t operation,
+                             uint64_t value, uint64_t& result) noexcept;
+
 [[nodiscard]] Status DoChown(uint64_t user_path, uint64_t uid, uint64_t gid,
                              uint64_t& result) noexcept;
 

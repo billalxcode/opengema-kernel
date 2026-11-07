@@ -19,6 +19,7 @@ void WaitQueueWait(WaitQueue& queue) noexcept {
   self->state = ThreadState::kBlocked;
   self->wake_ns = kNoWake;
   self->wait_owner = &queue;
+  self->wait_key = 0;
   self->next_wait = queue.head;
   queue.head = self;
   detail::Lock().unlock();
@@ -33,6 +34,7 @@ void WaitQueueWakeOne(WaitQueue& queue) noexcept {
     queue.head = thread->next_wait;
     thread->next_wait = nullptr;
     thread->wait_owner = nullptr;
+    thread->wait_key = 0;
     thread->wake_ns = kNoWake;
     thread->state = ThreadState::kReady;
     detail::EnqueueHomeLocked(thread);
@@ -48,6 +50,7 @@ void WaitQueueWakeAll(WaitQueue& queue) noexcept {
     Thread* next = thread->next_wait;
     thread->next_wait = nullptr;
     thread->wait_owner = nullptr;
+    thread->wait_key = 0;
     thread->wake_ns = kNoWake;
     thread->state = ThreadState::kReady;
     detail::EnqueueHomeLocked(thread);
@@ -66,10 +69,56 @@ void WaitQueueEnqueueCurrent(WaitQueue& queue) noexcept {
     self->state = ThreadState::kBlocked;
     self->wake_ns = kNoWake;
     self->wait_owner = &queue;
+    self->wait_key = 0;
     self->next_wait = queue.head;
     queue.head = self;
   }
   detail::Lock().unlock();
+}
+
+void WaitQueueEnqueueCurrentWithKey(WaitQueue& queue, uint64_t key) noexcept {
+  Thread* self = CurrentThread();
+  if (self == nullptr || self == detail::IdleThread()) {
+    return;
+  }
+  detail::Lock().lock();
+  if (!(self->state == ThreadState::kBlocked && self->wait_owner == &queue &&
+        self->wait_key == key)) {
+    self->state = ThreadState::kBlocked;
+    self->wake_ns = kNoWake;
+    self->wait_owner = &queue;
+    self->wait_key = key;
+    self->next_wait = queue.head;
+    queue.head = self;
+  }
+  detail::Lock().unlock();
+}
+
+uint32_t WaitQueueWakeKey(WaitQueue& queue, uint64_t key,
+                          uint32_t count) noexcept {
+  if (count == 0U) {
+    return 0;
+  }
+  uint32_t woken = 0;
+  detail::Lock().lock();
+  Thread** link = &queue.head;
+  while (*link != nullptr && woken < count) {
+    Thread* thread = *link;
+    if (thread->wait_key != key) {
+      link = &thread->next_wait;
+      continue;
+    }
+    *link = thread->next_wait;
+    thread->next_wait = nullptr;
+    thread->wait_owner = nullptr;
+    thread->wait_key = 0;
+    thread->wake_ns = kNoWake;
+    thread->state = ThreadState::kReady;
+    detail::EnqueueHomeLocked(thread);
+    ++woken;
+  }
+  detail::Lock().unlock();
+  return woken;
 }
 
 void WakeThread(Thread* thread) noexcept {
@@ -80,6 +129,7 @@ void WakeThread(Thread* thread) noexcept {
   if (thread->state == ThreadState::kBlocked) {
     thread->next_wait = nullptr;
     thread->wait_owner = nullptr;
+    thread->wait_key = 0;
     thread->wake_ns = kNoWake;
     thread->state = ThreadState::kReady;
     detail::EnqueueHomeLocked(thread);
