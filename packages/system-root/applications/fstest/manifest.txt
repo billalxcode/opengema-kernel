@@ -1,6 +1,8 @@
 name=fstest
 version=0.1
-exec=fstest
+author=opengema
+description=Filesystem and persistence test application
+exec=/applications/fstest/fstest
 type=executable
 depends=libgemapi>=0.1
 capability=console

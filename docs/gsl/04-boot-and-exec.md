@@ -25,7 +25,7 @@ Firmware UEFI
   -> mount ESP FAT32 di /volumes/boot
   -> load /system/boot/init
   -> PID 1 user mode
-       -> start shell dari /applications/gemabox/gemabox
+       -> start shell dari /bin/gemabox
 ```
 
 Saat syscall mount untuk user space tersedia, init yang memasang volume
@@ -49,7 +49,7 @@ user tidak dapat menambah atau memindahkan mount point sistem.
 
 ## 4. Alur exec
 
-Usulan alur `spawn("/applications/gemabox/gemabox", argv)`:
+Usulan alur `spawn("/bin/gemabox", argv)`:
 
 1. libgemapi memvalidasi path, argv, dan capability.
 2. libgemapi memanggil `libkgema`.

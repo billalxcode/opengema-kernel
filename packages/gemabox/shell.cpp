@@ -48,27 +48,6 @@ void cat_file(const char* path, const char* label) {
   }
 }
 
-void list_dir(const char* path) {
-  for (gemapi::u64 index = 0;; ++index) {
-    gemapi::fs::DirEntry entry{};
-    auto found = gemapi::fs::list(path, index, entry);
-    if (!found) {
-      if (found.status() != gemapi::Status::ok) {
-        gemapi::io::write("ls: list failed\n");
-      }
-      return;
-    }
-    if (!found.value()) {
-      return;
-    }
-    gemapi::io::write(entry.name);
-    if (entry.kind == gemapi::fs::Kind::directory) {
-      gemapi::io::write("/");
-    }
-    gemapi::io::write("\n");
-  }
-}
-
 bool run_path(const char* path, const char* const* argv,
               gemapi::usize argc) {
   auto child = gemapi::process::spawn(path, argv, argc);
@@ -384,6 +363,14 @@ bool FindExternalPath(const char* name, char* buffer,
   }
 
   gemapi::usize cursor = 0;
+  cursor = append_text(buffer, capacity, cursor, "/bin/");
+  cursor = append_text(buffer, capacity, cursor, name);
+  if (finish_path(buffer, capacity, cursor) && gemapi::fs::stat(buffer)) {
+    *out_path = buffer;
+    return true;
+  }
+
+  cursor = 0;
   cursor = append_text(buffer, capacity, cursor, "/commands/");
   cursor = append_text(buffer, capacity, cursor, name);
   if (finish_path(buffer, capacity, cursor) && gemapi::fs::stat(buffer)) {
@@ -435,30 +422,6 @@ CommandResult RunHalt(const char* /*args*/, gemapi::usize /*args_length*/) {
 }
 
 CommandResult RunHelp(const char* /*args*/, gemapi::usize /*args_length*/);
-
-CommandResult RunEcho(const char* args, gemapi::usize args_length) {
-  gemapi::io::write(args, args_length);
-  gemapi::io::write("\n");
-  return CommandResult::kContinue;
-}
-
-CommandResult RunCat(const char* args, gemapi::usize args_length) {
-  if (args_length == 0U) {
-    gemapi::io::write("cat: missing path\n");
-    return CommandResult::kContinue;
-  }
-  cat_file(args, "cat");
-  return CommandResult::kContinue;
-}
-
-CommandResult RunList(const char* args, gemapi::usize args_length) {
-  if (args_length == 0U) {
-    list_dir("/");
-  } else {
-    list_dir(args);
-  }
-  return CommandResult::kContinue;
-}
 
 CommandResult RunStat(const char* args, gemapi::usize args_length) {
   char path[128];
@@ -982,11 +945,31 @@ CommandResult RunUmount(const char* args, gemapi::usize args_length) {
   return CommandResult::kContinue;
 }
 
+
+CommandResult RunCd(const char* args, gemapi::usize args_length) {
+  char path[128];
+  gemapi::usize length = 0;
+  const char* cursor = args;
+  const char* end = args + args_length;
+  if (!next_token(cursor, end, path, sizeof(path), length) ||
+      length >= (sizeof(path) - 1U)) {
+    gemapi::io::write("cd: usage: cd <path>\n");
+    return CommandResult::kContinue;
+  }
+  char extra[2];
+  gemapi::usize extra_length = 0;
+  if (next_token(cursor, end, extra, sizeof(extra), extra_length) ||
+      gemapi::fs::chdir(path) != gemapi::Status::ok) {
+    gemapi::io::write("cd: failed\n");
+    return CommandResult::kContinue;
+  }
+  return CommandResult::kContinue;
+}
+
+
 constexpr Command kCommands[] = {
   {"help", &RunHelp},
-  {"echo", &RunEcho},
-  {"cat", &RunCat},
-  {"ls", &RunList},
+  {"cd", &RunCd},
   {"stat", &RunStat},
   {"clear", &RunClear},
   {"acpi", &RunAcpi},
@@ -1016,14 +999,26 @@ constexpr Command kCommands[] = {
 constexpr gemapi::usize kCommandCount =
   sizeof(kCommands) / sizeof(kCommands[0]);
 
+// Help lists built-ins and external /bin applets in a stable order.
+constexpr const char* kHelpCommands[] = {
+  "help", "echo", "cat", "ls", "pwd", "cd", "touch", "head", "wc",
+  "grep", "free", "stat", "clear", "acpi", "uptime", "date", "tz",
+  "sleep", "ps", "prio", "id", "setuid", "setgid", "dmesg", "loglevel",
+  "mkdir", "rm", "mv", "chmod", "chown", "mount", "umount", "halt",
+  "shutdown", "reboot", "pkg",
+};
+
+constexpr gemapi::usize kHelpCommandCount =
+  sizeof(kHelpCommands) / sizeof(kHelpCommands[0]);
+
 CommandResult RunHelp(const char* /*args*/, gemapi::usize /*args_length*/) {
-  char text[192];
+  char text[384];
   gemapi::usize cursor = append_text(text, sizeof(text), 0, "commands: ");
-  for (gemapi::usize index = 0; index < kCommandCount; ++index) {
+  for (gemapi::usize index = 0; index < kHelpCommandCount; ++index) {
     if (index != 0U) {
       cursor = append_text(text, sizeof(text), cursor, ", ");
     }
-    cursor = append_text(text, sizeof(text), cursor, kCommands[index].name);
+    cursor = append_text(text, sizeof(text), cursor, kHelpCommands[index]);
   }
   cursor = append_text(text, sizeof(text), cursor, "\n");
   gemapi::io::write(text, cursor);
@@ -1074,14 +1069,6 @@ int run_shell() {
       --args_length;
     }
 
-    const Command* command = FindCommand(line, name_length);
-    if (command != nullptr) {
-      if (command->run(args, args_length) == CommandResult::kHalt) {
-        return 0;
-      }
-      continue;
-    }
-
     char name[kMaxName];
     const gemapi::usize name_copy =
       name_length < (sizeof(name) - 1U) ? name_length : (sizeof(name) - 1U);
@@ -1099,6 +1086,14 @@ int run_shell() {
         (void)run_path(path, argv, argc);
         continue;
       }
+    }
+
+    const Command* command = FindCommand(line, name_length);
+    if (command != nullptr) {
+      if (command->run(args, args_length) == CommandResult::kHalt) {
+        return 0;
+      }
+      continue;
     }
 
     gemapi::io::write("unknown: ");

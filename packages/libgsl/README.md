@@ -18,8 +18,12 @@ Konstanta utama:
 /system/boot/init
 /system/boot/ld-gem
 /system/libraries
+/system/config
+/system/packages
+/system/packages/registry
+/bin
+/bin/gemabox
 /applications
-/applications/gemabox/gemabox
 /commands
 /etc
 /users

@@ -1,6 +1,8 @@
 name=gemabox
 version=0.1
-exec=gemabox
+author=opengema
+description=Shell daemon and command dispatcher
+exec=/bin/gemabox
 type=executable
 depends=libgemapi>=0.1
 capability=console

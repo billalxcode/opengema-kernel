@@ -87,6 +87,12 @@ i64 invoke3(i64 number, i64 arg0, i64 arg1, i64 arg2) noexcept {
       return 0x7000;
     case kSetTls:
       return arg0 == 0x7000 || arg0 == 0 ? 0 : -1;
+    case kGetCwd:
+      if (arg0 == 0 || arg1 < 5) {
+        return -22;
+      }
+      std::memcpy(reinterpret_cast<void*>(arg0), "/tmp", 5);
+      return 4;
     case kChmod:
       return Same(reinterpret_cast<const char*>(arg0), "file") &&
                  arg1 == 0600
@@ -225,6 +231,12 @@ int main() {
 
   if (!kgema::chdir(path) || g_last_number != kgema::syscall::kChdir) {
     return Fail("chdir failed");
+  }
+  char cwd[8]{};
+  if (kgema::getcwd(cwd, sizeof(cwd)) != 4 || !Same(cwd, "/tmp") ||
+      kgema::getcwd(nullptr, sizeof(cwd)) >= 0 ||
+      kgema::getcwd(cwd, 0U) >= 0) {
+    return Fail("getcwd failed");
   }
 
   kgema::DirEntry entry{};

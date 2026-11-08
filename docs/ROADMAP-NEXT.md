@@ -123,6 +123,17 @@ Tujuan: userland punya API yang layak dan gemabox menjadi shell nyata.
       config, satu contoh program baru, dan dokumentasi link.
 - [x] SDK-09 Uji: shell menerima `help`, `ls`, `acpi`, `uptime`, `sleep`,
       `ps`, `shutdown`, `reboot`, dan `halt`.
+- [x] SDK-10 Applet shell file: `pwd`, `cd`, `touch`, `head`, `wc`,
+      `grep`, dan `free` memakai syscall `getcwd` serta API filesystem
+      yang sudah ada.
+- [x] PKG-01 Package registry read-only di `/system/packages/registry`
+      dengan metadata nama, versi, author, deskripsi, dan path exec.
+      Format dan rencana ada di `docs/PACKAGE-REGISTRY.md`.
+- [x] APP-01 Biner applet terpisah di `/bin`; gemabox menjadi shell
+      daemon yang mengeksekusi biner, bukan cabang kondisi internal.
+- [~] APP-02 Applet `/bin` slice pertama: `echo`, `cat`, `ls`, `pwd`,
+      `touch`, `head`, `wc`, `grep`, `free`, dan `pkg`. Migrasi perintah
+      lain masih pending.
 
 **Selesai bila:** shell interaktif berjalan di atas UART dan perintah dasar
 bisa dijalankan tanpa menyalin kode syscall.

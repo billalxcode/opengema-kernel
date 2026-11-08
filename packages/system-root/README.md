@@ -9,14 +9,26 @@ Isi yang disalin dari sini:
 ```
 system/config/version
 system/config/gsl.conf
+system/packages/registry
 applications/gemabox/manifest.txt
 ```
 
 Isi yang disalin dari build:
 
 ```
-applications/gemabox/gemabox
+bin/gemabox
+bin/echo
+bin/cat
+bin/ls
+bin/pwd
+bin/touch
+bin/head
+bin/wc
+bin/grep
+bin/free
+bin/pkg
 applications/hello/hello
+applications/fstest/fstest
 system/boot/init
 system/boot/ld-gem
 system/libraries/libgemapi.so.1

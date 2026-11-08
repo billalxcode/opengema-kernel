@@ -3,10 +3,9 @@
 Proses PID 1 user space untuk GSL. Program ini dijalankan kernel dari
 `/system/boot/init`.
 
-Saat ini `init` menjalankan shell dari
-`/applications/gemabox/gemabox` dengan argumen `shell`, lalu menunggu dan
-meneruskan exit status shell. Jika shell keluar dengan status bukan nol,
-init mencoba menjalankannya ulang sampai dua kali.
+Saat ini `init` menjalankan shell dari `/bin/gemabox` dengan argumen
+`shell`, lalu menunggu dan meneruskan exit status shell. Jika shell keluar
+dengan status bukan nol, init mencoba menjalankannya ulang sampai dua kali.
 
 ## Rencana
 

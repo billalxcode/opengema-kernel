@@ -54,6 +54,14 @@ bool chdir(const char* path) noexcept {
   return syscall::invoke3(syscall::kChdir, reinterpret_cast<i64>(path), 0, 0) == 0;
 }
 
+i64 getcwd(char* buffer, usize size) noexcept {
+  if (buffer == nullptr || size == 0) {
+    return syscall::kErrInvalid;
+  }
+  return syscall::invoke3(syscall::kGetCwd, reinterpret_cast<i64>(buffer),
+                          static_cast<i64>(size), 0);
+}
+
 bool mkdir(const char* path) noexcept {
   if (path == nullptr) {
     return false;

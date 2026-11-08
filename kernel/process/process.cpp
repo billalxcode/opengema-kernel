@@ -448,12 +448,16 @@ struct LoadedProgram {
   mem::Zero(slot, sizeof(*slot));
   uint32_t parent_uid = 0;
   uint32_t parent_gid = 0;
+  char parent_cwd[fs::kMaxPath];
+  parent_cwd[0] = '/';
+  parent_cwd[1] = '\0';
   if (parent_pid != kKernelPid) {
     for (uint32_t index = 0; index < kMaxProcesses; ++index) {
       if (g_processes[index].used != 0U &&
           g_processes[index].pid == parent_pid) {
         parent_uid = g_processes[index].uid;
         parent_gid = g_processes[index].gid;
+        mem::Copy(parent_cwd, g_processes[index].cwd, sizeof(parent_cwd));
         break;
       }
     }
@@ -482,8 +486,7 @@ struct LoadedProgram {
     name_length >= sizeof(slot->name) ? (sizeof(slot->name) - 1U) : name_length;
   mem::Copy(slot->name, path, name_copy);
   slot->name[name_copy] = '\0';
-  slot->cwd[0] = '/';
-  slot->cwd[1] = '\0';
+  mem::Copy(slot->cwd, parent_cwd, sizeof(slot->cwd));
 
   const Result<sched::Thread*> thread = sched::ThreadCreateIn(
     "user", &ProcessThreadEntry, slot, &slot->space, slot);

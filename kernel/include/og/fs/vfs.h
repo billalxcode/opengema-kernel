@@ -178,7 +178,9 @@ struct FileTable {
                             bool& found) noexcept;
 
 [[nodiscard]] Result<Node*> FsCreate(const char* path,
-                                     NodeType type) noexcept;
+                                     NodeType type,
+                                     uint32_t uid = 0,
+                                     uint32_t gid = 0) noexcept;
 [[nodiscard]] Status FsRemove(const char* path, NodeType type) noexcept;
 [[nodiscard]] Status FsRename(const char* old_path,
                               const char* new_path) noexcept;

@@ -202,7 +202,7 @@ Command:
 
 - `gemabox` adalah multi-call binary untuk applet inti.
 - Aplikasi besar adalah binary terpisah di `/applications`.
-- `/commands/gemabox` menunjuk ke `/applications/gemabox/gemabox`.
+- `/commands/gemabox` menunjuk ke `/bin/gemabox`.
 - `/commands/ls`, `/commands/cat`, dan `/commands/echo` bisa menunjuk ke
   binary yang sama dengan nama applet.
 
@@ -251,7 +251,8 @@ Layout yang sudah berjalan:
   system/libraries/libgemapi.so.1
   system/config/version
   system/config/gsl.conf
-  applications/gemabox/gemabox
+  system/packages/registry
+  bin/gemabox
   applications/gemabox/manifest.txt
   commands/
   etc/                  direktori kosong read-only di image

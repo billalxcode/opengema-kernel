@@ -352,6 +352,42 @@ add_custom_command(
 add_custom_target(og_fstest DEPENDS ${OG_FSTEST_ELF})
 add_dependencies(og_fstest og_libgemapi)
 
+# Standalone applet binaries. The shell daemon executes these from /bin
+# instead of carrying a command implementation for each one.
+set(OG_APPLET_ROOT ${CMAKE_BINARY_DIR}/applet-root)
+set(OG_APPLET_NAMES echo cat ls pwd touch head wc grep free pkg)
+set(OG_APPLET_ELFS)
+foreach(applet IN LISTS OG_APPLET_NAMES)
+  add_library(og_applet_${applet}_user OBJECT packages/applets/${applet}.cpp)
+  target_include_directories(og_applet_${applet}_user PRIVATE ${OG_GEMAPI_INCLUDE})
+  target_compile_options(og_applet_${applet}_user PRIVATE ${OG_USER_CXX_FLAGS})
+
+  set(applet_elf ${OG_APPLET_ROOT}/bin/${applet})
+  add_custom_command(
+    OUTPUT ${applet_elf}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${OG_APPLET_ROOT}/bin
+    COMMAND ${OG_GEMABOX_LD} -pie
+            -T ${CMAKE_SOURCE_DIR}/packages/libgemapi/link.ld
+            -z max-page-size=4096 -s
+            --dynamic-linker=/system/boot/ld-gem
+            -u _start
+            $<TARGET_OBJECTS:og_applet_${applet}_user>
+            $<TARGET_OBJECTS:og_gemapi_start>
+            -L${CMAKE_BINARY_DIR} -rpath-link=${CMAKE_BINARY_DIR} -lgemapi
+            -o ${applet_elf}
+    DEPENDS
+      $<TARGET_OBJECTS:og_applet_${applet}_user>
+      og_applet_${applet}_user
+      og_gemapi_start
+      ${OG_GEMAPI_SO}
+      ${CMAKE_SOURCE_DIR}/packages/libgemapi/link.ld
+    COMMAND_EXPAND_LISTS
+    COMMENT "link applet ${applet}")
+  add_custom_target(og_applet_${applet} DEPENDS ${applet_elf})
+  add_dependencies(og_applet_${applet} og_libgemapi)
+  list(APPEND OG_APPLET_ELFS ${applet_elf})
+endforeach()
+
 # System image for GSLFS. The staging tree mirrors the Unix-like layout in
 # docs/gsl/03-filesystem-layout.md.
 set(OG_SYSTEM_ROOT ${CMAKE_BINARY_DIR}/system-root)
@@ -366,9 +402,11 @@ add_custom_command(
           ${OG_SYSTEM_ROOT}/system/services
           ${OG_SYSTEM_ROOT}/system/config
           ${OG_SYSTEM_ROOT}/system/commands
+          ${OG_SYSTEM_ROOT}/system/packages
           ${OG_SYSTEM_ROOT}/applications/gemabox/resources
           ${OG_SYSTEM_ROOT}/applications/hello
           ${OG_SYSTEM_ROOT}/applications/fstest
+          ${OG_SYSTEM_ROOT}/bin
           ${OG_SYSTEM_ROOT}/commands
           ${OG_SYSTEM_ROOT}/etc
           ${OG_SYSTEM_ROOT}/users
@@ -381,7 +419,12 @@ add_custom_command(
           ${OG_SYSTEM_ROOT}/proc
           ${OG_SYSTEM_ROOT}/volumes/boot
   COMMAND ${CMAKE_COMMAND} -E copy ${OG_GEMABOX_ELF}
-          ${OG_SYSTEM_ROOT}/applications/gemabox/gemabox
+          ${OG_SYSTEM_ROOT}/bin/gemabox
+  COMMAND ${CMAKE_COMMAND} -E copy_directory ${OG_APPLET_ROOT}/bin
+          ${OG_SYSTEM_ROOT}/bin
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+          ${CMAKE_SOURCE_DIR}/packages/system-root/system/packages
+          ${OG_SYSTEM_ROOT}/system/packages
   COMMAND ${CMAKE_COMMAND} -E copy ${OG_LDGEM_ELF}
           ${OG_SYSTEM_ROOT}/system/boot/ld-gem
   COMMAND ${CMAKE_COMMAND} -E copy ${OG_INIT_ELF}
@@ -419,10 +462,12 @@ add_custom_command(
     ${OG_INIT_ELF}
     ${OG_HELLO_ELF}
     ${OG_FSTEST_ELF}
+    ${OG_APPLET_ELFS}
     ${OG_GEMAPI_SO}
     ${OG_KGEMA_SO}
     ${CMAKE_SOURCE_DIR}/packages/system-root/system/config/version
     ${CMAKE_SOURCE_DIR}/packages/system-root/system/config/gsl.conf
+    ${CMAKE_SOURCE_DIR}/packages/system-root/system/packages/registry
     ${CMAKE_SOURCE_DIR}/packages/system-root/applications/gemabox/manifest.txt
     ${CMAKE_SOURCE_DIR}/packages/system-root/applications/hello/manifest.txt
     ${CMAKE_SOURCE_DIR}/packages/system-root/applications/fstest/manifest.txt

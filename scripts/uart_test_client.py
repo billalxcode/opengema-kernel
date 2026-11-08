@@ -80,6 +80,18 @@ def main(argv):
     identity_seen = False
     prio_cmd_sent = False
     prio_cmd_seen = False
+    shell_sent = False
+    shell_seen = False
+    shell_batch = 0
+    shell_batches = [
+        b"pwd\ncd /tmp\npwd\ncd /\npwd\necho SHELL-1\n",
+        b"touch /tmp/gemabox.txt\nstat /tmp/gemabox.txt\n"
+        b"rm /tmp/gemabox.txt\necho SHELL-2\n",
+        b"head /system/config/version\nwc /system/config/version\n"
+        b"grep 0.1 /system/config/version\necho SHELL-3\n",
+        b"pkg list\npkg info gemabox\necho PKG-DONE\necho SHELL-DONE\n",
+    ]
+    shell_markers = [b"SHELL-1", b"SHELL-2", b"SHELL-3", b"SHELL-DONE"]
     identity_batch = 0
     identity_output = bytearray()
     identity_batches = [
@@ -169,7 +181,7 @@ def main(argv):
                 buffer.clear()
 
             if (help_sent and not help_seen and
-                    b"commands: help, echo, cat, ls, stat, clear, acpi, uptime, date, tz, sleep, ps, prio, id, setuid, setgid, dmesg, loglevel, mkdir, rm, mv, chmod, chown, mount, umount, halt, shutdown, reboot" in buffer):
+                    b"commands: help, echo, cat, ls, pwd, cd, touch, head, wc, grep, free, stat, clear, acpi, uptime, date, tz, sleep, ps, prio, id, setuid, setgid, dmesg, loglevel, mkdir, rm, mv, chmod, chown, mount, umount, halt, shutdown, reboot, pkg" in buffer):
                 help_seen = True
 
             if (help_seen and not acpi_sent and
@@ -335,7 +347,25 @@ def main(argv):
                     b"PRIO-CMD-DONE" in buffer:
                 prio_cmd_seen = True
 
-            if (prio_cmd_seen and not clear_sent and
+            if (prio_cmd_seen and not shell_sent and
+                    time.time() - last_data > 0.5 and
+                    b"gemabox> " in buffer):
+                send_line(client, shell_batches[0])
+                shell_batch = 1
+                shell_sent = True
+                buffer.clear()
+
+            if (shell_sent and not shell_seen and
+                    shell_batch < len(shell_batches) and
+                    shell_markers[shell_batch - 1] in buffer):
+                send_line(client, shell_batches[shell_batch])
+                shell_batch += 1
+                buffer.clear()
+
+            if shell_sent and not shell_seen and b"SHELL-DONE" in buffer:
+                shell_seen = True
+
+            if (shell_seen and not clear_sent and
                     time.time() - last_data > 0.5 and
                     b"gemabox> " in buffer):
                 send_line(client, b"clear\necho CLEAR-DONE\n")

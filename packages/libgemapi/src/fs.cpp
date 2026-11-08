@@ -130,6 +130,17 @@ Status chdir(const char* path) noexcept {
   return kgema::chdir(path) ? Status::ok : detail::LastError(Status::not_found);
 }
 
+Result<usize> cwd(char* buffer, usize size) noexcept {
+  if (buffer == nullptr || size == 0U) {
+    return Status::invalid_argument;
+  }
+  const i64 result = kgema::getcwd(buffer, size);
+  if (result < 0) {
+    return detail::LastError(Status::invalid_argument);
+  }
+  return static_cast<usize>(result);
+}
+
 Result<bool> list(const char* path, u64 index, DirEntry& entry) noexcept {
   if (path == nullptr) {
     return Status::invalid_argument;

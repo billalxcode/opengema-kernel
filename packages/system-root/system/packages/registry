@@ -1,0 +1,13 @@
+gemabox	0.1	opengema	Shell daemon and command dispatcher	/bin/gemabox
+hello	0.1	opengema	Kernel and SDK smoke test application	/applications/hello/hello
+fstest	0.1	opengema	Filesystem and persistence test application	/applications/fstest/fstest
+echo	0.1	opengema	Echo arguments	/bin/echo
+cat	0.1	opengema	Concatenate files to stdout	/bin/cat
+ls	0.1	opengema	List directory entries	/bin/ls
+pwd	0.1	opengema	Print the current directory	/bin/pwd
+touch	0.1	opengema	Create an empty file	/bin/touch
+head	0.1	opengema	Print the first ten lines	/bin/head
+wc	0.1	opengema	Count lines and bytes	/bin/wc
+grep	0.1	opengema	Print matching lines	/bin/grep
+free	0.1	opengema	Show memory statistics	/bin/free
+pkg	0.1	opengema	Inspect the package registry	/bin/pkg

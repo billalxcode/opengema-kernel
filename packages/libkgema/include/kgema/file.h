@@ -35,6 +35,7 @@ struct DirEntry {
 [[nodiscard]] bool seek(i64 descriptor, u64 offset) noexcept;
 [[nodiscard]] bool stat(const char* path, Stat& result) noexcept;
 [[nodiscard]] bool chdir(const char* path) noexcept;
+[[nodiscard]] i64 getcwd(char* buffer, usize size) noexcept;
 [[nodiscard]] bool mkdir(const char* path) noexcept;
 [[nodiscard]] bool unlink(const char* path) noexcept;
 [[nodiscard]] bool rmdir(const char* path) noexcept;

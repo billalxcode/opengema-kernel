@@ -562,7 +562,8 @@ Status FsList(const char* path, uint32_t index, DirEntry& entry, bool& found) no
   return node.value()->ops->iterate(node.value(), index, entry, found);
 }
 
-Result<Node*> FsCreate(const char* path, NodeType type) noexcept {
+Result<Node*> FsCreate(const char* path, NodeType type, uint32_t uid,
+                       uint32_t gid) noexcept {
   OperationGuard guard;
   if (path == nullptr || FsIsMountRoot(path)) {
     return Result<Node*>::Err(Status::kBusy);
@@ -575,6 +576,13 @@ Result<Node*> FsCreate(const char* path, NodeType type) noexcept {
   if (directory->ops == nullptr || directory->ops->create == nullptr) {
     return Result<Node*>::Err(Status::kUnsupported);
   }
+  if (uid != 0U) {
+    const uint32_t shift =
+      uid == directory->uid ? 6U : (gid == directory->gid ? 3U : 0U);
+    if ((directory->mode & (1U << (shift + 2U))) == 0U) {
+      return Result<Node*>::Err(Status::kDenied);
+    }
+  }
   Node* created = nullptr;
   const Status status = directory->ops->create(
     directory, parent.value().name, type, &created);
@@ -584,6 +592,8 @@ Result<Node*> FsCreate(const char* path, NodeType type) noexcept {
   if (created == nullptr) {
     return Result<Node*>::Err(Status::kIoError);
   }
+  created->uid = uid;
+  created->gid = gid;
   return Result<Node*>::Ok(created);
 }
 

@@ -135,6 +135,9 @@ uint64_t g_syscall_counts[kMaxSyscallNumbers]{};
     case kSysSetTls:
       status = DoSetTls(frame->x[0], result);
       break;
+    case kSysGetCwd:
+      status = DoGetCwd(frame->x[0], frame->x[1], result);
+      break;
     case kSysChdir:
       status = DoChdir(frame->x[0], result);
       break;

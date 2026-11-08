@@ -73,7 +73,8 @@ Result<uint32_t> FsOpen(FileTable& table, const char* path,
   Result<Node*> node = ResolveForOpen(path, mount_index);
   if (node.is_err() && (flags & kOpenCreate) != 0U &&
       node.status() == Status::kNotFound) {
-    const Result<Node*> created = FsCreate(path, NodeType::kFile);
+    const Result<Node*> created =
+      FsCreate(path, NodeType::kFile, table.uid, table.gid);
     if (created.is_err()) {
       return Result<uint32_t>::Err(created.status());
     }

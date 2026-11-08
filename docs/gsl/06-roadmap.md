@@ -101,7 +101,7 @@ tanpa rebuild kernel.
 
 Status: image GSLFS dibuat dari `packages/system-root` dan ditulis ke
 partisi kedua. Kernel memvalidasi checksum, me-mount root read-only,
-memuat `/applications/gemabox/gemabox` dan `/system/boot/ld-gem`, lalu
+memuat `/bin/gemabox` dan `/system/boot/ld-gem`, lalu
 `ld-gem` memuat library dari `/system/libraries`. ESP FAT32 di-mount di
 `/volumes/boot`. Volume writable `/etc`, `/users`, dan `/var` serta init
 user belum ada.
@@ -123,7 +123,7 @@ Selesai bila: kernel hanya memuat init, lalu init memasang volume dan
 menjalankan shell.
 
 Status: kernel memuat `/system/boot/init`, lalu init men-spawn
-`/applications/gemabox/gemabox shell` dan menunggu. `/etc`, `/users`,
+`/bin/gemabox shell` dan menunggu. `/etc`, `/users`,
 `/var`, dan `/tmp` sudah writable lewat ramfs pada path tetap. Volume
 persisten, service manager, dan recovery belum ada.
 

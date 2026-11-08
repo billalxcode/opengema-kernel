@@ -65,6 +65,8 @@ class File {
 
 [[nodiscard]] Result<Info> stat(const char* path) noexcept;
 [[nodiscard]] Status chdir(const char* path) noexcept;
+// Copies the absolute current directory into buffer and returns its length.
+[[nodiscard]] Result<usize> cwd(char* buffer, usize size) noexcept;
 [[nodiscard]] Status mkdir(const char* path) noexcept;
 [[nodiscard]] Status unlink(const char* path) noexcept;
 [[nodiscard]] Status rmdir(const char* path) noexcept;

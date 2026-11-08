@@ -166,6 +166,28 @@ Status DoChdir(uint64_t user_path, uint64_t& result) noexcept {
   return Status::kOk;
 }
 
+Status DoGetCwd(uint64_t buffer, uint64_t length,
+                uint64_t& result) noexcept {
+  process::Process* process = CurrentProcess();
+  if (process == nullptr) {
+    return Status::kNotInit;
+  }
+  if (buffer == 0U || length == 0U) {
+    return Status::kInvalidArg;
+  }
+  const uint64_t cwd_length = mem::Length(process->cwd);
+  if (length <= cwd_length) {
+    return Status::kInvalidArg;
+  }
+  const Status status = mem::VmmCopyOut(
+    process->space, buffer, process->cwd, cwd_length + 1U);
+  if (IsErr(status)) {
+    return status;
+  }
+  result = cwd_length;
+  return Status::kOk;
+}
+
 Status DoMkdir(uint64_t user_path, uint64_t& result) noexcept {
   process::Process* process = CurrentProcess();
   if (process == nullptr) {
@@ -177,7 +199,8 @@ Status DoMkdir(uint64_t user_path, uint64_t& result) noexcept {
     return status;
   }
   const Result<fs::Node*> created =
-    fs::FsCreate(path, fs::NodeType::kDirectory);
+    fs::FsCreate(path, fs::NodeType::kDirectory, process->uid,
+                 process->gid);
   if (created.is_err()) {
     return created.status();
   }

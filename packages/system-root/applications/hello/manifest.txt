@@ -1,6 +1,8 @@
 name=hello
 version=0.1
-exec=hello
+author=opengema
+description=Kernel and SDK smoke test application
+exec=/applications/hello/hello
 type=executable
 depends=libgemapi>=0.1
 capability=console

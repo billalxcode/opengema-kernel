@@ -25,9 +25,12 @@ constexpr char kConfig[] = "/system/config";
 constexpr char kConfigVersion[] = "/system/config/version";
 constexpr char kConfigGsl[] = "/system/config/gsl.conf";
 constexpr char kSystemCommands[] = "/system/commands";
+constexpr char kPackages[] = "/system/packages";
+constexpr char kPackageRegistry[] = "/system/packages/registry";
 
+constexpr char kBin[] = "/bin";
 constexpr char kApplications[] = "/applications";
-constexpr char kGemabox[] = "/applications/gemabox/gemabox";
+constexpr char kGemabox[] = "/bin/gemabox";
 constexpr char kCommands[] = "/commands";
 
 constexpr char kEtc[] = "/etc";

@@ -175,7 +175,7 @@ Framebuffer console memakai virtio-gpu 1280x800 dan diuji otomatis dengan
 API publik `packages/libgemapi`, yang memakai lapisan ABI
 `packages/libkgema` secara privat. Aplikasi tidak menyentuh `svc` atau
 header kernel. Binary gemabox adalah ELF64 dynamic dan dibaca dari volume
-system GSLFS: kernel memetakan `/applications/gemabox/gemabox` dan
+system GSLFS: kernel memetakan `/bin/gemabox` dan
 `/system/boot/ld-gem`, lalu `ld-gem` memuat `libgemapi.so.1` dan
 `libkgema.so.1` dari `/system/libraries`. Kernel menjalankan
 `/system/boot/init` sebagai PID 1; init menjalankan shell gemabox.

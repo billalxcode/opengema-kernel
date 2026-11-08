@@ -104,6 +104,14 @@ bool chdir(const char* path) noexcept {
   return Same(path, "dir");
 }
 
+i64 getcwd(char* buffer, usize size) noexcept {
+  if (buffer == nullptr || size < 5U) {
+    return -1;
+  }
+  std::memcpy(buffer, "/tmp", 5);
+  return 4;
+}
+
 i64 list(const char* path, u64 index, DirEntry& entry) noexcept {
   if (Same(path, "error")) {
     return -1;
@@ -289,6 +297,16 @@ int main() {
   }
   if (gemapi::fs::chdir(nullptr) != Status::invalid_argument) {
     return Fail("chdir null");
+  }
+  char cwd[8]{};
+  auto current = gemapi::fs::cwd(cwd, sizeof(cwd));
+  if (!current || current.value() != 4U || !Same(cwd, "/tmp")) {
+    return Fail("cwd");
+  }
+  if (gemapi::fs::cwd(nullptr, sizeof(cwd)).status() !=
+          Status::invalid_argument ||
+      gemapi::fs::cwd(cwd, 0U).status() != Status::invalid_argument) {
+    return Fail("cwd invalid");
   }
 
   if (gemapi::fs::mkdir("newdir") != Status::ok) {

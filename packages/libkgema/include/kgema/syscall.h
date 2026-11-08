@@ -53,6 +53,7 @@ constexpr i64 kSetPriority = 43;
 constexpr i64 kFutex = 44;
 constexpr i64 kGetTls = 45;
 constexpr i64 kSetTls = 46;
+constexpr i64 kGetCwd = 47;
 
 // Negative Linux errno values returned by the kernel in x0.
 constexpr i64 kErrPermission = -1;

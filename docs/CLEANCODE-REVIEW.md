@@ -378,6 +378,14 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   berkutip. Command `persist` tidak lagi ada di shell produksi.
 - Test shell quoting: `mkdir` dan `rm` menerima path dengan spasi di dalam
   tanda kutip ganda.
+- Test applet shell: `pwd` mencetak cwd, `cd /tmp` mengubahnya, `touch`
+  membuat berkas kosong, `head`/`wc`/`grep` membaca
+  `/system/config/version`, dan `free` membaca `/proc/meminfo`.
+- Test package registry: `pkg list` membaca `/system/packages/registry`,
+  `pkg info gemabox` menampilkan versi, author, deskripsi, dan path exec.
+- Test applet eksternal: gemabox mengeksekusi `/bin/echo`, `/bin/pwd`,
+  `/bin/touch`, `/bin/wc`, dan `/bin/pkg` sebagai proses terpisah. `spawn`
+  mewarisi cwd parent sehingga `pwd` anak melihat direktori hasil `cd`.
 - Test metadata: `stat` menampilkan tipe, ukuran, mode oktal, uid, gid, dan
   mtime; mode direktori, file, device, dan file read-only diperiksa.
   `chmod` memperbarui mode ramfs dan read-only attribute FAT32, `chown`
@@ -393,12 +401,12 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 
 Verifikasi branch `dev`:
 
-- `python3 scripts/compile-check.py`: 141 file OK, 0 dilewati.
+- `python3 scripts/compile-check.py`: 151 file OK, 0 dilewati.
 - `./scripts/build.sh` lewat podman: kernel build dan link OK,
   `arch-check` dan `gsl-check` OK.
-- `./scripts/test-tidy.sh`: 121 file C++ OK dengan clang-tidy.
+- `./scripts/test-tidy.sh`: 131 file C++ OK dengan clang-tidy.
 - Sanitizer host test dengan ASan+UBSan: seluruh probe OK.
-- `./scripts/test-coverage.sh`: host test inti 55,41 persen baris,
+- `./scripts/test-coverage.sh`: host test inti 55,10 persen baris,
   ambang 55 persen.
 - `hello mem`: map 8 MiB lalu unmap berhasil, map 40 MiB ditolak limit
   32 MiB, dan `/proc/processes` menampilkan `mem_kb` serta `limit_kb`.
@@ -427,6 +435,12 @@ Verifikasi branch `dev`:
 - Prioritas user: `prio: ok` dan `PRIO-DONE` muncul; `hello prio` menurunkan
   prioritas ke 20, menolak 40, dan menolak kenaikan oleh uid 1. Shell
   mencetak `priority: 16` sebelum perubahan.
+- Applet shell: `pwd: /tmp`, `touch: ok`, `lines: 1 bytes: 4`, dan
+  `SHELL-DONE` muncul setelah `cd`, `touch`, `head`, `wc`, dan `grep`.
+- Registry package: `gemabox 0.1 opengema` dan
+  `description: Shell daemon` muncul dari `pkg list` dan `pkg info`.
+  `/bin` berisi `gemabox`, `echo`, `cat`, `ls`, `pwd`, `touch`, `head`,
+  `wc`, `grep`, `free`, dan `pkg`.
 - Work stealing: `sched: steal ok` muncul pada SMP=2/4 setelah worker dari
   CPU 0 berjalan juga di CPU lain; SMP=1 melewati tes ini.
 - Fork: `fork: child` dan `fork: parent` muncul; child menulis global COW

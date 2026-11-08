@@ -94,6 +94,8 @@ Result<WritableTree> CreateWritableTree() noexcept {
   if (tmp.is_err()) {
     return Result<WritableTree>::Err(tmp.status());
   }
+  // Any user may create temporary files, matching a normal Unix /tmp.
+  tmp.value()->mode = 0777U;
 
   if (IsErr(CreateDirChecked(users.value(), "demo")) ||
       IsErr(CreateDirChecked(var.value(), "log")) ||

@@ -165,6 +165,8 @@ namespace og::syscall {
 
 [[nodiscard]] Status DoGetTls(uint64_t& result) noexcept;
 [[nodiscard]] Status DoSetTls(uint64_t address, uint64_t& result) noexcept;
+[[nodiscard]] Status DoGetCwd(uint64_t buffer, uint64_t length,
+                              uint64_t& result) noexcept;
 
 [[nodiscard]] Status DoChown(uint64_t user_path, uint64_t uid, uint64_t gid,
                              uint64_t& result) noexcept;

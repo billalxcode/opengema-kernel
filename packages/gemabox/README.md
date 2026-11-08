@@ -6,9 +6,14 @@ API publik `libgemapi`. Binary yang dipasang adalah ELF64 dynamic:
 `libgemapi.so.1`. Kernel memvalidasi ELF, memetakan segmen `PT_LOAD`, lalu
 `ld-gem` memuat dependency dari filesystem sebelum masuk ke `main`.
 
-Saat bring-up, binary berada di volume system GSLFS sebagai
-`/applications/gemabox/gemabox`; kernel memvalidasi ELF dan memetakannya
-sebelum `ld-gem` memuat library.
+Saat bring-up, binary shell berada di `/bin/gemabox`. Applet eksternal
+berada di `/bin` dan didaftarkan di `/system/packages/registry`.
+
+Gemabox adalah shell daemon kecil. Perintah yang mengubah state shell
+(`cd`, `setuid`, `setgid`, `prio`, `mount`, `umount`) tetap built-in.
+Perintah lain dieksekusi sebagai ELF terpisah dari `/bin`, misalnya
+`echo`, `cat`, `ls`, `pwd`, `touch`, `head`, `wc`, `grep`, `free`, dan
+`pkg`.
 
 Aplikasi ini tidak menyertakan header `kgema/` dan tidak menautkan
 `libkgema`. Lapisan ABI itu dipakai `libgemapi` secara privat.
@@ -17,7 +22,8 @@ Aplikasi ini tidak menyertakan header `kgema/` dan tidak menautkan
 
 | Berkas | Isi |
 |---|---|
-| `main.cpp` | Program utama |
+| `main.cpp` | Entry point dan mode test |
+| `shell.cpp` | Shell daemon, built-in, dan dispatch `/bin` |
 | `README.md` | Dokumen ini |
 
 Entry point `_start`, pembungkus syscall, dan helper output disediakan oleh
@@ -36,9 +42,10 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
 7. Mode `writer`: `chdir("/tmp")`, tulis `write ok` ke file `writer`,
    seek, read, lalu cetak `write ok`.
 8. Mode `shell`: prompt `gemabox>`, baca input UART dan keyboard,
-   jalankan `help`, `echo`, `cat`, `ls`, `clear`, `acpi`, `uptime`,
-   `sleep`, `ps`, `prio`, `dmesg`, `loglevel`, `mkdir`, `rm`, `mv`, `mount`,
-   `umount`, `halt`, `shutdown`, dan `reboot`.
+   jalankan `help`, `echo`, `cat`, `ls`, `pwd`, `cd`, `touch`, `head`,
+   `wc`, `grep`, `free`, `clear`, `acpi`, `uptime`, `sleep`, `ps`,
+   `prio`, `dmesg`, `loglevel`, `mkdir`, `rm`, `mv`, `mount`, `umount`,
+   `halt`, `shutdown`, dan `reboot`.
 9. Command di luar applet dicari di `/commands/<name>`, lalu
    `/applications/<name>/<name>`.
 10. `acpi` membaca ringkasan tabel dari `/proc/acpi`. `uptime` mencetak
@@ -47,7 +54,11 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
     menampilkan prioritas thread dan `prio <0..31>` mengubahnya
     (non-root hanya boleh menurunkan prioritas), `dmesg`
     membaca ring log kernel dari `/proc/dmesg`, dan `loglevel`
-    menampilkan atau mengubah filter level log. `date` mencetak waktu
+    menampilkan atau mengubah filter level log. `pwd` mencetak direktori
+    kerja, `cd <path>` mengubahnya, `touch <path>` membuat berkas kosong,
+    `head <path>` mencetak sepuluh baris pertama, `wc <path>` menghitung
+    baris dan byte, `grep <pola> <path>` mencetak baris yang cocok, dan
+    `free` membaca `/proc/meminfo`. `date` mencetak waktu
     lokal dari RTC, dan `date <unix-seconds>` menyetel RTC. `tz`
     menampilkan offset zona waktu, `tz <menit>` mengubahnya dalam rentang
     -840..840, dan `tz save` menyimpannya ke `/volumes/boot/gsl.tz`. `stat` menampilkan tipe, ukuran, mode, uid,
@@ -91,7 +102,7 @@ child ok
 spawn ok
 write ok
 gemabox> help
-commands: help, echo, cat, ls, stat, clear, acpi, uptime, date, tz, sleep, ps, prio, id, setuid, setgid, dmesg, loglevel, mkdir, rm, mv, chmod, chown, mount, umount, halt, shutdown, reboot
+commands: help, echo, cat, ls, pwd, cd, touch, head, wc, grep, free, stat, clear, acpi, uptime, date, tz, sleep, ps, prio, id, setuid, setgid, dmesg, loglevel, mkdir, rm, mv, chmod, chown, mount, umount, halt, shutdown, reboot, pkg
 gemabox> acpi
 ACPI revision 2
 gemabox> uptime
