@@ -84,6 +84,14 @@ void GenerateAcpi(og::fmt::LineBuilder& line) noexcept {
       .Hex(info.pci_ecam_size).Char('\n');
   }
   line.Text("GTDT ").Dec(info.has_gtdt ? 1U : 0U).Char('\n');
+  if (info.has_gtdt) {
+    line.Text("GTDT ns timer ").Dec(info.gtdt_ns_timer_irq)
+        .Text(" flags ").Hex(info.gtdt_ns_timer_flags).Char('\n');
+    line.Text("GTDT virt timer ").Dec(info.gtdt_virtual_timer_irq)
+        .Text(" flags ").Hex(info.gtdt_virtual_timer_flags).Char('\n');
+    line.Text("GTDT platform timers ").Dec(info.gtdt_platform_timers)
+        .Char('\n');
+  }
   line.Text("FADT flags ").Hex(info.fadt_flags).Char('\n');
   line.Text("ARM boot ").Hex(info.arm_boot_flags).Char('\n');
   line.Text("PSCI ").Dec(info.psci_compliant ? 1U : 0U).Text(" hvc ")

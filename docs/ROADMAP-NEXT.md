@@ -20,7 +20,7 @@ Prioritas: P0 blocker, P1 penting, P2 menengah, P3 nanti.
 | Scheduler | Per-CPU, prioritas dan aging, work stealing, futex, TLS dasar, join dan reclaim | ELF PT_TLS dan runtime `__thread` | Beban lebih merata, sinkronisasi dan TLS per proses tersedia | P1 |
 | TLB dan SMP | ASID bitmap dengan reuse, flush lokal saat switch, IPI shootdown dengan ack sinkron | Shootdown selektif per ASID | Remote flush menunggu ack dengan timeout 1 ms | P1 |
 | Driver | UART, RTC, PCI, virtio-blk, virtio-gpu | virtio-net, input, MSI-X, virtio IRQ, multi device, DMA streaming | Belum ada jaringan atau input interaktif | P1 |
-| Platform | QEMU virt hardcoded, DTB/ACPI dasar, matriks 1/2/4 core 256M/512M | GTDT detail, ACPI memory map, discovery RAM/device, initrd, cmdline | Sulit pindah board atau boot ACPI penuh | P2 |
+| Platform | QEMU virt hardcoded, DTB/ACPI dasar, GTDT timer detail, matriks 1/2/4 core 256M/512M | ACPI memory map, discovery RAM/device, initrd, cmdline | Sulit pindah board atau boot ACPI penuh | P2 |
 | Daya dan waktu | RTC dibaca saat boot, shutdown/reboot ACPI dan PSCI | settime, timezone, shutdown dari service manager | Mesin bisa dimatikan dan di-reboot dari shell | P2 |
 | Observability | Log serial, panic, procfs uptime/threads | dmesg ring, tracing, counter, watchdog, statistik memori/CPU | Debug produksi dan regresi sulit | P1 |
 | Test dan CI | Smoke QEMU, host test, sanitizer, coverage 58%, clang-tidy, fuzz, workflow CI hijau, artifact image, firmware terkunci | Fuzz coverage-guided, coverage seluruh probe, artifact SDK | CI dasar lengkap dan hijau di GitHub | P1 |
@@ -263,7 +263,9 @@ sinkronisasi lulus uji stres.
 - [x] PLT-10b MADT cpu count dan GIC distributor/redistributor.
 - [x] PLT-10c SPCR UART dan MCFG PCI ECAM.
 - [x] PLT-10d FADT flags, PSCI conduit, dan reset register.
-- [ ] PLT-10e GTDT detail dan ACPI memory map.
+- [~] PLT-10e GTDT detail dan ACPI memory map. GTDT mem-parsing timer
+      non-secure EL1, virtual EL1, flags, dan jumlah platform timer.
+      ACPI memory map belum.
 - [ ] PLT-10 ACPI: MADT, GTDT, SPCR, MCFG, dan memory map.
 - [ ] PLT-11 DTB: discovery RAM, UART, GIC, timer, PCI, dan device.
 - [ ] PLT-12 Platform generik, bukan qemu_virt hardcoded.

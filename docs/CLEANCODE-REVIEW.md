@@ -250,6 +250,8 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   kembali terlihat setelah unmount. Descriptor yang masih terbuka menahan
   root sampai ditutup, lalu node dibebaskan.
 - Test dmesg: `/proc/dmesg` dibaca lewat procfs dan command shell.
+- Test ACPI GTDT: `/proc/acpi` menampilkan `GTDT ns timer`, flags,
+  virtual timer, dan jumlah platform timer dari tabel GTDT QEMU.
 - Test CPU accounting: `/proc/processes` menampilkan kolom `cpu_ms`, uid,
   gid, jumlah region user, dan prioritas thread lewat kolom `prio`;
   `/proc/stat` menampilkan heartbeat per CPU; `/proc/threads` menampilkan
@@ -442,6 +444,8 @@ Verifikasi branch `dev`:
   valid setelah sleep, context switch, dan `fork`.
 - Syscall counter: `/proc/syscalls` menampilkan header `number count` dan
   nomor syscall yang sudah dipanggil, termasuk `write` dan `mmap`.
+- GTDT: `/proc/acpi` menampilkan `GTDT ns timer`, virtual timer, dan jumlah
+  platform timer pada boot ACPI QEMU.
 - File-backed mmap: `filemap: ok` muncul setelah snapshot private berisi
   `0.1`, tail nol, dan tulisan ke mapping tidak mengubah berkas asli.
 - `.github/workflows/ci.yml`: build native Linux, host test, sanitizer,

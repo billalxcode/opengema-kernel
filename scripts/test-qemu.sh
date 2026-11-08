@@ -285,6 +285,7 @@ if [ "$ACPI" = "on" ]; then
   check "platform: acpi parsed"
   check "acpi: tables"
   check "ACPI revision"
+  check "GTDT ns timer"
   check "MADT cpus"
   check "GICD"
   check "SPCR uart"

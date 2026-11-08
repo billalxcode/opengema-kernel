@@ -33,6 +33,11 @@ struct Info {
   uint64_t pci_ecam;        // First MCFG allocation.
   uint64_t pci_ecam_size;
   bool has_gtdt;
+  uint32_t gtdt_ns_timer_irq;
+  uint32_t gtdt_ns_timer_flags;
+  uint32_t gtdt_virtual_timer_irq;
+  uint32_t gtdt_virtual_timer_flags;
+  uint32_t gtdt_platform_timers;
   uint32_t fadt_flags;
   uint16_t arm_boot_flags;
   bool hardware_reduced;

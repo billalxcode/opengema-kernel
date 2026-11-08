@@ -37,6 +37,13 @@ constexpr uint32_t kFadtHardwareReduced = 1U << 20;
 constexpr uint32_t kFadtResetRegisterFlag = 1U << 10;
 constexpr uint16_t kFadtPsciCompliant = 1U;
 constexpr uint16_t kFadtPsciUseHvc = 1U << 1;
+// GTDT timer fields after the 36 byte SDT header.
+constexpr uint32_t kGtdtNonSecureTimerOffset = 56;
+constexpr uint32_t kGtdtNonSecureFlagsOffset = 60;
+constexpr uint32_t kGtdtVirtualTimerOffset = 64;
+constexpr uint32_t kGtdtVirtualFlagsOffset = 68;
+constexpr uint32_t kGtdtPlatformCountOffset = 88;
+constexpr uint32_t kGtdtMinimumLength = 96;
 
 constexpr uint8_t kMadtGenericInterrupt = 0x0B;
 constexpr uint8_t kMadtGenericDistributor = 0x0C;
@@ -190,6 +197,20 @@ void ParseFadt() noexcept {
   }
 }
 
+void ParseGtdt() noexcept {
+  const Result<Table> table = FindTable("GTDT");
+  if (table.is_err() || table.value().length < kGtdtMinimumLength) {
+    return;
+  }
+  const uint64_t address = table.value().address;
+  g_info.has_gtdt = true;
+  g_info.gtdt_ns_timer_irq = Read32(address + kGtdtNonSecureTimerOffset);
+  g_info.gtdt_ns_timer_flags = Read32(address + kGtdtNonSecureFlagsOffset);
+  g_info.gtdt_virtual_timer_irq = Read32(address + kGtdtVirtualTimerOffset);
+  g_info.gtdt_virtual_timer_flags = Read32(address + kGtdtVirtualFlagsOffset);
+  g_info.gtdt_platform_timers = Read32(address + kGtdtPlatformCountOffset);
+}
+
 void ParseSpcr() noexcept {
   const Result<Table> table = FindTable("SPCR");
   if (table.is_err() || table.value().length < kSpcrMinimumLength) {
@@ -296,7 +317,7 @@ Status Init(uint64_t rsdp_address) noexcept {
   ParseSpcr();
   ParseMcfg();
   ParseFadt();
-  g_info.has_gtdt = FindTable("GTDT").is_ok();
+  ParseGtdt();
   return Status::kOk;
 }
 
