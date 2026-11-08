@@ -253,7 +253,8 @@ Perubahan yang sudah dikerjakan di branch `dev`:
 - Test CPU accounting: `/proc/processes` menampilkan kolom `cpu_ms`, uid,
   gid, jumlah region user, dan prioritas thread lewat kolom `prio`;
   `/proc/stat` menampilkan heartbeat per CPU; `/proc/threads` menampilkan
-  snapshot id, CPU, state, prioritas, ticks, TLS, dan nama thread.
+  snapshot id, CPU, state, prioritas, ticks, TLS, dan nama thread;
+  `/proc/syscalls` menampilkan jumlah panggilan per nomor syscall.
 - Test prioritas user: `hello prio` membaca prioritas default 16,
   menurunkannya ke 20, menolak nilai di atas 31, dan memastikan proses
   non-root ditolak saat menaikkan prioritas. Shell `prio` menampilkan
@@ -439,6 +440,8 @@ Verifikasi branch `dev`:
   mengembalikan satu waiter dan child melanjutkan setelah nilai berubah.
 - TLS: `tls: child` lalu `tls: parent` muncul; TPIDR_EL0 dan blok TLS tetap
   valid setelah sleep, context switch, dan `fork`.
+- Syscall counter: `/proc/syscalls` menampilkan header `number count` dan
+  nomor syscall yang sudah dipanggil, termasuk `write` dan `mmap`.
 - File-backed mmap: `filemap: ok` muncul setelah snapshot private berisi
   `0.1`, tail nol, dan tulisan ke mapping tidak mengubah berkas asli.
 - `.github/workflows/ci.yml`: build native Linux, host test, sanitizer,

@@ -25,6 +25,7 @@
 #include "og/platform/smp.h"
 #include "og/process/process.h"
 #include "og/sched/sched.h"
+#include "og/syscall/syscall.h"
 #include "og/time/timer.h"
 
 namespace og::boot {
@@ -351,6 +352,22 @@ Status FormatThreads(char* buffer, std::size_t capacity,
   return Status::kOk;
 }
 
+Status FormatSyscalls(char* buffer, std::size_t capacity,
+                      std::size_t& length) noexcept {
+  og::fmt::LineBuilder line(buffer, capacity);
+  line.Text("number count\n");
+  for (uint64_t number = 1U; number < syscall::kMaxSyscallNumbers;
+       ++number) {
+    const uint64_t count = syscall::SyscallCount(number);
+    if (count == 0U) {
+      continue;
+    }
+    line.Dec(number).Char(' ').Dec(count).Char('\n');
+  }
+  length = line.size();
+  return Status::kOk;
+}
+
 Status FormatProcesses(char* buffer, std::size_t capacity,
                        std::size_t& length) noexcept {
   og::fmt::LineBuilder line(buffer, capacity);
@@ -538,7 +555,7 @@ Status MountProcfs() noexcept {
     fs::procfs::Create(&sched::ThreadCount, &FormatProcesses,
                        &FormatBlockDevices, &FormatMemInfo, &FormatStat,
                        &FormatTrace, &FormatDevices, &FormatInterrupts,
-                       &FormatMounts, &FormatThreads);
+                       &FormatMounts, &FormatThreads, &FormatSyscalls);
   if (proc.is_err()) {
     return proc.status();
   }

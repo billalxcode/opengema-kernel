@@ -23,6 +23,7 @@ enum class ProcKind : uint32_t {
   kDevices = 9,
   kInterrupts = 10,
   kMounts = 11,
+  kSyscalls = 12,
 };
 
 struct ProcFile {
@@ -33,7 +34,7 @@ struct ProcFile {
 
 struct ProcDir {
   Node node;
-  ProcFile files[12];
+  ProcFile files[13];
   uint32_t count;
 };
 
@@ -48,6 +49,7 @@ TextFn g_devices_text = nullptr;
 TextFn g_interrupts_text = nullptr;
 TextFn g_mounts_text = nullptr;
 TextFn g_threads_text = nullptr;
+TextFn g_syscalls_text = nullptr;
 
 void GenerateAcpi(og::fmt::LineBuilder& line) noexcept {
   const acpi::Info& info = acpi::GetInfo();
@@ -167,6 +169,13 @@ Status Generate(const ProcFile& file, char* buffer, std::size_t capacity,
         return g_mounts_text(buffer, capacity, length);
       }
       break;
+    case ProcKind::kSyscalls:
+      if (g_syscalls_text == nullptr) {
+        line.Text("syscalls unavailable\n");
+      } else {
+        return g_syscalls_text(buffer, capacity, length);
+      }
+      break;
     default:
       return Status::kInvalidArg;
   }
@@ -280,7 +289,8 @@ Result<Node*> Create(ThreadCountFn thread_count,
                      TextFn devices_text,
                      TextFn interrupts_text,
                      TextFn mounts_text,
-                     TextFn threads_text) noexcept {
+                     TextFn threads_text,
+                     TextFn syscalls_text) noexcept {
   g_thread_count = thread_count;
   g_process_text = process_text;
   g_block_text = block_text;
@@ -291,6 +301,7 @@ Result<Node*> Create(ThreadCountFn thread_count,
   g_interrupts_text = interrupts_text;
   g_mounts_text = mounts_text;
   g_threads_text = threads_text;
+  g_syscalls_text = syscalls_text;
   mem::Zero(&g_root, sizeof(g_root));
   g_root.node.name = "/";
   g_root.node.type = NodeType::kDirectory;
@@ -312,7 +323,8 @@ Result<Node*> Create(ThreadCountFn thread_count,
   AddFile(9, "devices", ProcKind::kDevices);
   AddFile(10, "interrupts", ProcKind::kInterrupts);
   AddFile(11, "mounts", ProcKind::kMounts);
-  g_root.count = 12;
+  AddFile(12, "syscalls", ProcKind::kSyscalls);
+  g_root.count = 13;
   return Result<Node*>::Ok(&g_root.node);
 }
 

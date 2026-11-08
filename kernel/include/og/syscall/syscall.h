@@ -53,6 +53,10 @@ constexpr uint64_t kSysSetPriority = 43;
 constexpr uint64_t kSysFutex = 44;
 constexpr uint64_t kSysGetTls = 45;
 constexpr uint64_t kSysSetTls = 46;
+constexpr uint64_t kMaxSyscallNumbers = 64;
+
+// Total calls observed for a syscall number, or zero when unknown.
+[[nodiscard]] uint64_t SyscallCount(uint64_t number) noexcept;
 
 // Negative Linux errno values returned in x0 on failure.
 constexpr int64_t kErrPermission = -1;

@@ -62,6 +62,7 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
     statistik DMA, sedangkan `cat /proc/stat` menampilkan tick, thread, context switch,
     jumlah proses, operasi VFS, dan counter block device. `cat /proc/threads`
     menampilkan id, CPU, state, prioritas, ticks, TLS, dan nama thread.
+    `cat /proc/syscalls` menampilkan jumlah panggilan per nomor syscall.
     `cat /proc/trace`
     menampilkan ring event block, context switch, spawn, dan exit.
     `cat /proc/devices` menampilkan urutan probe, kelas, MMIO, IRQ,

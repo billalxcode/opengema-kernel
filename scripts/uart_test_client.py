@@ -90,7 +90,7 @@ def main(argv):
         b"mkdir /tmp/d\nmv /tmp/d /tmp/e\nls /tmp\nrm /tmp/e\nstat /system/config/version\n",
         b"mkdir \"/tmp/quoted dir\"\nrm \"/tmp/quoted dir\"\nchmod 600 /tmp/hello\nstat /tmp/hello\n",
         b"mkdir /tmp/mnt\nmount ramfs /tmp/mnt\nmount ramfs /tmp/mnt\n",
-        b"umount /tmp/mnt\numount /tmp/mnt\nrm /tmp/mnt\ncat /proc/meminfo\ncat /proc/stat\ncat /proc/threads\n",
+        b"umount /tmp/mnt\numount /tmp/mnt\nrm /tmp/mnt\ncat /proc/meminfo\ncat /proc/stat\ncat /proc/threads\ncat /proc/syscalls\n",
         b"cat /proc/block\nls /volumes/boot\n",
         b"cat /proc/trace\n",
         b"cat /proc/devices\ncat /proc/interrupts\n",

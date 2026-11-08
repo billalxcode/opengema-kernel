@@ -17,6 +17,8 @@ constexpr uint64_t kEsrEcMask = 0x3F;
 constexpr uint64_t kExceptionClassSvc64 = 0x15;
 constexpr uint64_t kSyscallNumberRegister = 8;
 
+uint64_t g_syscall_counts[kMaxSyscallNumbers]{};
+
 [[nodiscard]] int64_t ErrnoFor(Status status) noexcept {
   switch (status) {
     case Status::kOk:
@@ -61,6 +63,10 @@ constexpr uint64_t kSyscallNumberRegister = 8;
   }
 
   const uint64_t number = frame->x[kSyscallNumberRegister];
+  if (number < kMaxSyscallNumbers) {
+    (void)__atomic_add_fetch(&g_syscall_counts[number], 1U,
+                             __ATOMIC_RELAXED);
+  }
   uint64_t result = 0;
   Status status = Status::kOk;
 
@@ -225,6 +231,13 @@ constexpr uint64_t kSyscallNumberRegister = 8;
 
 void SyscallInit() noexcept {
   events::SetSyncHook(&SyncHandler, nullptr);
+}
+
+uint64_t SyscallCount(uint64_t number) noexcept {
+  if (number >= kMaxSyscallNumbers) {
+    return 0U;
+  }
+  return __atomic_load_n(&g_syscall_counts[number], __ATOMIC_ACQUIRE);
 }
 
 }  // namespace og::syscall

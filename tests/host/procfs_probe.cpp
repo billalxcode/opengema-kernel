@@ -318,6 +318,11 @@ int main() {
     return 1;
   }
   if (og::IsErr(root.value()->ops->iterate(root.value(), 12, entry, found)) ||
+      !found || entry.name[0] != 's') {
+    std::printf("procfs probe: iterate thirteenth entry failed\n");
+    return 1;
+  }
+  if (og::IsErr(root.value()->ops->iterate(root.value(), 13, entry, found)) ||
       found) {
     std::printf("procfs probe: iterate past end failed\n");
     return 1;
