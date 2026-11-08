@@ -292,9 +292,10 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   stack awal 16 KiB sampai batas 64 KiB. `hello stackguard` melewati batas
   tersebut dan harus mati pada guard page.
 - Test TLB shootdown: setiap perubahan permission atau unmap user mengirim
-  SGI `kIpiIrq` ke CPU online lain. Handler IPI mem-flush TLB lokal lalu
-  menyimpan ack generasi. Pengirim menunggu ack dengan timeout 1 ms agar
-  target yang sibuk atau IRQ-masked tidak membuat deadlock.
+  SGI `kIpiIrq` ke CPU online lain. PPI diaktifkan pada semua redistributor
+  termasuk CPU0. Handler IPI mem-flush TLB lokal lalu menyimpan ack
+  generasi. Pengirim menunggu ack dengan timeout 10 ms agar target yang
+  sibuk atau IRQ-masked tidak membuat deadlock.
 - Test ASID: self-test mengalokasikan 255 address space, memastikan space
   ke-256 ditolak, menghancurkan semuanya, lalu mengalokasikan ulang. Bitmap
   ASID mengembalikan slot saat `AddressSpaceDestroy`, jadi tidak ada
@@ -409,7 +410,8 @@ Verifikasi branch `dev`:
   fault, proses mati, dan `NX-DONE` muncul tanpa `nx: data executed`.
 - TLB shootdown: `smp: ipi count: 1`, `smp: tlb sync`, dan
   `smp: tlb shootdown ok` muncul; QEMU SMP=4 lulus tanpa deadlock.
-  `/proc/meminfo` menampilkan `tlb_sync` dan `tlb_timeouts`.
+  `/proc/meminfo` menampilkan `tlb_sync`, `tlb_timeouts`, dan
+  `ipi_cpuN` per CPU.
 - Reuse ASID: `mem: asid reuse ok` muncul setelah self-test mengisi dan
   mengosongkan seluruh 255 slot ASID.
 - PAN: QEMU `-cpu max` mencetak `hardening: pan enabled` dan lulus

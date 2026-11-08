@@ -43,6 +43,7 @@ namespace og {
 namespace {
 
 uint64_t g_ipi_count = 0;
+uint64_t g_ipi_by_cpu[smp::kMaxCpus]{};
 uint64_t g_tlb_generation = 0;
 uint64_t g_tlb_ack[smp::kMaxCpus]{};
 uint64_t g_tlb_sync_count = 0;
@@ -219,7 +220,7 @@ void BroadcastTlbShootdown() noexcept {
   // shooter cannot stall the caller.
   const uint64_t frequency = arch::aarch64::ReadCntfrqEl0();
   const uint64_t deadline =
-    arch::aarch64::ReadCntpctEl0() + (frequency / 1000U);
+    arch::aarch64::ReadCntpctEl0() + (frequency / 100U);
   bool synchronized = true;
   for (uint32_t index = 0; index < smp::CpuCount(); ++index) {
     if (index == current) {
@@ -247,10 +248,13 @@ void BroadcastTlbShootdown() noexcept {
 
 Status IpiHandler(void* /*context*/, uint32_t /*irq*/) noexcept {
   __atomic_add_fetch(&g_ipi_count, 1U, __ATOMIC_RELAXED);
+  const uint32_t current = smp::CurrentIndex();
+  if (current < smp::kMaxCpus) {
+    (void)__atomic_add_fetch(&g_ipi_by_cpu[current], 1U, __ATOMIC_RELAXED);
+  }
   arch::aarch64::InvalidateTlbAllLocal();
   const uint64_t generation =
     __atomic_load_n(&g_tlb_generation, __ATOMIC_ACQUIRE);
-  const uint32_t current = smp::CurrentIndex();
   if (current < smp::kMaxCpus) {
     __atomic_store_n(&g_tlb_ack[current], generation, __ATOMIC_RELEASE);
   }
@@ -321,6 +325,13 @@ uint64_t TlbSyncCount() noexcept {
 
 uint64_t TlbTimeoutCount() noexcept {
   return __atomic_load_n(&g_tlb_timeout_count, __ATOMIC_ACQUIRE);
+}
+
+uint64_t IpiCount(uint32_t cpu) noexcept {
+  if (cpu >= smp::kMaxCpus) {
+    return 0U;
+  }
+  return __atomic_load_n(&g_ipi_by_cpu[cpu], __ATOMIC_ACQUIRE);
 }
 
 }  // namespace boot

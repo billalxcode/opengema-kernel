@@ -60,7 +60,9 @@ ABI yang tidak bisa dihindari. Tidak ada file `.S`.
     referensi proses tersebut. `cat /proc/block` menampilkan nama dan
     kapasitas device blok. `cat /proc/meminfo` menampilkan frame, heap, dan
     statistik DMA, sedangkan `cat /proc/stat` menampilkan tick, thread, context switch,
-    jumlah proses, operasi VFS, dan counter block device. `cat /proc/threads`
+    jumlah proses, operasi VFS, dan counter block device. `cat /proc/meminfo`
+    juga menampilkan `tlb_sync`, `tlb_timeouts`, dan `ipi_cpuN`.
+    `cat /proc/threads`
     menampilkan id, CPU, state, prioritas, ticks, TLS, dan nama thread.
     `cat /proc/syscalls` menampilkan jumlah panggilan per nomor syscall.
     `cat /proc/trace`

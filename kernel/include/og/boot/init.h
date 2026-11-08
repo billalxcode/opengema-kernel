@@ -18,5 +18,6 @@ void RunUserSelfTest() noexcept;
 
 [[nodiscard]] uint64_t TlbSyncCount() noexcept;
 [[nodiscard]] uint64_t TlbTimeoutCount() noexcept;
+[[nodiscard]] uint64_t IpiCount(uint32_t cpu) noexcept;
 
 }  // namespace og::boot

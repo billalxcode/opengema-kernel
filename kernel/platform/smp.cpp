@@ -81,7 +81,7 @@ Status StartSecondaries() noexcept {
   }
 
   // Arm the IPI on every redistributor before the cores exist.
-  for (uint32_t index = 1; index < g_cpu_count; ++index) {
+  for (uint32_t index = 0; index < g_cpu_count; ++index) {
     const Status status = drivers::irq::Gicv3::EnablePpiAt(RedistributorFor(index), kIpiIrq);
     if (IsErr(status)) {
       return status;

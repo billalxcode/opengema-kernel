@@ -430,6 +430,9 @@ Status FormatMemInfo(char* buffer, std::size_t capacity,
   line.Text("lazy_faults: ").Dec(mem::VmmLazyFaultCount()).Char('\n');
   line.Text("tlb_sync: ").Dec(TlbSyncCount()).Char('\n');
   line.Text("tlb_timeouts: ").Dec(TlbTimeoutCount()).Char('\n');
+  for (uint32_t cpu = 0; cpu < smp::OnlineCount(); ++cpu) {
+    line.Text("ipi_cpu").Dec(cpu).Text(": ").Dec(IpiCount(cpu)).Char('\n');
+  }
   length = line.size();
   return Status::kOk;
 }

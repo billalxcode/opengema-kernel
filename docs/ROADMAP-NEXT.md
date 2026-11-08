@@ -18,7 +18,7 @@ Prioritas: P0 blocker, P1 penting, P2 menengah, P3 nanti.
 | Filesystem | FAT32 read-only, ramfs statis, mount internal | Tulis berkas, mkdir, unlink, rename, mount/umount, permission, sync | Data tidak bisa disimpan atau diubah | P1 |
 | Memori user | W^X user, stack growth 64 KiB, guard page, limit 32 MiB, ASLR stack/mmap/executable, fork COW, lazy mmap, shared mmap, file-backed private mmap, partial munmap, OOM kill requester | File-backed shared mmap, ELF demand paging, OOM selektif | Demand paging baru untuk mmap anonymous; file-backed mmap masih eager | P1 |
 | Scheduler | Per-CPU, prioritas dan aging, work stealing, futex, TLS dasar, join dan reclaim | ELF PT_TLS dan runtime `__thread` | Beban lebih merata, sinkronisasi dan TLS per proses tersedia | P1 |
-| TLB dan SMP | ASID bitmap dengan reuse, flush lokal saat switch, IPI shootdown dengan ack sinkron | Shootdown selektif per ASID | Remote flush menunggu ack dengan timeout 1 ms | P1 |
+| TLB dan SMP | ASID bitmap dengan reuse, flush lokal saat switch, IPI shootdown dengan ack sinkron | Shootdown selektif per ASID | Remote flush menunggu ack dengan timeout 10 ms | P1 |
 | Driver | UART, RTC, PCI, virtio-blk, virtio-gpu | virtio-net, input, MSI-X, virtio IRQ, multi device, DMA streaming | Belum ada jaringan atau input interaktif | P1 |
 | Platform | QEMU virt hardcoded, DTB/ACPI dasar, GTDT timer detail, matriks 1/2/4 core 256M/512M | ACPI memory map, discovery RAM/device, initrd, cmdline | Sulit pindah board atau boot ACPI penuh | P2 |
 | Daya dan waktu | RTC dibaca saat boot, shutdown/reboot ACPI dan PSCI | settime, timezone, shutdown dari service manager | Mesin bisa dimatikan dan di-reboot dari shell | P2 |
@@ -201,12 +201,13 @@ keyboard di jendela QEMU.
       saat free frame di bawah reserve. Accounting dan limit diuji lewat
       `hello mem`; jalur OOM kill belum diuji QEMU.
 - [x] MEM-16 TLB shootdown lintas core dan ASID reuse. Semua CPU
-      mem-flush TLB lokal saat address space berganti. Perubahan
-      permission dan unmap mengirim SGI flush ke CPU online dan menunggu
-      ack generasi dengan timeout 1 ms; timeout mencegah target yang sibuk
-      atau IRQ-masked membuat deadlock. ASID 1..255 dialokasikan lewat
-      bitmap dan dikembalikan saat address space dihancurkan. Shootdown
-      selektif per ASID belum.
+      mem-flush TLB lokal saat address space berganti. PPI IPI diaktifkan
+      pada semua redistributor termasuk CPU0, sehingga shootdown dari core
+      mana pun diterima. Perubahan permission dan unmap mengirim SGI flush
+      ke CPU online dan menunggu ack generasi dengan timeout 10 ms; timeout
+      mencegah target yang sibuk atau IRQ-masked membuat deadlock. ASID
+      1..255 dialokasikan lewat bitmap dan dikembalikan saat address space
+      dihancurkan. Shootdown selektif per ASID belum.
 - [x] MEM-17 ASLR untuk stack, mmap, dan executable. Aplikasi dynamic
       dibangun sebagai PIE/ET_DYN, kernel memilih load bias acak, dan
       library dimuat di mmap acak. Build statis SDK tetap memakai image
