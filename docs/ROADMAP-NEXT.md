@@ -16,7 +16,7 @@ Prioritas: P0 blocker, P1 penting, P2 menengah, P3 nanti.
 | Reklamasi | Stack, address space, FD, dan slot proses dibebaskan; frame kembali | PID reuse, reklamasi saat gagal di tengah jalan | Aman untuk dua proses, belum untuk beban besar | P0 |
 | SDK dan shell | API berkas/proses/waktu/error, argv, konstruktor C++, shell multi perintah | Packaging SDK, contoh program, dan template package | Belum ada pengalaman userland yang nyata | P1 |
 | Filesystem | FAT32 read-only, ramfs statis, mount internal | Tulis berkas, mkdir, unlink, rename, mount/umount, permission, sync | Data tidak bisa disimpan atau diubah | P1 |
-| Memori user | W^X user, stack growth 64 KiB, guard page, limit 32 MiB, ASLR stack/mmap/executable, fork COW, lazy mmap, shared mmap, file-backed private mmap, OOM kill requester | File-backed shared mmap, ELF demand paging, OOM selektif | Demand paging baru untuk mmap anonymous; file-backed mmap masih eager | P1 |
+| Memori user | W^X user, stack growth 64 KiB, guard page, limit 32 MiB, ASLR stack/mmap/executable, fork COW, lazy mmap, shared mmap, file-backed private mmap, partial munmap, OOM kill requester | File-backed shared mmap, ELF demand paging, OOM selektif | Demand paging baru untuk mmap anonymous; file-backed mmap masih eager | P1 |
 | Scheduler | Per-CPU, prioritas dan aging, work stealing, futex, TLS dasar, join dan reclaim | ELF PT_TLS dan runtime `__thread` | Beban lebih merata, sinkronisasi dan TLS per proses tersedia | P1 |
 | TLB dan SMP | ASID bitmap dengan reuse, flush lokal saat switch, IPI shootdown dengan ack sinkron | Shootdown selektif per ASID | Remote flush menunggu ack dengan timeout 1 ms | P1 |
 | Driver | UART, RTC, PCI, virtio-blk, virtio-gpu | virtio-net, input, MSI-X, virtio IRQ, multi device, DMA streaming | Belum ada jaringan atau input interaktif | P1 |
@@ -216,6 +216,9 @@ keyboard di jendela QEMU.
       mmap dan stack growth, data abort permission menangani COW, dan
       instruction abort permission mematikan proses saat mengeksekusi
       halaman NX.
+- [x] MEM-19 `munmap` parsial. Range di dalam satu region membebaskan page
+      yang tercakup dan membagi region tracking menjadi prefix dan suffix;
+      prefix, suffix, dan tetangga yang tidak di-unmap tetap dapat diakses.
 
 **Selesai bila:** user tidak bisa mengeksekusi data, dan fork/COW serta
 demand paging lulus uji.

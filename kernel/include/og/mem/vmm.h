@@ -18,7 +18,7 @@ namespace og::mem {
 // there while the kernel entries stay shared.
 constexpr uint64_t kUserSpaceBase = 1ULL << 40U;   // 1 TiB
 constexpr uint64_t kUserSpaceSize = 1ULL << 39U;   // 512 GiB
-constexpr uint32_t kMaxUserRegions = 8;
+constexpr uint32_t kMaxUserRegions = 16;
 constexpr uint64_t kUserMemoryLimit = 32ULL * 1024U * 1024U;  // 32 MiB
 
 struct UserRegion {

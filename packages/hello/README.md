@@ -48,6 +48,9 @@ Manifest ada di `packages/system-root/applications/hello/manifest.txt`.
   terakhir, lalu memastikan `/proc/meminfo` mencatat `lazy_faults: 2`.
 - `hello shm` memetakan satu halaman shared, lalu `fork`. Child menulis
   `0x22` dan parent harus melihat nilai yang sama setelah `wait`.
+- `hello unmap` memetakan tiga halaman, melepas halaman tengah, memastikan
+  halaman tetangga tetap utuh, lalu `fork` dan memastikan child yang
+  menyentuh halaman tengah mati.
 - `hello futex` memakai shared page, child menunggu `futex_wait` pada nilai
   0, lalu parent mengubah nilai menjadi 1 dan `futex_wake`. Parent harus
   membangunkan tepat satu waiter dan child mencetak `futex: child woke`.

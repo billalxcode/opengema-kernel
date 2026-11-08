@@ -350,6 +350,54 @@ int main(int argc, char** argv, char** envp) {
     gemapi::io::write("shm: parent\n");
     return 0;
   }
+  if (argc > 1 && same(argv[1], "unmap")) {
+    constexpr gemapi::usize kPage = 4096U;
+    const auto mapped = gemapi::memory::map(kPage * 3U);
+    if (!mapped) {
+      gemapi::io::write("unmap: map failed\n");
+      return 1;
+    }
+    volatile unsigned char* base =
+      static_cast<volatile unsigned char*>(mapped.value());
+    unsigned char* raw = static_cast<unsigned char*>(mapped.value());
+    base[0] = 0x11U;
+    base[kPage] = 0x22U;
+    base[kPage * 2U] = 0x33U;
+    if (gemapi::memory::unmap(raw + kPage, kPage) !=
+        gemapi::Status::ok) {
+      gemapi::io::write("unmap: middle failed\n");
+      return 1;
+    }
+    if (base[0] != 0x11U || base[kPage * 2U] != 0x33U) {
+      gemapi::io::write("unmap: neighbor lost\n");
+      return 1;
+    }
+
+    const auto child = gemapi::process::fork();
+    if (!child) {
+      gemapi::io::write("unmap: fork failed\n");
+      return 1;
+    }
+    if (child.value() == 0U) {
+      base[kPage] = 0x44U;
+      gemapi::io::write("unmap: child wrote\n");
+      return 0;
+    }
+    int status = 0;
+    if (gemapi::process::wait(child.value(), status) != gemapi::Status::ok ||
+        status == 0) {
+      gemapi::io::write("unmap: middle still mapped\n");
+      return 1;
+    }
+    if (gemapi::memory::unmap(raw, kPage) != gemapi::Status::ok ||
+        gemapi::memory::unmap(raw + kPage * 2U, kPage) !=
+          gemapi::Status::ok) {
+      gemapi::io::write("unmap: tail failed\n");
+      return 1;
+    }
+    gemapi::io::write("unmap: ok\n");
+    return 0;
+  }
   if (argc > 1 && same(argv[1], "futex")) {
     const auto mapped = gemapi::memory::map_shared(4096U);
     if (!mapped) {

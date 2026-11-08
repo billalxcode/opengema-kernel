@@ -5,23 +5,58 @@ CMake runs inside podman with the repo mounted at /work, so every entry
 points at /work/... On the host those paths do not exist and clangd or
 cpptools cannot resolve includes. This rewrites them to the repo root.
 
+A /work component is only treated as the container root when it starts a
+path token or follows a flag such as -I. Paths like /home/runner/work must
+stay untouched.
+
 Usage: fix_compile_commands.py <compile_commands.json> [repo_root]
 Exit nonzero on invalid JSON or missing file.
 """
 
 import json
 import os
-import re
 import sys
 
-# Only rewrite /work when it is a complete path component and not part of
-# another path such as /home/runner/work.
-WORK_PREFIX = re.compile(r"(?<![A-Za-z0-9_.-])/work(?![A-Za-z0-9_.-])")
+CONTAINER_ROOT = "/work"
 
 
 def fail(msg):
     print("fix_compile_commands: " + msg)
     return 1
+
+
+def rewrite_token(token, repo_root):
+    """Replace each /work path root in one space-separated token."""
+    changed = False
+    position = 0
+    while True:
+        index = token.find(CONTAINER_ROOT, position)
+        if index < 0:
+            break
+        prefix = token[:index]
+        if "/" in prefix:
+            position = index + len(CONTAINER_ROOT)
+            continue
+        token = (
+            prefix
+            + repo_root
+            + token[index + len(CONTAINER_ROOT):]
+        )
+        position = index + len(repo_root)
+        changed = True
+    return token, changed
+
+
+def rewrite_value(value, repo_root):
+    """Rewrite every path token, preserving the command separators."""
+    parts = value.split(" ")
+    changed = 0
+    for index, part in enumerate(parts):
+        rewritten, part_changed = rewrite_token(part, repo_root)
+        if part_changed:
+            parts[index] = rewritten
+            changed += 1
+    return " ".join(parts), changed
 
 
 def main(argv):
@@ -48,17 +83,17 @@ def main(argv):
             value = entry.get(key)
             if not isinstance(value, str):
                 continue
-            original = value
-            if "/work" in value:
-                value = WORK_PREFIX.sub(lambda _match: repo_root, value)
+            rewritten, count = rewrite_value(value, repo_root)
+            if count == 0:
+                continue
             # Container compiler paths do not exist on the host. Use the
             # bare name so clangd resolves it from PATH.
-            if value.startswith("/usr/bin/clang++ "):
-                value = "clang++ " + value[len("/usr/bin/clang++ "):]
-            elif value.startswith("/usr/bin/clang "):
-                value = "clang " + value[len("/usr/bin/clang "):]
-            if value != original:
-                entry[key] = value
+            if rewritten.startswith("/usr/bin/clang++ "):
+                rewritten = "clang++ " + rewritten[len("/usr/bin/clang++ "):]
+            elif rewritten.startswith("/usr/bin/clang "):
+                rewritten = "clang " + rewritten[len("/usr/bin/clang "):]
+            if rewritten != value:
+                entry[key] = rewritten
                 changed += 1
 
     try:

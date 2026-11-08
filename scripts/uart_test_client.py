@@ -125,6 +125,8 @@ def main(argv):
     lazy_seen = False
     shm_sent = False
     shm_seen = False
+    unmap_sent = False
+    unmap_seen = False
     futex_sent = False
     futex_seen = False
     tls_sent = False
@@ -456,7 +458,15 @@ def main(argv):
             if shm_sent and not shm_seen and b"SHM-DONE" in buffer:
                 shm_seen = True
 
-            if shm_seen and not futex_sent and b"SHM-DONE" in buffer:
+            if shm_seen and not unmap_sent and b"SHM-DONE" in buffer:
+                send_line(client, b"hello unmap\necho UNMAP-DONE\n")
+                unmap_sent = True
+                buffer.clear()
+
+            if unmap_sent and not unmap_seen and b"UNMAP-DONE" in buffer:
+                unmap_seen = True
+
+            if unmap_seen and not futex_sent and b"UNMAP-DONE" in buffer:
                 send_line(client, b"hello futex\necho FUTEX-DONE\n")
                 futex_sent = True
                 buffer.clear()

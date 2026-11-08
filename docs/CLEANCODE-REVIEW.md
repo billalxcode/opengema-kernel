@@ -316,6 +316,9 @@ Perubahan yang sudah dikerjakan di branch `dev`:
   halaman, lalu `/proc/meminfo` menunjukkan `lazy_faults: 2`.
 - Test shared mmap: `hello shm` berbagi satu halaman anonim dengan child
   melewati `fork`; tulisan child terlihat oleh parent.
+- Test partial munmap: `hello unmap` melepas halaman tengah dari mapping
+  tiga halaman, memastikan tetangga tetap valid, lalu child yang menyentuh
+  halaman tengah harus mati.
 - Test futex: `hello futex` memakai shared page, child memblokir di
   `futex_wait` sampai parent menulis nilai baru dan memanggil `futex_wake`.
   Parent harus membangunkan tepat satu waiter.
@@ -430,6 +433,8 @@ Verifikasi branch `dev`:
   disentuh; frame baru dialokasikan saat fault.
 - Shared mmap: `shm: child` lalu `shm: parent` membuktikan halaman anonim
   yang sama tetap writable dan dibagi setelah `fork`.
+- Partial munmap: `unmap: ok` muncul setelah halaman tengah dilepas,
+  tetangga tetap berisi pola, dan child yang menyentuh halaman tengah mati.
 - Futex: `futex: child woke` lalu `futex: parent` muncul; `futex_wake`
   mengembalikan satu waiter dan child melanjutkan setelah nilai berubah.
 - TLS: `tls: child` lalu `tls: parent` muncul; TPIDR_EL0 dan blok TLS tetap

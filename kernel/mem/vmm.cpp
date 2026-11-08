@@ -897,12 +897,19 @@ Status VmmUnmapUser(AddressSpace& space, uint64_t virtual_address,
     return Status::kInvalidArg;
   }
   const uint64_t aligned = (size + kPageSize - 1U) & ~(kPageSize - 1U);
+  if (virtual_address < kUserSpaceBase ||
+      virtual_address > (~0ULL - aligned)) {
+    return Status::kInvalidArg;
+  }
+  const uint64_t range_end = virtual_address + aligned;
 
   uint32_t region_index = 0;
   bool found = false;
   for (uint32_t index = 0; index < space.region_count; ++index) {
-    if (space.regions[index].base == virtual_address &&
-        space.regions[index].size == aligned) {
+    const UserRegion& region = space.regions[index];
+    if (virtual_address >= region.base &&
+        virtual_address - region.base <= region.size &&
+        aligned <= region.size - (virtual_address - region.base)) {
       region_index = index;
       found = true;
       break;
@@ -910,6 +917,13 @@ Status VmmUnmapUser(AddressSpace& space, uint64_t virtual_address,
   }
   if (!found) {
     return Status::kInvalidArg;
+  }
+
+  UserRegion& region = space.regions[region_index];
+  const uint64_t region_end = region.base + region.size;
+  const bool split = virtual_address > region.base && range_end < region_end;
+  if (split && space.region_count >= kMaxUserRegions) {
+    return Status::kNoMem;
   }
 
   auto* root = reinterpret_cast<uint64_t*>(space.root);
@@ -921,7 +935,29 @@ Status VmmUnmapUser(AddressSpace& space, uint64_t virtual_address,
   } else {
     space.user_bytes = 0;
   }
-  DropUserRegion(space, region_index);
+
+  if (virtual_address == region.base) {
+    if (range_end == region_end) {
+      DropUserRegion(space, region_index);
+    } else {
+      region.base = range_end;
+      region.size = region_end - range_end;
+    }
+    return Status::kOk;
+  }
+  if (range_end == region_end) {
+    region.size = virtual_address - region.base;
+    return Status::kOk;
+  }
+
+  // The unmapped hole splits the tracked region. The original entry keeps
+  // the prefix and a new entry owns the suffix.
+  UserRegion suffix = region;
+  suffix.base = range_end;
+  suffix.size = region_end - range_end;
+  region.size = virtual_address - region.base;
+  space.regions[space.region_count] = suffix;
+  ++space.region_count;
   return Status::kOk;
 }
 
